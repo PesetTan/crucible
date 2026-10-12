@@ -1,0 +1,27 @@
+@using System.Text.RegularExpressions
+<span class="mana-cost" role="img" aria-label="@(Label ?? (string.IsNullOrWhiteSpace(Cost) ? "No mana cost" : $"Mana cost {Cost}"))" title="@Cost">
+    <span class="mana-symbols" aria-hidden="true">
+        @foreach (Match token in Regex.Matches(Cost ?? "", @"\{([^}]+)\}|([^{}]+)")) {
+            if (token.Groups[1].Success) {
+                var parts = token.Groups[1].Value.Split('/');
+                <span class="mana-cost-symbol @(parts.Length > 1 ? "mana-cost-hybrid" : "")">
+                    @for (var i = 0; i < parts.Length; i++) {
+                        if (i > 0) { <span class="mana-cost-divider">/</span> }
+                        var part = parts[i];
+                        if (part.Length == 1 && "WUBRGCT".Contains(part[0])) {
+                            <ManaLogo Symbol="@part[0]" />
+                        } else {
+                            <span class="mana-generic">@part</span>
+                        }
+                    }
+                </span>
+            } else {
+                <span class="mana-cost-divider">@token.Value</span>
+            }
+        }
+    </span>
+</span>
+@code {
+    [Parameter] public string? Cost { get; set; }
+    [Parameter] public string? Label { get; set; }
+}

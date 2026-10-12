@@ -3,10 +3,11 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Channels;
+using System.Diagnostics;
 
 namespace MtgSimulator;
 
-public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoordinator> logger) : BackgroundService
+public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoordinator> logger,AppPaths paths) : BackgroundService
 {
     private readonly Channel<string> queue=Channel.CreateUnbounded<string>();
     private readonly ConcurrentDictionary<string,byte> queued=new();
@@ -16,16 +17,48 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     public async Task<string> Create(RunRequest request,string key)
     {
         var blockers=engine.Preflight(request);if(blockers.Count!=0)throw new InvalidOperationException(string.Join("\n",blockers));
+        await mutations.WaitAsync();try {
         var capability=engine.Capabilities();var decks=request.DeckIds.Order(StringComparer.Ordinal).ToList();
-        var config=new RunConfig(decks,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capability.EngineHash,capability.AdapterHash);
+        var config=new RunConfig(decks,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capability.EngineHash,capability.AdapterHash,
+            StaggerStarts:request.StaggerStarts,EstimatedGameSeconds:request.EstimatedGameSeconds,StartLeadSeconds:request.StartLeadSeconds,StartupSpacingSeconds:request.StartupSpacingSeconds);
         var id=Guid.NewGuid().ToString("N");var slots=new List<GameSlot>();var seeds=new HashSet<long>();
         for(var a=0;a<decks.Count;a++)for(var b=a+1;b<decks.Count;b++)for(var starter=0;starter<2;starter++)for(var index=0;index<request.GamesPerPair/2;index++){
             var digest=SHA256.HashData(Encoding.UTF8.GetBytes(Json.Encode(new{scheme="sha256-v1",rootSeed=request.RootSeed,a=decks[a],b=decks[b],starter,index})));
             var seed=BinaryPrimitives.ReadInt64BigEndian(digest);if(!seeds.Add(seed))throw new InvalidOperationException("Seed collision detected.");
             slots.Add(new(Guid.NewGuid().ToString("N"),id,decks[a],decks[b],decks[starter==0?a:b],seed,index,"pending",[]));
         }
-        var run=new SimulationRun(id,DateTimeOffset.UtcNow,"queued",config,slots.Count);
-        var actualId=await store.CreateRun(run,slots,key,DeckImporter.Hash(Json.Encode(config)));if(store.Run(actualId).Status=="queued")Enqueue(actualId);return actualId;
+        var cache=store.CachedGames(config);
+        slots=slots.Select(slot=>Reuse(slot,cache)).ToList();
+        var run=new SimulationRun(id,DateTimeOffset.UtcNow,slots.All(slot=>slot.Status=="completed")?"completed":"queued",config,slots.Count);
+        var actualId=await store.CreateRun(run,slots,key,DeckImporter.Hash(Json.Encode(config)));
+        if(actualId==id&&run.Status=="completed"){
+            var now=DateTimeOffset.UtcNow;
+            await store.SaveSessionTiming(new(Guid.NewGuid().ToString("N"),id,now,now,now,0,0,0,"completed"));
+        }
+        if(store.Run(actualId).Status=="queued")Enqueue(actualId);return actualId;
+        }finally{mutations.Release();}
+    }
+    public async Task<bool> Delete(string id)
+    {
+        await mutations.WaitAsync();
+        try {
+            if(active.ContainsKey(id))throw new InvalidOperationException("Cancel the session and wait for it to stop before deleting it.");
+            var files=await store.DeleteRun(id);queued.TryRemove(id,out _);var cleanupComplete=true;
+            foreach(var file in files){
+                if(Path.GetFileName(file)!=file){cleanupComplete=false;continue;}
+                try{File.Delete(Path.Combine(paths.Replays,file));}
+                catch(Exception error)when(error is IOException or UnauthorizedAccessException){
+                    cleanupComplete=false;logger.LogWarning(error,"Session {Run} was deleted but replay file {File} could not be removed",id,file);
+                }
+            }
+            return cleanupComplete;
+        }finally{mutations.Release();}
+    }
+    private GameSlot Reuse(GameSlot slot,Dictionary<CachedGameKey,GameSlot> cache)
+    {
+        if(!cache.TryGetValue(Store.CacheKey(slot),out var source)||!engine.HasReusableReplay(source))return slot;
+        return slot with{Status="completed",Result=source.Result,Attempts=[source.Attempts.Last(a=>a.Status=="completed")],
+            CachedFromRunId=source.CachedFromRunId??source.RunId,CachedFromGameId=source.CachedFromGameId??source.Id};
     }
     public async Task Cancel(string id)
     {
@@ -49,8 +82,14 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        foreach(var run in store.Runs().Where(r=>r.Status is "running" or "cancelling" or "queued")) {
-            foreach(var slot in store.Slots(run.Id).Where(s=>s.Status=="running")) {
+        foreach(var run in store.Runs()) {
+            foreach(var timing in store.SessionTimings(run.Id).Where(t=>t.Status=="running"))
+                await store.SaveSessionTiming(timing with{Status="interrupted",FinishedAt=timing.UpdatedAt});
+            var slots=store.Slots(run.Id);
+            // A stale terminal run status must not hide abandoned work from recovery.
+            if(run.Status is not ("running" or "cancelling" or "queued")&&!slots.Any(s=>s.Status=="running")&&
+                !(run.Status=="completed"&&(slots.Count!=run.Total||slots.Any(s=>s.Status!="completed"||s.Result is null))))continue;
+            foreach(var slot in slots.Where(s=>s.Status=="running")) {
                 var attempts=slot.Attempts.Select(a=>a.Status=="running"?a with{Status="interrupted",FinishedAt=DateTimeOffset.UtcNow,Error="Service restarted; explicit resume required."}:a).ToList();
                 await store.SaveSlot(slot with{Status="cancelled",Attempts=attempts});
             }
@@ -60,14 +99,35 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             await mutations.WaitAsync(stoppingToken);
             try{
-                if(store.Run(id).Status!="queued"){queued.TryRemove(id,out _);continue;}
+                var waiting=store.Runs().FirstOrDefault(run=>run.Id==id);
+                if(waiting is null||waiting.Status!="queued"){queued.TryRemove(id,out _);continue;}
                 active[id]=cancellation;
                 await store.SaveRun(store.Run(id) with{Status="running"});
             }finally{mutations.Release();}
+            var timingStarted=DateTimeOffset.UtcNow;
+            var timing=new SessionTiming(Guid.NewGuid().ToString("N"),id,timingStarted,timingStarted,null,0,0,0,"running");
+            var elapsed=Stopwatch.StartNew();var attemptDurations=new List<(long Order,double Seconds)>();using var timingWriter=new SemaphoreSlim(1,1);
+            using var timingStop=new CancellationTokenSource();var checkpoints=Task.CompletedTask;
+            var timingOutcome="failed";
+            async Task RecordTiming(string status="running"){
+                await timingWriter.WaitAsync();try{
+                    var now=DateTimeOffset.UtcNow;
+                    timing=timing with{UpdatedAt=now,FinishedAt=status=="running"?null:now,ActiveSeconds=elapsed.Elapsed.TotalSeconds,
+                        AttemptCount=attemptDurations.Count,ScheduledSeconds=RuntimeEstimate.MeasuredSchedule(attemptDurations.OrderBy(a=>a.Order).Select(a=>a.Seconds),store.Run(id).Config),Status=status};
+                    await store.SaveSessionTiming(timing);
+                }finally{timingWriter.Release();}
+            }
             try {
+                await RecordTiming();
+                checkpoints=CheckpointTiming();
+                async Task CheckpointTiming(){
+                    using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));
+                    while(await timer.WaitForNextTickAsync(timingStop.Token))await RecordTiming();
+                }
                 var run=store.Run(id);var cap=engine.Capabilities();
                 if(!cap.Available||cap.EngineHash!=run.Config.EngineHash||cap.AdapterHash!=run.Config.AdapterHash)throw new InvalidOperationException("Engine or adapter changed after preflight.");
-                await Parallel.ForEachAsync(store.Slots(id).Where(s=>s.Status=="pending"),new ParallelOptions{MaxDegreeOfParallelism=run.Config.Workers,CancellationToken=cancellation.Token},async(slot,ct)=>{
+                async Task PlaySlot(GameSlot slot,CancellationToken ct){
+                    var attemptOrder=Stopwatch.GetTimestamp();var attemptClock=Stopwatch.StartNew();
                     var attempts=slot.Attempts.ToList();var number=attempts.Count+1;
                     var started=new Attempt(number,DateTimeOffset.UtcNow,null,"running",null,null,null);attempts.Add(started);
                     await store.SaveSlot(slot with{Status="running",Attempts=attempts});
@@ -83,13 +143,59 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
                         attempts[^1]=started with{Status="failed",FinishedAt=DateTimeOffset.UtcNow,Error=error.Message[..Math.Min(error.Message.Length,16000)]};
                         await store.SaveSlot(slot with{Status="failed",Attempts=attempts});
                     }
-                });
-                var failed=store.Slots(id).Count(s=>s.Status=="failed");await store.SaveRun(run with{Status=failed==0?"completed":"failed",Error=failed==0?null:$"{failed} slots failed; matrix incomplete. Explicit retry is available."});
+                    finally{
+                        await timingWriter.WaitAsync();try{attemptDurations.Add((attemptOrder,attemptClock.Elapsed.TotalSeconds));}finally{timingWriter.Release();}
+                        await RecordTiming();
+                    }
+                }
+                while(true){
+                // An earlier queued session may have finished these games since this session was created.
+                await mutations.WaitAsync(cancellation.Token);try {
+                var cache=store.CachedGames(run.Config);
+                foreach(var slot in store.Slots(id).Where(s=>s.Status=="pending")) {
+                    var reused=Reuse(slot,cache);if(reused.CachedFromRunId is not null)await store.SaveSlot(reused);
+                }
+                }finally{mutations.Release();}
+                var pending=store.Slots(id).Where(s=>s.Status=="pending").ToList();
+                if(run.Config.StaggerStarts&&run.Config.StartupSpacingSeconds is null){
+                    // Resume old saved sessions with their original scheduling policy.
+                    using var pacer=new StartPacer(TimeSpan.FromSeconds(run.Config.EstimatedGameSeconds-run.Config.StartLeadSeconds));
+                    await Parallel.ForEachAsync(pending,new ParallelOptions{MaxDegreeOfParallelism=run.Config.Workers,CancellationToken=cancellation.Token},async(slot,ct)=>{
+                        await pacer.WaitAsync(ct);await PlaySlot(slot,ct);
+                    });
+                }else{
+                    var spacing=run.Config.StaggerStarts?TimeSpan.FromSeconds(run.Config.StartupSpacingSeconds??1):TimeSpan.Zero;
+                    await GameScheduler.RunAsync(pending,run.Config.Workers,spacing,PlaySlot,cancellation.Token);
+                }
+                var repeat=false;
+                await mutations.WaitAsync(stoppingToken);
+                try {
+                    repeat=store.Slots(id).Any(slot=>slot.Status=="pending");
+                    if(!repeat){
+                        var current=store.Run(id);var finished=store.Slots(id);
+                        var complete=finished.Count==current.Total&&finished.All(s=>s.Status=="completed"&&s.Result is not null);
+                        var cancelled=finished.Any(s=>s.Status=="cancelled");
+                        timingOutcome=complete?"completed":cancelled?"cancelled":"failed";
+                        await store.SaveRun(current with{Status=timingOutcome,
+                            Error=complete?null:"Schedule incomplete; unfinished games require explicit resume or retry."});
+                    }
+                }finally{mutations.Release();}
+                if(!repeat)break;
+                }
             }catch(OperationCanceledException)when(cancellation.IsCancellationRequested){
+                timingOutcome="cancelled";
                 foreach(var slot in store.Slots(id).Where(s=>s.Status=="pending"))await store.SaveSlot(slot with{Status="cancelled"});
                 await store.SaveRun(store.Run(id) with{Status="cancelled"});
             }catch(Exception error){logger.LogError(error,"Run {Run} failed",id);await store.SaveRun(store.Run(id) with{Status="failed",Error=error.Message});}
-            finally{active.TryRemove(id,out _);queued.TryRemove(id,out _);}
+            finally{
+                timingStop.Cancel();
+                try{await checkpoints;}catch(OperationCanceledException)when(timingStop.IsCancellationRequested){}
+                elapsed.Stop();await RecordTiming(timingOutcome);
+                await mutations.WaitAsync();try{
+                    active.TryRemove(id,out _);queued.TryRemove(id,out _);
+                    if(store.Runs().FirstOrDefault(run=>run.Id==id)?.Status=="queued")Enqueue(id);
+                }finally{mutations.Release();}
+            }
         }
     }
 }

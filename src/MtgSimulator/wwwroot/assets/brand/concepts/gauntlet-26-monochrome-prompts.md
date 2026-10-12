@@ -1,0 +1,23 @@
+# Gauntlet 26 monochrome options
+
+Built-in image generation edits. Final colorways: silver, cobalt, violet, Statue of Liberty verdigris, and emerald. Earlier copper and teal drafts are preserved alongside these.
+
+## 26A Silver
+
+Use case: precise-object-edit. Edit target: attached Gauntlet option 26 Prismatic grip logo. Create the 26A Silver monochrome colorway. Preserve EXACTLY the original armored fist silhouette, orientation, thumb, every armor plate boundary, cuff shape, anvil location and shape, dark negative-space channels, and Gauntlet wordmark. Change ONLY the color palette of the logo to a single hue Silver (#BFC8D2) with lighter tints and darker shades of that SAME hue for facets. Silver uses neutral grayscale only. All plates including previously ivory, blue, black, red and green must become this unified monochrome palette; no leftover colors. Anvil use a very light tint of same hue. Keep refined vector-like facet shading and strong contrast. Keep dark navy backdrop and white Gauntlet wordmark. Replace top heading with exact '26A · Silver'. One logo only, same centered composition, generous margin. Do not redesign, rearrange, invent or remove plates.
+
+## 26B Cobalt
+
+Use case: precise-object-edit. Edit target: attached Gauntlet option 26 Prismatic grip logo. Create the 26B Cobalt monochrome colorway. Preserve EXACTLY the original armored fist silhouette, orientation, thumb, every armor plate boundary, cuff shape, anvil location and shape, dark negative-space channels, and Gauntlet wordmark. Change ONLY the color palette of the logo to a single hue Cobalt (#397DFA) with lighter tints and darker shades of that SAME hue for facets. Silver uses neutral grayscale only. All plates including previously ivory, blue, black, red and green must become this unified monochrome palette; no leftover colors. Anvil use a very light tint of same hue. Keep refined vector-like facet shading and strong contrast. Keep dark navy backdrop and white Gauntlet wordmark. Replace top heading with exact '26B · Cobalt'. One logo only, same centered composition, generous margin. Do not redesign, rearrange, invent or remove plates.
+
+## 26C Violet
+
+Use case: precise-object-edit. Edit target: attached Gauntlet option 26 Prismatic grip logo. Create the 26C Violet monochrome colorway. Preserve EXACTLY the original armored fist silhouette, orientation, thumb, every armor plate boundary, cuff shape, anvil location and shape, dark negative-space channels, and Gauntlet wordmark. Change ONLY the color palette of the logo to a single hue Violet (#9B72E8) with lighter tints and darker shades of that SAME hue for facets. Silver uses neutral grayscale only. All plates including previously ivory, blue, black, red and green must become this unified monochrome palette; no leftover colors. Anvil use a very light tint of same hue. Keep refined vector-like facet shading and strong contrast. Keep dark navy backdrop and white Gauntlet wordmark. Replace top heading with exact '26C · Violet'. One logo only, same centered composition, generous margin. Do not redesign, rearrange, invent or remove plates.
+
+## 26D Verdigris
+
+Use case: precise-object-edit. Edit attached Gauntlet option 26D logo. User clarified desired aged copper color is like the STATUE OF LIBERTY: oxidized copper VERDIGRIS GREEN PATINA. Change ONLY armor and anvil palette to muted pale sage-seafoam green, base #7BAF9A, darker patina-green facet shadows #376D5B, soft chalky mint highlights #C9DED1. Overall calm matte weathered verdigris, visibly green with restrained saturation, not bright emerald, neon turquoise, orange, red or brown. Single monochrome patina hue family. Keep smooth vector-like facets, no physical corrosion texture. Preserve EXACTLY fist silhouette, orientation, thumb, all armor plate boundaries, cuff, negative-space gaps, anvil shape and location, composition, dark navy backdrop and white Gauntlet wordmark. Change top label to exact '26D · Verdigris'. Do not add statue imagery, crowns or torches.
+
+## 26E Emerald
+
+Use case: precise-object-edit. Edit this 26E Teal Gauntlet logo. Change ONLY the teal hue to distinctly greener emerald: base #27B65B, deep forest-green facet shadows #10552B, soft mint-green highlights #B8F0C9. Single cohesive emerald-green hue family throughout all armor and anvil; remove cyan and blue cast. Preserve EXACTLY all plate geometry, thumb, fist silhouette, every negative space, cuff, anvil shape and placement, image layout, dark navy background, white Gauntlet wordmark. Keep polished vector facet shading. Top label exact '26E · Emerald'. No redesign or new elements.

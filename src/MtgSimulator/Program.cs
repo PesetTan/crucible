@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Net;
 using MtgSimulator;
 using MtgSimulator.Components;
 using Microsoft.AspNetCore.DataProtection;
@@ -12,20 +13,33 @@ if(args.Contains("--setup",StringComparer.Ordinal))
 }
 
 var builder=WebApplication.CreateBuilder(args);
-builder.WebHost.UseUrls("http://127.0.0.1:5077");
+builder.Configuration.AddJsonFile("branding.json", optional:false, reloadOnChange:true);
+builder.Services.AddSingleton<BrandSettings>();
+var lanAddress=Environment.GetEnvironmentVariable("MTG_LAN_ADDRESS");
+if(lanAddress is not null && (!IPAddress.TryParse(lanAddress,out var lanIp)||lanIp.AddressFamily!=System.Net.Sockets.AddressFamily.InterNetwork||
+    !(lanIp.GetAddressBytes()[0]==10 || (lanIp.GetAddressBytes()[0]==172 && lanIp.GetAddressBytes()[1] is >=16 and <=31) || (lanIp.GetAddressBytes()[0]==192 && lanIp.GetAddressBytes()[1]==168))))
+    throw new ArgumentException("MTG_LAN_ADDRESS must be a private IPv4 address assigned to this computer.");
+var allowedHosts=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"127.0.0.1","localhost"};
+if(lanAddress is not null)allowedHosts.Add(lanAddress);
+builder.WebHost.UseUrls(lanAddress is null ? ["http://127.0.0.1:5077"] : ["http://127.0.0.1:5077",$"http://{lanAddress}:5077"]);
 builder.WebHost.UseStaticWebAssets();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 var paths=new AppPaths(builder.Environment);
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(paths.Data,"protection-keys")));
 builder.Services.AddSingleton(paths);builder.Services.AddSingleton<Store>();builder.Services.AddSingleton<DeckImporter>();builder.Services.AddSingleton<ForgeEngine>();
+builder.Services.AddSingleton<ResourceCapacity>();
 builder.Services.AddSingleton<RunCoordinator>();builder.Services.AddHostedService(p=>p.GetRequiredService<RunCoordinator>());
 builder.Services.ConfigureHttpJsonOptions(options=>{options.SerializerOptions.PropertyNamingPolicy=Json.Options.PropertyNamingPolicy;});
 var app=builder.Build();
+app.MapGet("/branding.css", (BrandSettings branding, HttpContext context) => {
+    context.Response.Headers.CacheControl="no-store";
+    return Results.Text(branding.StyleSheet(), "text/css");
+});
 var instanceToken=Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
 app.Use(async(context,next)=>{
-    if(context.Request.Host.Host is not ("127.0.0.1" or "localhost")){context.Response.StatusCode=403;return;}
+    if(!allowedHosts.Contains(context.Request.Host.Host)){context.Response.StatusCode=403;return;}
     var origin=context.Request.Headers.Origin.ToString();
-    if(origin.Length>0&&(!Uri.TryCreate(origin,UriKind.Absolute,out var uri)||uri.Host is not ("127.0.0.1" or "localhost")||uri.Port!=context.Request.Host.Port)) {context.Response.StatusCode=403;return;}
+    if(origin.Length>0&&(!Uri.TryCreate(origin,UriKind.Absolute,out var uri)||!string.Equals(uri.Scheme,context.Request.Scheme,StringComparison.OrdinalIgnoreCase)||!string.Equals(uri.Host,context.Request.Host.Host,StringComparison.OrdinalIgnoreCase)||uri.Port!=context.Request.Host.Port)) {context.Response.StatusCode=403;return;}
     if(context.Request.Path.StartsWithSegments("/api")&&context.Request.Method is not ("GET" or "HEAD")&&context.Request.Headers["X-Instance-Token"]!=instanceToken){context.Response.StatusCode=403;return;}
     try{await next();}
     catch(Exception error)when(error is KeyNotFoundException or ArgumentException or InvalidOperationException or InvalidDataException){
@@ -40,13 +54,21 @@ app.MapGet("/api/v1/capabilities",(ForgeEngine engine)=>engine.Capabilities());
 app.MapGet("/api/v1/decks",(Store store,ForgeEngine engine)=>store.Decks().Select(d=>new{manifest=d,coverage=engine.Coverage(d)}));
 app.MapGet("/api/v1/decks/{id}",(string id,Store store,ForgeEngine engine)=>new{manifest=store.Deck(id),coverage=engine.Coverage(store.Deck(id))});
 app.MapPost("/api/v1/imports",async(DeckImporter importer)=>await importer.Import());
-app.MapPost("/api/v1/runs/preflight",(RunRequest request,ForgeEngine engine)=>new{blockers=engine.Preflight(request),limitations=engine.Capabilities().Limitations});
+app.MapPost("/api/v1/runs/preflight",(RunRequest request,ForgeEngine engine,Store store)=>{
+    var capabilities=engine.Capabilities();
+    var config=new RunConfig(request.DeckIds,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capabilities.EngineHash,capabilities.AdapterHash);
+    var cached=store.CachedGameKeys(config).Count(key=>request.DeckIds.Contains(key.DeckA)&&request.DeckIds.Contains(key.DeckB)&&key.Index<request.GamesPerPair/2);
+    var existing=store.ExistingSession(config);
+    return new{blockers=engine.Preflight(request),limitations=capabilities.Limitations,cachedGames=cached,existingSessionId=existing?.Id,existingGamesPerPair=existing?.Config.GamesPerPair};
+});
 app.MapPost("/api/v1/runs",async(RunRequest request,HttpContext context,RunCoordinator coordinator)=>{
     var key=context.Request.Headers["Idempotency-Key"].ToString();if(key.Length is <1 or >128)throw new ArgumentException("Provide an Idempotency-Key of 1–128 characters.");
     return Results.Ok(new{id=await coordinator.Create(request,key)});
 });
 app.MapGet("/api/v1/runs",(Store store,int offset=0,int limit=50)=>{if(offset<0||limit is <1 or >100)throw new ArgumentException("Invalid page range.");return store.Runs().Skip(offset).Take(limit);});
 app.MapGet("/api/v1/runs/{id}",(string id,Store store)=>store.Run(id));
+app.MapGet("/api/v1/runs/{id}/timings",(string id,Store store)=>{_ = store.Run(id);return store.SessionTimings(id);});
+app.MapDelete("/api/v1/runs/{id}",async(string id,RunCoordinator coordinator)=>Results.Ok(new{replayCleanupComplete=await coordinator.Delete(id)}));
 app.MapPost("/api/v1/runs/{id}/cancel",async(string id,RunCoordinator coordinator)=>{await coordinator.Cancel(id);return Results.Accepted();});
 app.MapPost("/api/v1/runs/{id}/resume",async(string id,RunCoordinator coordinator)=>{await coordinator.Resume(id);return Results.Accepted();});
 app.MapPost("/api/v1/runs/{id}/retry",async(string id,RunCoordinator coordinator)=>{await coordinator.Resume(id,true);return Results.Accepted();});

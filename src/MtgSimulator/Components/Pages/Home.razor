@@ -1,64 +1,175 @@
+@inject BrandSettings Branding
 @page "/"
+@implements IDisposable
+@inherits PersistentSelectionPage<HomeSelections>
+@inject ResourceCapacity Resources
 @inject Store Store
 @inject ForgeEngine Engine
 @inject RunCoordinator Coordinator
 @inject NavigationManager Navigation
-<PageTitle>Gauntlet — Standard simulator</PageTitle>
+<PageTitle>Gauntlet — Standard Simulator</PageTitle>
+<div inert="@(!SelectionsReady)">
 <div class="eyebrow">THE LOCAL PLAYTESTING DESK</div>
-<h1>Put your decks<br /><em>across the table.</em></h1>
+<h1>Put Your Decks<br /><em>Across the Table.</em></h1>
 <p class="lead">Run complete head-to-head games. Follow every turn.<br />Compare what happens when your deck has an opponent.</p>
-<div class="notice"><strong>Exploratory mode</strong><span>Forge resolves the games. Its pilots and card interactions still need independent validation. These rates describe the automated pilots, not your Arena win rate.</span></div>
+<div class="notice"><strong>Exploratory Mode</strong><span>Forge resolves the games. Its pilots and card interactions still need independent validation. These rates describe the automated pilots, not your Arena win rate.</span></div>
 @if(capabilities is not null&&capabilities.Blockers.Count>0){<div class="error">@foreach(var blocker in capabilities.Blockers){<p>@blocker</p>}</div>}
 <section class="panel">
-    <div class="section-head"><div><div class="eyebrow">01 / THE FIELD</div><h2>Choose the decks for a round robin</h2></div><span class="muted">@selected.Count / @ChartPalette.MaximumDecks decks selected</span></div>
+    <div class="section-head"><div><div class="eyebrow">01 / THE FIELD</div><h2>Choose the Decks for a Round Robin</h2></div><span class="@(limitDeck is null?"muted":"selection-limit-count")">@selected.Count / @ChartPalette.MaximumDecks decks selected</span></div>
     <p class="small muted">Choose 2–5 decks. Each selected deck gets one color across all line charts.</p>
-    <div class="chart-palette">@foreach(var color in ChartPalette.Colors){<span><i style="background:@color.Color"></i>@color.Name</span>}</div>
+    <div class="chart-palette">@foreach(var color in Branding.Palette){<span><i style="background:@color.Color"></i>@UiText.Label(color.Name)</span>}</div>
     @if(selected.Count>=ChartPalette.MaximumDecks){<p class="small" role="status">Five decks selected. Deselect a deck to choose another.</p>}
     <div class="matchup-explainer" role="note">
         <div><strong>Every selected deck plays every other selected deck.</strong><p>Click a deck to include it in the field. Public decks also play each other. Your deck joins the same round robin when selected. For example, selecting A, B, and C creates A ↔ B, A ↔ C, and B ↔ C.</p></div>
         <div class="matchup-count"><strong>@(selected.Count*(selected.Count-1)/2)</strong><span>matchups from @selected.Count selected decks</span></div>
     </div>
+    @if(CachedCount>0){
+        <div class="combination-notice" role="status"><strong>@CachedCount stored games available for seed @seed.</strong><span>Reuse completed matchups; continue saved sessions for missing games.</span><a href="/runs">View Run History →</a></div>
+    }
+    @if(ExistingSession is {} existing&&games>existing.Config.GamesPerPair){<p class="small muted" role="status">Continue the saved session from @existing.Config.GamesPerPair to @games games per matchup, using its saved run settings. <a href="@($"/runs/{existing.Id}")">View Session →</a></p>}
     <div class="deck-grid">
     @foreach(var deck in decks){var coverage=Engine.Coverage(deck);var blocked=coverage.Status=="blocked";
-        <label class="deck-card @(selected.Contains(deck.Id)?"selected":"") @(blocked?"blocked":"")">
+        <label class="deck-card @(selected.Contains(deck.Id)?"selected":"") @(blocked?"blocked":"") @(limitDeck==deck.Id?"selection-limit-reached":"")" @onclick="()=>CheckLimit(deck.Id,blocked)" tabindex="@(!blocked&&!selected.Contains(deck.Id)&&selected.Count>=ChartPalette.MaximumDecks?0:-1)" @onkeyup="e=>CheckLimitKey(e,deck.Id,blocked)">
             <div class="deck-card-top"><DeckColors Deck="deck" /><input type="checkbox" checked="@selected.Contains(deck.Id)" disabled="@(blocked||(!selected.Contains(deck.Id)&&selected.Count>=ChartPalette.MaximumDecks))" @onchange="e=>Toggle(deck.Id,(bool)e.Value!)" />
-                <details class="deck-menu" name="deck-details">
+                <details class="deck-menu" name="deck-details" @onclick:stopPropagation="true" @onkeyup:stopPropagation="true">
                     <summary aria-label="@($"Details for {deck.Name}")"><span aria-hidden="true">⋯</span></summary>
                     <div class="deck-menu-content">
                         <p>@deck.CreatureCount creatures · @deck.LandCount lands</p>
-                        @if(selected.Contains(deck.Id)){var color=ChartPalette.Colors[selected.Order(StringComparer.Ordinal).ToList().IndexOf(deck.Id)];<span class="deck-chart-color"><i style="background:@color.Color"></i>Chart color: @color.Name</span>}
-                        @if(!blocked){<details class="pilot-help"><summary aria-label="About exploratory pilot">Exploratory pilot <span aria-hidden="true">?</span></summary><p>Forge AI plays this deck. Its strategy is unvalidated; results may differ from human play.</p></details>}
-                        <a href="@($"/decks#{deck.Id}")">List ↗</a>
+                        @if(selected.Contains(deck.Id)){var color=Branding.Palette[selected.Order(StringComparer.Ordinal).ToList().IndexOf(deck.Id)];<span class="deck-chart-color"><i style="background:@color.Color"></i>Chart Color: @UiText.Label(color.Name)</span>}
+                        @if(!blocked){<details class="pilot-help"><summary aria-label="About exploratory pilot">Exploratory Pilot <span aria-hidden="true">?</span></summary><p>Forge AI plays this deck. Its strategy is unvalidated; results may differ from human play.</p></details>}
+                        <a href="@($"/decks#{deck.Id}")">List</a>
                     </div>
                 </details>
             </div>
-            <span class="tag">@(deck.SourceType=="personal"?"YOUR SAVED SNAPSHOT":"PUBLIC REPRESENTATIVE")</span>
             <h3>@deck.Name</h3>
-            @if(blocked){<div class="deck-bottom"><span>Missing card support</span></div>}
+        <div class="deck-tier"><ArchetypeTier Deck="deck" /></div>
+            @if(limitDeck==deck.Id){<p class="deck-limit-feedback" role="alert" @key="limitAttempt">You can select up to 5 decks. Deselect one to choose another.</p>}
+            @if(blocked){<div class="deck-bottom"><span>Missing Card Support</span></div>}
         </label>
     }
     </div>
 </section>
 <section class="panel">
-    <div class="section-head"><div><div class="eyebrow">02 / THE SESSION</div><h2>Set up the run</h2></div><span class="tag">EVEN PLAY / DRAW SPLIT</span></div>
-    <div class="config-grid session-options"><label>Games per matchup<InputNumber @bind-Value="games" min="2" max="1000" step="2" /></label><fieldset class="parallel-options" aria-describedby="parallel-help"><legend>Parallel games</legend><InputRadioGroup @bind-Value="workers" Name="parallel-games"><div class="parallel-choices">@for(var count=1;count<=4;count++){var choice=count;<label><InputRadio Value="choice" /><span>@choice</span></label>}</div></InputRadioGroup><div id="parallel-help"><small>Engine memory allowance: ~1.2 GB per game (4 games: ~4.8 GB), plus app and engine overhead.</small></div></fieldset></div>
-    <details><summary>Advanced options</summary>
+    <div class="section-head"><div><div class="eyebrow">02 / THE SESSION</div><h2>Set Up the Run</h2></div><span class="tag">EVEN PLAY / DRAW SPLIT</span></div>
+    <div class="config-grid session-options"><label>Games per Matchup<InputNumber @bind-Value="games" min="2" max="1000" step="2" /></label><fieldset class="parallel-options" aria-describedby="parallel-help"><legend>Parallel Games</legend><InputRadioGroup @bind-Value="Workers" Name="parallel-games"><div class="parallel-choices">@for(var count=1;count<=4;count++){var choice=count;<label><InputRadio Value="choice" disabled="@(staggerStarts&&choice==1)" /><span>@choice</span></label>}</div></InputRadioGroup><div class="capacity-check" aria-live="polite">
+            <span class="capacity-badge @badge.Status" tabindex="0" aria-describedby="capacity-explanation">@badge.Label<span class="capacity-tooltip" id="capacity-explanation" role="tooltip">@badge.Explanation</span></span>
+        </div><div id="parallel-help"><small>Engine memory allowance: ~1.2 GB per game (4 games: ~4.8 GB), plus app and engine overhead.</small></div></fieldset></div>
+    <div class="stagger-options">
+        <label><input type="checkbox" @bind="StaggerStarts" /> Stagger Engine Starts</label>
+        @if(staggerStarts){
+            <div class="config-grid advanced-options">
+                <label>Initial Engine Spacing (Seconds)<InputNumber @bind-Value="startupSpacingSeconds" min="0" max="5" step="0.25" /><small>Only offsets the first start of each parallel worker. Default: 1 second.</small></label>
+            </div>
+            <p class="small muted" role="status">@StaggerHelp()</p>
+        }
+    </div>
+    <details><summary>Advanced Options</summary>
         <div class="config-grid advanced-options">
-            <label>Time limit per game (seconds)<InputNumber @bind-Value="timeout" min="10" max="1800" /><small>10–1,800 seconds; default 180. Stops a stalled attempt. Games can finish sooner; engine startup counts toward this limit.</small></label>
-            <label>Root seed<InputNumber @bind-Value="seed" /><small>Starting value for game randomness. Keep it the same to reuse the same scheduled game seeds.</small></label>
-            <label>Maximum actual player turns<InputNumber @bind-Value="turnLimit" min="10" max="1000" /></label>
+            <label>Time Limit per Game (Minutes)<InputNumber @bind-Value="TimeoutMinutes" min="0.17" max="30" step="any" /><small>0.17–30 minutes; default 3. Fractions allowed. Stops a stalled attempt. Games can finish sooner; engine startup counts toward this limit.</small></label>
+            <label>Root Seed<InputNumber @bind-Value="Seed" /><small>Starting value for game randomness. Completed games for the same matchups and seed are reused. Choose a new seed for fresh games.</small></label>
+            <div>
+                <label>Maximum Actual Player Turns<InputNumber @bind-Value="TurnLimit" min="10" max="1000" @oninput="()=>followLongestGame=false" />
+                    <small>@if(turnStats is {} stats){<span>Longest Completed Game: @stats.LongestGame turns · rounded up to @stats.SuggestedLimit · @stats.Sessions sessions · @stats.Games completed games.</span>}else{<span>No completed games yet; starts at 150 turns.</span>}</small>
+                </label>
+                <label class="turn-limit-auto"><input type="checkbox" @bind="FollowLongestGame" /> Update from the Longest Game</label>
+            </div>
         </div>
         <p>Ordinary London mulligans approximate Arena Bo1 opening hands. No hand smoothing is guessed. Forge Default pilots make the mulligan and bottom choices.</p>
         <p>A timeout or turn limit is an incomplete attempt, never a rules draw.</p>
+        <p class="small muted">The automatic limit rounds the longest completed game up to the next multiple of 10 turns across all sessions, including sessions still in progress. It counts both players' actual turns and refreshes every 10 seconds as results arrive. Edit the number to use a custom limit.</p>
     </details>
-    <div class="run-bar"><div><strong>@(selected.Count*(selected.Count-1)/2) matchups</strong><span> · @(selected.Count*(selected.Count-1)/2*games) full games</span><small>@(games/2) starts per deck in each matchup · No sideboarding</small></div><button class="primary" disabled="@(busy||selected.Count<2||capabilities?.Available!=true)" @onclick="Start">@(busy?"Preparing…":"Run exploratory games →")</button></div>
+    @{var runtime=RuntimeEstimate.Calculate(selected.ToList(),games,workers,timeout,turnLimit,staggerStarts,estimatedGameSeconds,startLeadSeconds,timingSamples,startupSpacingSeconds,cachedKeys,sessionTimingSamples);}
+    <div class="runtime-estimate" aria-live="polite">
+        @if(runtime is not null&&ScheduledCount>0&&CachedCount==ScheduledCount){<span class="small muted">Stored Results Ready</span><strong>No new games needed</strong><p class="small muted">Reuse the saved games for this seed.</p>}else if(runtime is not null){
+            <span class="small muted">Rough Runtime</span><strong>@RuntimeEstimate.Duration(runtime.LowerSeconds)–@RuntimeEstimate.Duration(runtime.UpperSeconds)</strong>
+            <p class="small muted">@(runtime.Observations>0?$"Based on {runtime.Observations} recent game attempts on this Mac.":$"No comparable timings yet; assumes about {Math.Min(timeout,Math.Max(1,estimatedGameSeconds))} seconds per game.") @(runtime.Extrapolated?"Some matchups or run settings are extrapolated.":"Uses timings for these matchups and settings.") @(runtime.SessionObservations>0?$"Adjusted using {runtime.SessionObservations} completed session run periods.":"") Stored games are excluded. Includes the initial stagger when enabled; later games start as soon as a slot is free. Slow games and other apps can change the result.</p>
+        }else{<p class="small muted">Choose at least two decks and valid run settings to estimate runtime.</p>}
+    </div>
+    <div class="run-bar"><div><strong>@(selected.Count*(selected.Count-1)/2) matchups</strong><span> · @(selected.Count*(selected.Count-1)/2*games) full games</span><small>@(games/2) starts per deck in each matchup · No sideboarding</small>@if(CachedCount>0){<small>@CachedCount stored · @(ScheduledCount-CachedCount) to run</small>}</div><button class="primary" disabled="@(busy||selected.Count<2||capabilities?.Available!=true)" @onclick="Start">@(busy?"Preparing…":ScheduledCount>0&&CachedCount==ScheduledCount?"Use Stored Results":ExistingSession is not null?"Continue Session":CachedCount>0?"Reuse Results & Run Missing Games":"Run Exploratory Games")</button></div>
     @if(error is not null){<div class="error">@error</div>}
 </section>
-@if(Store.Runs().FirstOrDefault() is {} latest){<a class="recent-link" href="@($"/runs/{latest.Id}")"><span>YOUR LATEST SESSION</span><strong>@latest.Total games · @latest.Status</strong><span>View results ↗</span></a>}
+@if(Store.Runs().FirstOrDefault() is {} latest){<a class="recent-link" href="@($"/runs/{latest.Id}")"><span>YOUR LATEST SESSION</span><strong>@latest.Total games · @UiText.Label(latest.Status)</strong><span>View Results</span></a>}
+</div>
 @code {
+    protected override string SelectionKey => "home";
+    protected override HomeSelections CaptureSelections() => new(selected.ToList(), games, workers, timeout, turnLimit, seed, staggerStarts, startupSpacingSeconds, followLongestGame);
+    protected override void RestoreSelections(HomeSelections saved)
+    {
+        selected=(saved.DeckIds??[]).Where(id=>decks.Any(deck=>deck.Id==id&&Engine.Coverage(deck).Status!="blocked")).Distinct().Take(ChartPalette.MaximumDecks).ToHashSet();
+        games=saved.Games is >=2 and <=1000&&saved.Games%2==0?saved.Games:200;
+        workers=Math.Clamp(saved.Workers,1,4);
+        timeout=Math.Clamp(saved.Timeout,10,1800);
+        turnLimit=Math.Clamp(saved.TurnLimit,10,1000);
+        seed=saved.Seed;
+        staggerStarts=saved.StaggerStarts;
+        if(staggerStarts&&workers<2)workers=2;
+        startupSpacingSeconds=double.IsFinite(saved.StartupSpacingSeconds)?Math.Clamp(saved.StartupSpacingSeconds,0,5):1;
+        followLongestGame=saved.FollowLongestGame;
+        ApplyTurnStatistics(Store.SessionTurnStatistics());
+        LoadCachedKeys();
+    }
+    private ResourceSnapshot? resources;
+    private CapacityBadge badge => ResourceCapacity.Assess(resources, workers);
+    private readonly CancellationTokenSource resourceCancellation = new();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+        if(firstRender) await RefreshResources();
+    }
+    private async Task RefreshResources()
+    {
+        try
+        {
+            resources = await Resources.Sample(resourceCancellation.Token);
+            StateHasChanged();
+            _ = PollResources();
+        }
+        catch(OperationCanceledException) { }
+    }
+    private async Task PollResources()
+    {
+        var cancellation = resourceCancellation.Token;
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        try
+        {
+            while(await timer.WaitForNextTickAsync(cancellation))
+            {
+                var sample = await Resources.Sample(cancellation);
+                var latestTurns=Store.SessionTurnStatistics();
+
+                await InvokeAsync(() => { resources = sample; LoadCachedKeys(); LoadTimings(); ApplyTurnStatistics(latestTurns); StateHasChanged(); });
+            }
+        }
+        catch(OperationCanceledException) { }
+    }
+    public void Dispose() { resourceCancellation.Cancel(); resourceCancellation.Dispose(); }
+    private List<SimulationRun> savedRuns=[];
+    private SimulationRun? ExistingSession=>capabilities is null?null:savedRuns.Where(run=>MtgSimulator.Store.CompatibleSession(run.Config,new(selected.ToList(),games,workers,timeout,turnLimit,seed,true,capabilities.EngineHash,capabilities.AdapterHash))).OrderByDescending(run=>run.Config.GamesPerPair).FirstOrDefault();
+    private HashSet<CachedGameKey> cachedKeys=[];
+    private int ScheduledCount=>selected.Count*(selected.Count-1)/2*games;
+    private int CachedCount=>cachedKeys.Count(key=>selected.Contains(key.DeckA)&&selected.Contains(key.DeckB)&&key.Index<games/2);
+    private long Seed{get=>seed;set{seed=value;LoadCachedKeys();}}
+    private void LoadCachedKeys(){savedRuns=Store.Runs();if(capabilities is not null)cachedKeys=Store.CachedGameKeys(new([],games,workers,timeout,turnLimit,seed,true,capabilities.EngineHash,capabilities.AdapterHash));}
     private List<DeckManifest> decks=[];private HashSet<string> selected=[];private Capabilities? capabilities;
-    private int games=200,workers=1,timeout=180,turnLimit=150;private long seed=42;private bool busy;private string? error;
-    protected override void OnInitialized(){decks=Store.Decks().OrderBy(d=>d.SourceType).ThenBy(d=>d.Name).ToList();capabilities=Engine.Capabilities();foreach(var d in decks.Where(d=>d.SourceType=="public"&&Engine.Coverage(d).Status!="blocked").Take(ChartPalette.MaximumDecks))selected.Add(d.Id);}
-    private void Toggle(string id,bool value){if(value){if(selected.Count<ChartPalette.MaximumDecks)selected.Add(id);}else selected.Remove(id);}
-    private async Task Start(){busy=true;error=null;try{var id=await Coordinator.Create(new(selected.ToList(),games,workers,timeout,turnLimit,seed,true),Guid.NewGuid().ToString("N"));Navigation.NavigateTo($"/runs/{id}");}catch(Exception e){error=e.Message;}finally{busy=false;}}
+    private List<TimingSample> timingSamples=[];
+    private List<SessionTimingSample> sessionTimingSamples=[];
+    private void LoadTimings(){if(capabilities is null)return;timingSamples=Store.TimingSamples(capabilities.EngineHash,capabilities.AdapterHash);sessionTimingSamples=Store.SessionTimingSamples(capabilities.EngineHash,capabilities.AdapterHash);}
+    private int games=200,workers=1,timeout=180,turnLimit=150,estimatedGameSeconds=15,startLeadSeconds=5;private bool staggerStarts;private long seed=42;private bool busy;private string? error;
+    private double startupSpacingSeconds=1;
+    private SessionTurnStats? turnStats;private bool followLongestGame=true;
+    private int TurnLimit{get=>turnLimit;set{turnLimit=value;followLongestGame=false;}}
+    private bool FollowLongestGame{get=>followLongestGame;set{followLongestGame=value;if(value&&turnStats is {} stats)turnLimit=stats.SuggestedLimit;}}
+    private void ApplyTurnStatistics(SessionTurnStats? stats){turnStats=stats;if(followLongestGame&&stats is not null)turnLimit=stats.SuggestedLimit;}
+    private double TimeoutMinutes{get=>timeout/60.0;set=>timeout=(int)Math.Round(value*60,MidpointRounding.AwayFromZero);}
+    private int Workers{get=>workers;set=>workers=staggerStarts?Math.Max(2,value):value;}
+    private bool StaggerStarts{get=>staggerStarts;set{staggerStarts=value;if(value&&workers<2)workers=2;}}
+    private string StaggerHelp()=>double.IsFinite(startupSpacingSeconds)&&startupSpacingSeconds is >=0 and <=5
+        ?$"Start {workers} workers {startupSpacingSeconds:0.##} seconds apart, then immediately replace each finished game. Spreads startup load without limiting ongoing throughput. Faster completion depends on how this Mac handles engine starts."
+        :"Choose initial spacing between 0 and 5 seconds.";
+    private string? limitDeck;private int limitAttempt;
+    protected override void OnInitialized(){decks=Store.Decks().OrderBy(d=>d.SourceType).ThenBy(d=>d.Name).ToList();capabilities=Engine.Capabilities();LoadCachedKeys();LoadTimings();ApplyTurnStatistics(Store.SessionTurnStatistics());foreach(var d in decks.Where(d=>d.SourceType=="public"&&Engine.Coverage(d).Status!="blocked").Take(ChartPalette.MaximumDecks))selected.Add(d.Id);}
+    private void CheckLimit(string id,bool blocked){if(!blocked&&!selected.Contains(id)&&selected.Count>=ChartPalette.MaximumDecks){limitDeck=id;limitAttempt++;}}
+    private void CheckLimitKey(KeyboardEventArgs e,string id,bool blocked){if(e.Key is "Enter" or " ")CheckLimit(id,blocked);}
+    private void Toggle(string id,bool value){if(value){if(selected.Count<ChartPalette.MaximumDecks){selected.Add(id);limitDeck=null;}else CheckLimit(id,false);}else{selected.Remove(id);limitDeck=null;}}
+    private async Task Start(){busy=true;error=null;try{var id=await Coordinator.Create(new(selected.ToList(),games,workers,timeout,turnLimit,seed,true,staggerStarts,estimatedGameSeconds,startLeadSeconds,startupSpacingSeconds),Guid.NewGuid().ToString("N"));Navigation.NavigateTo($"/runs/{id}");}catch(Exception e){error=e.Message;}finally{busy=false;}}
 }

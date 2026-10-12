@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180">
+  <rect width="160" height="180" fill="#121827"/><title>Gauntlet — geometric cobalt armor with forge anvil</title>
+  <g fill="#497cff">
+    <path d="m54 34 5-5h7l5 5v48H54Z"/>
+    <path d="m75 21 5-5h7l5 5v61H75Z"/>
+    <path d="m96 28 5-5h7l5 5v54H96Z"/>
+    <path d="m117 42 5-5h7l5 5v40h-17Z"/>
+    <path d="m53 95-21-21H22l-7 7v9l38 38 15-16Z"/>
+    <path d="M54 87h80v32l-23 21H77l-23-23Z"/>
+    <path d="M69 145h50l10 23H59Z"/>
+  </g>
+  <g fill="#84c6ff">
+    <path d="M54 50h17v4H54Zm0 17h17v4H54Z"/>
+    <path d="M75 40h17v4H75Zm0 23h17v4H75Z"/>
+    <path d="M96 46h17v4H96Zm0 20h17v4H96Z"/>
+    <path d="M117 56h17v4h-17Zm0 16h17v4h-17Z"/>
+    <path d="m22 81 35 35 3-3-35-35Z"/>
+    <path d="M69 151h50l2 4H67Z"/>
+  </g>
+  <path d="M70 100h28v-6h22v12h-11l-8 7v9h10v7H79v-7h10v-9l-9-6H70l-9-7Z" fill="#f5f8ff"/>
+</svg>

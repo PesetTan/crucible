@@ -45,9 +45,15 @@ public sealed class ForgeEngine(AppPaths paths, Store store)
              "Exact skipped-turn cycle grouping and mana-pool replay are unavailable; actual turns are authoritative.",
              "Legality uses the dated local snapshot and is not independently refreshed by this app."]);
     }
+    private string ForgeCardName(string name)
+    {
+        if (scripts.Value.ContainsKey(name)) return name;
+        var firstFace = name.Split(" // ", 2, StringSplitOptions.None)[0];
+        return firstFace != name && scripts.Value.ContainsKey(firstFace) ? firstFace : name;
+    }
     public DeckCoverage Coverage(DeckManifest deck)
     {
-        var cards=deck.Cards.Where(c=>c.Zone=="MainDeck").Select(c=>scripts.Value.TryGetValue(c.Name,out var script)?
+        var cards=deck.Cards.Where(c=>c.Zone=="MainDeck").Select(c=>scripts.Value.TryGetValue(ForgeCardName(c.Name),out var script)?
             new CoverageItem(c.Name,"present_unvalidated",Path.GetRelativePath(paths.Vendor,script),null):new CoverageItem(c.Name,"missing",null,"No exact Forge card identity found.")).ToList();
         return new(deck.Id,cards.Any(c=>c.Status=="missing")?"blocked":"exploratory",cards,
             ["Faces, generated tokens, copy interactions, rules fixtures, and pilot behavior remain unvalidated."]);
@@ -59,13 +65,29 @@ public sealed class ForgeEngine(AppPaths paths, Store store)
         if(request.DeckIds.Distinct().Count()!=request.DeckIds.Count||request.DeckIds.Count is <2 or >ChartPalette.MaximumDecks)blockers.Add("Select two to five distinct deck versions.");
         if(request.GamesPerPair<2||request.GamesPerPair>1000||request.GamesPerPair%2!=0)blockers.Add("Choose an even number of games per matchup between 2 and 1,000.");
         if(request.Workers is <1 or >4)blockers.Add("Worker count must be between 1 and 4; each uses up to 1.2 GB.");
-        if(request.TimeoutSeconds is <10 or >1800)blockers.Add("Time limit must be 10–1,800 seconds per attempt.");
+        if(request.StaggerStarts){
+            if(request.Workers<2)blockers.Add("Staggered starts require at least two parallel games to allow overlap.");
+            if(request.StartupSpacingSeconds is {} spacing){
+                if(!double.IsFinite(spacing)||spacing is <0 or >5)blockers.Add("Initial engine spacing must be 0–5 seconds.");
+            }else{
+                if(request.EstimatedGameSeconds is <1 or >1800)blockers.Add("Estimated game duration must be 1–1,800 seconds.");
+                if(request.StartLeadSeconds<0||request.StartLeadSeconds>=request.EstimatedGameSeconds)blockers.Add("The head start must be zero or more seconds and shorter than the estimated game duration.");
+            }
+        }
+        if(request.TimeoutSeconds is <10 or >1800)blockers.Add("Time limit must be 0.17–30 minutes per attempt.");
         if(request.TurnLimit is <10 or >1000)blockers.Add("Turn limit must be 10–1,000 actual player turns.");
         foreach(var id in request.DeckIds) {
             try { var deck=store.Deck(id);var coverage=Coverage(deck);blockers.AddRange(coverage.Cards.Where(c=>c.Status=="missing").Select(c=>$"{deck.Name}: {c.Name} is unsupported."));
                 blockers.AddRange(deck.Cards.Where(c=>c.Zone=="MainDeck"&&!c.LocallyLegal).Select(c=>$"{deck.Name}: {c.Name} lacks local Standard legality evidence."));
             }catch(KeyNotFoundException){blockers.Add("A selected deck version no longer exists.");}
         }return blockers;
+    }
+    public bool HasReusableReplay(GameSlot slot)
+    {
+        var attempt=slot.Attempts.LastOrDefault(a=>a.Status=="completed");
+        if(slot.Result is null||attempt?.Replay is null||attempt.ReplayHash is null)return false;
+        try { var path=Path.Combine(paths.Replays,attempt.Replay);return File.Exists(path)&&FileHash(path)==attempt.ReplayHash; }
+        catch(Exception error)when(error is IOException or UnauthorizedAccessException){return false;}
     }
     public async Task<(GameResult Result,string Replay,string Hash)> Play(SimulationRun run, GameSlot slot, int attemptNumber, CancellationToken cancellation)
     {
@@ -79,7 +101,7 @@ public sealed class ForgeEngine(AppPaths paths, Store store)
         using var registration=timeout.Token.Register(()=>{try{if(!process.HasExited)process.Kill(entireProcessTree:true);}catch(InvalidOperationException){} });
         var stderr=new StringBuilder();var stderrTask=Task.Run(async()=>{while(await process.StandardError.ReadLineAsync() is {} line){stderr.AppendLine(line);if(stderr.Length>16000)stderr.Remove(0,stderr.Length-16000);}},CancellationToken.None);
         var request=new {attemptId,seed=slot.Seed,starter=slot.Starter==slot.DeckA?0:1,turnLimit=run.Config.TurnLimit,
-            deckA=store.Deck(slot.DeckA).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new{c.Name,c.Quantity}),deckB=store.Deck(slot.DeckB).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new{c.Name,c.Quantity})};
+            deckA=store.Deck(slot.DeckA).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new{Name=ForgeCardName(c.Name),c.Quantity}),deckB=store.Deck(slot.DeckB).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new{Name=ForgeCardName(c.Name),c.Quantity})};
         GameResult? result=null;var samples=new List<TurnSample>();var openingHands=new Dictionary<string,OpeningHand>();var personalTurns=new Dictionary<string,int>();long sequence=0;long bytes=0;bool started=false;
         string? failure=null;int actualTurns=0;
         try {
@@ -111,7 +133,7 @@ public sealed class ForgeEngine(AppPaths paths, Store store)
             await process.WaitForExitAsync(timeout.Token);await stderrTask;
             if(process.ExitCode!=0||failure is not null||result is null)throw new InvalidOperationException(failure??$"Engine exited {process.ExitCode} without a complete result. {stderr}");
             File.Move(temp,outputPath,overwrite:false);return(result,Path.GetFileName(outputPath),FileHash(outputPath));
-        }catch(OperationCanceledException)when(!cancellation.IsCancellationRequested){throw new TimeoutException($"Attempt exceeded {run.Config.TimeoutSeconds} seconds; not a rules draw.");}
+        }catch(OperationCanceledException)when(!cancellation.IsCancellationRequested){throw new TimeoutException($"Attempt exceeded {run.Config.TimeoutSeconds/60.0:0.##} minutes; not a rules draw.");}
         finally {
             try{if(!process.HasExited)process.Kill(entireProcessTree:true);}catch(InvalidOperationException){}
             await process.WaitForExitAsync(CancellationToken.None);await stderrTask;

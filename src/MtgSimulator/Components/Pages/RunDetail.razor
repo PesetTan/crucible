@@ -1,73 +1,184 @@
+@inject BrandSettings Branding
 @page "/runs/{Id}"
 @implements IDisposable
+@inherits PersistentSelectionPage<ResultSelections>
 @inject Store Store
 @inject RunCoordinator Coordinator
-<PageTitle>Session results — Gauntlet</PageTitle>
-@if(summary is null){<h1>Loading session…</h1>}
+@inject NavigationManager Navigation
+@inject Microsoft.JSInterop.IJSRuntime JS
+<PageTitle>Session Results — Gauntlet</PageTitle>
+<div inert="@(!SelectionsReady)">
+@if(summary is null){<h1>Loading Session…</h1>}
 else{
     var run=summary.Run;
-    <div class="eyebrow">SESSION / @run.Id[..8]</div><div class="section-head"><div><h1>Across the table.</h1><p class="muted">@run.Config.DeckIds.Count decks · @run.Total scheduled games · Root seed @run.Config.RootSeed</p></div><span class="pill">@run.Status</span></div>
-    <div class="notice"><strong>Exploratory pilot results</strong><span>Rules and pilot gates remain unvalidated. @run.Config.OpeningPolicy. Extra/skipped turn-cycle grouping and mana-pool replay are unavailable.</span></div>
-    <div class="stats-grid"><div><span>VALID GAMES</span><strong>@summary.Valid <small>/ @run.Total</small></strong></div><div><span>IN PROGRESS</span><strong>@summary.Running</strong></div><div><span>TECHNICAL FAILURES</span><strong>@summary.Failed</strong></div><div><span>SCHEDULE</span><strong class="stat-word">@(summary.FullMatrix?"Complete":"Incomplete")</strong></div></div>
-    <div class="progress"><div style="width:@((100.0*summary.Valid/Math.Max(1,run.Total)).ToString("0.#",CultureInfo.InvariantCulture))%"></div></div>
-    <div class="notice"><strong>Mana incidents</strong><span>@summary.ManaStarvedGames games flagged mana-starved · @summary.ManaFloodedGames flagged mana-flooded · @summary.ManaAnalyzedGames / @summary.Valid valid games analyzed. Either player can trigger a flag.</span></div>
-    <details><summary>Mana detection rules</summary><p><strong>Mana-starved:</strong> @ManaAnalyzer.StarvedDefinition</p><p><strong>Mana-flooded:</strong> @ManaAnalyzer.FloodedDefinition</p><p class="muted">Version @ManaAnalyzer.Version. These are land-availability indicators, not proof of the cause of a loss. Nonland mana production and color-specific starvation are not measured by this detector.</p><a href="@($"/api/v1/runs/{Id}/mana-events")" target="_blank">Open the per-player incident log ↗</a></details>
+    var timingRecords=Store.SessionTimings(run.Id);
+    <div class="eyebrow">SESSION / @run.Id[..8]</div><div class="section-head"><div><h1>Across the Table.</h1><p class="muted">@run.Config.DeckIds.Count decks · @run.Total scheduled games · Root Seed @run.Config.RootSeed</p></div><span class="pill">@UiText.Label(run.Status)</span></div>
+    <div class="results-filter" role="region" aria-label="Results filter">
+        <label for="results-matchup">Matchup</label>
+        <select id="results-matchup" @bind="SelectedMatchupKey"><option value="">All Matchups</option>@foreach(var choice in MatchupChoices()){<option value="@choice.Key">@choice.Label</option>}</select>
+        <label for="results-time-unit">View by</label><select id="results-time-unit" @bind="timeUnit"><option value="rounds">Rounds</option><option value="turns">Turns</option></select>
+        <span class="small muted" aria-live="polite">@view!.Run.Total games · Applies to every results section</span>
+    </div>
+    @if(run.Config.StaggerStarts){<p class="small muted">@(run.Config.StartupSpacingSeconds is {} spacing?$"Initial engine starts: {spacing:0.##} seconds apart; finished games are replaced immediately. Up to {run.Config.Workers} games at once.":$"Original stagger policy: {run.Config.EstimatedGameSeconds-run.Config.StartLeadSeconds} seconds between every launch; up to {run.Config.Workers} games at once.")</p>}
+    <p><strong>@RuntimeEstimate.SessionDuration(timingRecords)</strong></p>
+    @if(timingRecords.Count>0){
+        <details><summary>Recorded Runtime</summary><p class="small muted">Time spent actively processing this session, including engine startup and saving results. Queued time and pauses between runs are excluded. Resuming or extending a stopped session adds another period. Only completed periods with at least five new game attempts adjust future estimates; stored games add no attempt timing.</p>
+            <div class="table-scroll"><table><thead><tr><th>Started</th><th>Finished / Last Recorded</th><th>Active Time</th><th>New Attempts</th><th>Status</th></tr></thead><tbody>
+            @foreach(var timing in timingRecords){<tr><td>@timing.StartedAt.ToLocalTime().ToString("MMM d, h:mm:ss tt")</td><td>@((timing.FinishedAt??timing.UpdatedAt).ToLocalTime().ToString("MMM d, h:mm:ss tt"))</td><td>@RuntimeEstimate.Duration(timing.ActiveSeconds)</td><td>@timing.AttemptCount</td><td>@UiText.Label(timing.Status)</td></tr>}
+            </tbody></table></div><a href="@($"/api/v1/runs/{Id}/timings")" target="_blank">Full Session Timing Log</a>
+        </details>
+    }
+    @if(run.Extensions?.Count>0){<p class="small muted">Session continued @run.Extensions.Count @(run.Extensions.Count==1?"time":"times"). Current target: @run.Config.GamesPerPair games per matchup; completed results retained.</p>}
+    <div class="notice"><strong>Exploratory Pilot Results</strong><span>Rules and pilot gates remain unvalidated. @run.Config.OpeningPolicy. Extra/skipped turn-cycle grouping and mana-pool replay are unavailable.</span></div>
+    @if(PairSlots().Any(slot=>slot.CachedFromRunId is not null)){
+        <div class="notice"><strong>Stored Results Reused</strong><span>@view!.CachedGames games reused for this seed. @foreach(var source in PairSlots().Where(slot=>slot.CachedFromRunId is not null).Select(slot=>slot.CachedFromRunId!).Distinct()){<a href="@($"/runs/{source}")">Source Session →</a><text> </text>}</span></div>
+    }
+    <div class="stats-grid"><div><span>VALID GAMES</span><strong>@view!.Valid <small>/ @view!.Run.Total</small></strong></div><div><span>IN PROGRESS</span><strong>@view!.Running</strong></div><div><span>TECHNICAL FAILURES</span><strong>@view!.Failed</strong></div><div><span>SCHEDULE</span><strong class="stat-word">@(view!.FullMatrix?"Complete":"Incomplete")</strong></div></div>
+    <div class="progress"><div style="width:@((100.0*view!.Valid/Math.Max(1,view.Run.Total)).ToString("0.#",CultureInfo.InvariantCulture))%"></div></div>
+    <div class="notice"><strong>Mana Incidents</strong><span>@view!.ManaStarvedGames games flagged mana-starved · @view!.ManaFloodedGames flagged mana-flooded · @view!.ManaAnalyzedGames / @view!.Valid valid games analyzed. Either player can trigger a flag.</span></div>
+    <details><summary>Mana Detection Rules</summary><p><strong>Mana-Starved:</strong> @ManaAnalyzer.StarvedDefinition</p><p><strong>Mana-Flooded:</strong> @ManaAnalyzer.FloodedDefinition</p><p class="muted">Version @ManaAnalyzer.Version. These are land-availability indicators, not proof of the cause of a loss. Nonland mana production and color-specific starvation are not measured by this detector.</p><a href="@($"/api/v1/runs/{Id}/mana-events")" target="_blank">Open the Full Session Incident Log</a></details>
     <div class="actions">
-        @if(run.Status is "running" or "queued" or "cancelling"){<button disabled="@(run.Status=="cancelling")" @onclick="()=>Act(()=>Coordinator.Cancel(Id))">Cancel session</button>}
-        else{<button @onclick="()=>Act(()=>Coordinator.Resume(Id))">Resume unfinished games</button>@if(summary.Failed>0){<button @onclick="()=>Act(()=>Coordinator.Resume(Id,true))">Retry failed attempts</button>}}
-        <a class="button" href="@($"/api/v1/runs/{Id}/export?format=csv")">Export CSV ↓</a><a class="button" href="@($"/api/v1/runs/{Id}/export")">Export JSON ↓</a>
+        @if(run.Status is "running" or "queued" or "cancelling"){<button disabled="@(run.Status=="cancelling")" @onclick="()=>Act(()=>Coordinator.Cancel(Id))">Cancel Session</button>}
+        else{<button disabled="@(!slots.Any(slot=>slot.Result is null&&slot.Status is ("pending" or "cancelled")&&slot.Attempts.Count<4))" @onclick="()=>Act(()=>Coordinator.Resume(Id))">Resume Unfinished Games</button>@if(summary.Failed>0){<button @onclick="()=>Act(()=>Coordinator.Resume(Id,true))">Retry Failed Attempts</button>}}
+        <a class="button" href="@($"/api/v1/runs/{Id}/export?format=csv")">Export Session CSV</a><a class="button" href="@($"/api/v1/runs/{Id}/export")">Export Session JSON</a>
         <span class="muted small">@(Eta())</span>
     </div>
     @if(error is not null||run.Error is not null){<div class="error">@(error??run.Error)</div>}
-    <section class="panel"><div class="section-head"><div><div class="eyebrow">OPENING HANDS</div><h2>Mulligans before keep</h2></div><a href="@($"/api/v1/runs/{Id}/opening-hands")" target="_blank">Per-player hand log ↗</a></div>
-        <div class="table-scroll"><table><thead><tr><th>Deck</th><th>Recorded players</th><th>Mean</th><th>Median / max</th><th>0 mulligans</th><th>1</th><th>2</th><th>3+</th><th>Kept size</th><th>Mean on play / draw</th></tr></thead><tbody>@foreach(var m in summary.Mulligans){<tr><td>@Name(m.DeckId)</td><td>@m.RecordedPlayers</td><td>@Number(m.Mean)</td><td>@Number(m.Median) / @(m.Maximum?.ToString()??"—")</td><td>@m.Zero</td><td>@m.One</td><td>@m.Two</td><td>@m.ThreePlus</td><td>@Number(m.MeanKeptSize)</td><td>@Number(m.MeanOnPlay) / @Number(m.MeanOnDraw)</td></tr>}</tbody></table></div><p class="small muted">Count is the number of mulligans before a final keep. Playable means accepted by the Forge pilot policy; forced keeps are identified in the game log. Completed games only; missing records remain unknown.</p>
+    <section class="panel"><div class="section-head"><div><div class="eyebrow">OPENING HANDS</div><h2>Mulligans Before Keep</h2></div><a href="@($"/api/v1/runs/{Id}/opening-hands")" target="_blank">Full Session Hand Log</a></div>
+        <div class="table-scroll"><table><thead><tr><th>Deck</th><th>Recorded Players</th><th>Mean</th><th>Median / Max</th><th>0 Mulligans</th><th>1</th><th>2</th><th>3+</th><th>Kept Size</th><th>Mean on Play / Draw</th></tr></thead><tbody>@foreach(var m in view!.Mulligans){<tr><td>@Name(m.DeckId)</td><td>@m.RecordedPlayers</td><td>@Number(m.Mean)</td><td>@Number(m.Median) / @(m.Maximum?.ToString()??"—")</td><td>@m.Zero</td><td>@m.One</td><td>@m.Two</td><td>@m.ThreePlus</td><td>@Number(m.MeanKeptSize)</td><td>@Number(m.MeanOnPlay) / @Number(m.MeanOnDraw)</td></tr>}</tbody></table></div><p class="small muted">Count is the number of mulligans before a final keep. Playable means accepted by the Forge pilot policy; forced keeps are identified in the game log. Completed games only; missing records remain unknown.</p>
     </section>
-    <section class="panel"><div class="section-head"><div><div class="eyebrow">01 / THE MATCHUPS</div><h2>Who wins against whom?</h2></div><span class="muted">Row deck's win rate</span></div>
-        <div class="table-scroll"><table class="matrix"><thead><tr><th>Deck</th>@foreach(var deck in deckVersions){<th>@Name(deck.Id)</th>}</tr></thead><tbody>
-        @foreach(var row in deckVersions){<tr><th>@Name(row.Id)</th>@foreach(var col in deckVersions){
-            var matchup=summary.Matchups.FirstOrDefault(m=>m.DeckA==row.Id&&m.DeckB==col.Id||m.DeckA==col.Id&&m.DeckB==row.Id);
-            <td>@if(row.Id==col.Id){<span class="muted">—</span>}else if(matchup is not null){var rate=matchup.DeckA==row.Id?matchup.WinRateA:matchup.WinRateB;<button class="matrix-cell" @onclick="()=>Select(matchup)"><strong>@Metrics.Rate(rate)</strong><small>@matchup.Valid games</small></button>}</td>
+    <section class="panel"><div class="section-head"><div><div class="eyebrow">01 / THE MATCHUPS</div><h2>Who Wins Against Whom?</h2></div><span class="muted">Row Deck's Win Rate</span></div>
+        <div class="table-scroll"><table class="matrix"><thead><tr><th>Deck</th>@foreach(var deck in viewDecks){<th>@Name(deck.Id)</th>}</tr></thead><tbody>
+        @foreach(var row in viewDecks){<tr><th>@Name(row.Id)</th>@foreach(var col in viewDecks){
+            var matchup=view!.Matchups.FirstOrDefault(m=>m.DeckA==row.Id&&m.DeckB==col.Id||m.DeckA==col.Id&&m.DeckB==row.Id);
+            <td>@if(row.Id==col.Id){<span class="muted">—</span>}else if(matchup is not null){var rate=matchup.DeckA==row.Id?matchup.WinRateA:matchup.WinRateB;<button class="matrix-cell" aria-pressed="@(IsSelected(matchup,row.Id)?"true":"false")" aria-label="@($"View {Name(row.Id)} vs {Name(col.Id)} matchup details")" @onclick="()=>SelectFromMatrix(matchup,row.Id)"><strong>@Metrics.Rate(rate)</strong><small>@matchup.Valid games</small></button>}</td>
         }</tr>}
-        </tbody></table></div><p class="small muted">Rules draws mean reverse cells may sum to less than 100%. Pending, failed, and cancelled slots are excluded from rates and shown separately.</p>
-        <details><summary>Overall performance — equal weight per selected opponent</summary><div class="table-scroll"><table><thead><tr><th>Deck</th><th>Mean opponent win rate</th><th>Opponents with data</th></tr></thead><tbody>@foreach(var deck in deckVersions){var rates=summary.Matchups.Where(m=>m.DeckA==deck.Id||m.DeckB==deck.Id).Select(m=>m.DeckA==deck.Id?m.WinRateA:m.WinRateB).Where(r=>r.HasValue).Select(r=>r!.Value).ToList();<tr><td>@Name(deck.Id)</td><td>@(rates.Count==0?"—":Metrics.Rate(rates.Average()))</td><td>@rates.Count / @(deckVersions.Count-1)</td></tr>}</tbody></table></div><p class="small muted">An aggregate with missing opponents is partial. No population Arena inference or binomial interval is attached to this average.</p></details>
+        </tbody></table></div><p class="small muted">Click a win-rate cell to filter every results section to that matchup. Rules draws mean reverse cells may sum to less than 100%. Pending, failed, and cancelled slots are excluded from rates and shown separately.</p>
+        <details><summary>Overall Performance — Equal Weight per Selected Opponent</summary><div class="table-scroll"><table><thead><tr><th>Deck</th><th>Mean Opponent Win Rate</th><th>Opponents with Data</th></tr></thead><tbody>@foreach(var deck in viewDecks){var rates=view!.Matchups.Where(m=>m.DeckA==deck.Id||m.DeckB==deck.Id).Select(m=>m.DeckA==deck.Id?m.WinRateA:m.WinRateB).Where(r=>r.HasValue).Select(r=>r!.Value).ToList();<tr><td>@Name(deck.Id)</td><td>@(rates.Count==0?"—":Metrics.Rate(rates.Average()))</td><td>@rates.Count / @(viewDecks.Count-1)</td></tr>}</tbody></table></div><p class="small muted">An aggregate with missing opponents is partial. No population Arena inference or binomial interval is attached to this average.</p></details>
     </section>
-    <section class="panel"><div class="eyebrow">02 / THE FIELD OVER TIME</div><h2>Every deck, one line</h2>
-        <p class="muted">Each line follows one selected deck across all its opponents. Deck colors stay the same across charts.</p>
-        <div class="chart-grid"><SeriesChart Title="Life totals" Series="Chart(s=>s.Life)" /><SeriesChart Title="Board power" HelpText="Total current power of your creatures, including tokens, boosts and tapped creatures. Lines show the average at turn end—not damage you can deal." Series="Chart(s=>s.Power)" /><SeriesChart Title="Creatures in play" Series="Chart(s=>s.Creatures)" /><SeriesChart Title="Lands in play" Series="Chart(s=>s.Lands)" /><SeriesChart Title="Cards in hand" Series="Chart(s=>s.Hand)" /><SeriesChart Title="Graveyard development" Series="Chart(s=>s.Graveyard)" /></div>
-        <p class="small muted">Averages at each player's completed turn end, pooled across completed games against all opponents. Later points include only games still active; expand a chart to see the observed-game counts. Power is descriptive, not a combat-strength estimate.</p>
-    </section>
-    @if(selected is {} pair){
-        <section class="panel"><div class="eyebrow">03 / MATCHUP DETAIL</div><h2>@Name(pair.DeckA) <span class="muted">vs</span> @Name(pair.DeckB)</h2>
-            <div class="matchup-cards"><div><h3>@Name(pair.DeckA)</h3><strong>@Metrics.Rate(pair.WinRateA)</strong><p>@pair.WinsA wins · @pair.WinsB losses · @pair.Draws draws</p><p class="muted">95% Wilson interval: @Interval(pair.IntervalA)</p><p>On play: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsAOnPlay/pair.PlayA) (@pair.PlayA games)<br />On draw: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsAOnDraw/pair.PlayB) (@pair.PlayB games)</p></div><div><h3>@Name(pair.DeckB)</h3><strong>@Metrics.Rate(pair.WinRateB)</strong><p>@pair.WinsB wins · @pair.WinsA losses · @pair.Draws draws</p><p class="muted">95% Wilson interval: @Interval(pair.IntervalB)</p><p>On play: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsBOnPlay/pair.PlayB) (@pair.PlayB games)<br />On draw: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsBOnDraw/pair.PlayA) (@pair.PlayA games)</p></div></div>
+    <section class="panel matchup-detail" aria-label="Matchup details">
+        <div class="eyebrow">02 / MATCHUP DETAIL</div>
+    @foreach(var pair in OrderedMatchups()){
+        <article class="matchup-entry" aria-label="@($"{Name(pair.DeckA)} vs {Name(pair.DeckB)} matchup details")">
+            <div class="matchup-toolbar">
+                <h2>@Name(pair.DeckA) <span class="muted">vs</span> @Name(pair.DeckB)</h2>
+            </div>
+            <div class="matchup-cards"><div><h3>@Name(pair.DeckA)</h3><strong>@Metrics.Rate(pair.WinRateA)</strong><p>@pair.WinsA wins · @pair.WinsB losses · @pair.Draws draws</p><p class="muted">95% Wilson Interval: @Interval(pair.IntervalA)</p><p>On Play: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsAOnPlay/pair.PlayA) (@pair.PlayA games)<br />On Draw: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsAOnDraw/pair.PlayB) (@pair.PlayB games)</p></div><div><h3>@Name(pair.DeckB)</h3><strong>@Metrics.Rate(pair.WinRateB)</strong><p>@pair.WinsB wins · @pair.WinsA losses · @pair.Draws draws</p><p class="muted">95% Wilson Interval: @Interval(pair.IntervalB)</p><p>On Play: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsBOnPlay/pair.PlayB) (@pair.PlayB games)<br />On Draw: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsBOnDraw/pair.PlayA) (@pair.PlayA games)</p></div></div>
             <p class="small muted">@pair.Valid valid / @pair.Scheduled scheduled · @pair.Failed failed · @pair.Cancelled cancelled · @pair.AttemptFailures historical failed attempts. Wilson intervals describe sampling variation under this fixed setup; draws count as nonwins.</p>
-            <div class="chart-grid"><Distribution Title="@($"{Name(pair.DeckA)} — wins")" Values="OutcomeTurns(pair.DeckA)" /><Distribution Title="@($"{Name(pair.DeckA)} — losses")" Values="OutcomeTurns(pair.DeckB)" /><Distribution Title="Rules draws" Values="PairSlots().Where(s=>s.Result?.Draw==true).Select(s=>s.Result!.ActualTurns).ToList()" /></div>
-        </section>
+            <div class="chart-grid"><Distribution Rounds="@(timeUnit=="rounds")" Title="@($"{Name(pair.DeckA)} — Wins")" Values="OutcomeTurns(pair,pair.DeckA)" /><Distribution Rounds="@(timeUnit=="rounds")" Title="@($"{Name(pair.DeckA)} — Losses")" Values="OutcomeTurns(pair,pair.DeckB)" /><Distribution Rounds="@(timeUnit=="rounds")" Title="Rules Draws" Values="MatchupSlots(pair).Where(s=>s.Result?.Draw==true).Select(s=>s.Result!.ActualTurns).ToList()" /></div>
+        </article>
     }
-    <section class="panel"><div class="section-head"><div><div class="eyebrow">04 / GAME EVIDENCE</div><h2>Open the replay</h2></div><div class="actions"><select aria-label="Outcome filter" @bind="statusFilter"><option value="">All outcomes</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="pending">Pending</option></select><select aria-label="Mana incident filter" @bind="manaFilter"><option value="">All mana conditions</option><option value="mana-starved">Mana-starved</option><option value="mana-flooded">Mana-flooded</option></select></div></div>
-        <div class="table-scroll"><table><thead><tr><th>Matchup</th><th>Starts</th><th>Outcome</th><th>Actual turns</th><th>Mulligans</th><th>Mana flags</th><th>Terminal evidence</th><th></th></tr></thead><tbody>@foreach(var slot in VisibleSlots()){
-            <tr><td>@Name(slot.DeckA)<br /><span class="muted">vs @Name(slot.DeckB)</span></td><td>@Name(slot.Starter)</td><td>@(slot.Result is {} result?result.Draw?"Rules draw":$"{Name(result.Winner!)} wins":slot.Status)</td><td>@(slot.Result?.ActualTurns.ToString()??"—")</td><td class="evidence">@if(slot.Result?.OpeningHands is {} openingHands){@foreach(var h in openingHands){<p>@Name(h.Player=="A"?slot.DeckA:slot.DeckB): @h.Mulligans · kept @h.KeptHandSize</p>}}else{<span>Unknown</span>}</td><td class="evidence">@if(slot.Result?.ManaFlags is {} flags){@foreach(var flag in flags){<p title="@flag.Evidence">@Name(flag.Player=="A"?slot.DeckA:slot.DeckB): @flag.Kind (own turns @flag.FirstOwnTurn–@flag.LastOwnTurn)</p>}@if(flags.Count==0){<span>No flags</span>}}else{<span>Not analyzed</span>}</td><td class="evidence">@(slot.Result?.TerminalReason??slot.Attempts.LastOrDefault()?.Error??"Awaiting play")</td><td>@if(slot.Status=="completed"){<a href="@($"/runs/{Id}/games/{slot.Id}")">Replay ↗</a>}</td></tr>
+    </section>
+    <section class="panel"><div class="eyebrow">03 / THE FIELD OVER TIME</div><h2>@(selected is null?"Every Deck, One Line":"This Matchup, Two Lines")</h2>
+        <p class="muted">@(selected is null?"Each line follows one deck across all its opponents.":"Each line follows one deck against the selected opponent.") Deck colors stay the same across charts.</p>
+        <div class="chart-grid">
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Life Totals" HelpText="Shows how well a deck preserves its life and how quickly it comes under pressure. Higher values mean more life remaining; a falling line means net life loss between checkpoints. Life gain and paying life also affect the line, so changes are not a direct measure of damage dealt. Each point averages that deck's life at the selected checkpoint in completed games that reached that checkpoint; later points may describe a smaller, different set of games." Series="Chart(s=>s.Life)" />
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Board Power" HelpText="Shows how much creature power a deck builds and retains. Each point averages the total current power of its creatures at its completed turn end, including tokens, boosts and tapped creatures. Higher values suggest more potential pressure, but do not measure attackable power or damage: blockers, summoning sickness, evasion and abilities matter. Later points include only completed games that reached that checkpoint." Series="Chart(s=>s.Power)" />
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Creatures in Play" HelpText="Shows how wide a deck's creature board becomes and whether it sustains that presence. Each point averages creatures in play, including tokens, at the selected checkpoint. More creatures can provide attackers, blockers or sacrifice resources; count alone does not describe their size or abilities. Drops can reflect removal, combat or sacrifices. Later points include only completed games that reached that checkpoint." Series="Chart(s=>s.Creatures)" />
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Lands in Play" HelpText="Shows land development and helps compare how decks establish their mana base. Each point averages lands on the battlefield at the selected checkpoint. Faster growth can reflect ramp; a flat line can reflect missed land drops or land losses. Land count does not measure usable mana, available colors or nonland mana sources. Later points include only completed games that reached that checkpoint." Series="Chart(s=>s.Lands)" />
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Cards in Hand" HelpText="Shows the size of a deck's remaining hand, helping you see when it spends resources or replenishes them. Each point averages all cards in hand, including lands, at the selected checkpoint. A larger hand offers more potential options, but may contain excess lands or cards that cannot be cast. A small hand may mean resources were deployed successfully. Later points include only completed games that reached that checkpoint." Series="Chart(s=>s.Hand)" />
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Graveyard Development" HelpText="Shows how quickly a deck fills its graveyard, an important resource for reanimation, recursion and other graveyard strategies. Each point averages cards currently in the graveyard at the selected checkpoint. Growth can come from milling, discarding, used spells or dead permanents; it does not directly measure card advantage or losses. A falling line may reflect recursion or exile. Later points include only completed games that reached that checkpoint." Series="Chart(s=>s.Graveyard)" />
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Nonland Cards in Hand" HelpText="Shows how many nonland cards a deck retains, separating its spell resources from lands in hand. Each point averages recorded nonland cards at the selected checkpoint. A falling line can indicate resources being spent; a rising line can reflect drawing cards or cards being returned to hand. These cards are not necessarily castable or useful, and a low count can follow successful deployment. Missing hand-composition records are excluded, not counted as zero. Later points include only completed games that reached that checkpoint." Series="Chart(s=>s.HandSpells)" />
+            <SeriesChart Rounds="@(timeUnit=="rounds")" Title="Win Rate by Game Length" GameLength="true" HelpText="Shows whether a deck's wins are concentrated in shorter or longer games. Each point is wins divided by all completed games involving that deck that ended at that length, expressed as a percentage; rules draws count as nonwins. The selected unit groups games by ending round or actual player turn. This is not the chance of winning a game still underway at that length and does not prove that extending a game improves the deck. Check the game counts: sparse points are unstable, lines only connect observed lengths, and all-matchup results pool opponents by game count." Series="GameLengthChart()" />
+        </div>
+        <p class="small muted">Averages at the selected checkpoint, pooled across completed games @(selected is null?"against all opponents":"in the selected matchup"). Later points include only games still active; expand a chart to see the observed-game counts. Power is descriptive, not a combat-strength estimate.</p>
+        <p class="small muted">Win Rate by Game Length groups games by their ending @timeUnit, rather than checkpoint averages. Its scale is 0–100%; expand it to see rates and game counts. One round groups two actual player turns.</p>
+    </section>
+    <section class="panel"><div class="section-head"><div><div class="eyebrow">04 / GAME EVIDENCE</div><h2>Open the Replay</h2></div></div>
+
+        <div class="actions"><select aria-label="Outcome Filter" @bind="statusFilter" @bind:after="ResetPage"><option value="">All Outcomes</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="pending">Pending</option></select><select aria-label="Mana Incident Filter" @bind="manaFilter" @bind:after="ResetPage"><option value="">All Mana Conditions</option><option value="mana-starved">Mana-Starved</option><option value="mana-flooded">Mana-Flooded</option></select></div>
+        <div class="table-scroll"><table><thead><tr><th>Matchup</th><th>Starts</th><th>Outcome</th><th>@(timeUnit=="rounds"?"Ending Round":"Actual Turns")</th><th>Mulligans</th><th>Mana Flags</th><th>Terminal Evidence</th><th></th></tr></thead><tbody>@foreach(var slot in VisibleSlots()){
+            <tr><td>@Name(slot.DeckA)<br /><span class="muted">vs @Name(slot.DeckB)</span></td><td>@Name(slot.Starter)</td><td>@(slot.Result is {} result?result.Draw?"Rules Draw":$"{Name(result.Winner!)} wins":UiText.Label(slot.Status))</td><td>@(slot.Result is {} resultLength?(timeUnit=="rounds"?(resultLength.ActualTurns+1)/2:resultLength.ActualTurns).ToString():"—")</td><td class="evidence">@if(slot.Result?.OpeningHands is {} openingHands){@foreach(var h in openingHands){<p>@Name(h.Player=="A"?slot.DeckA:slot.DeckB): @h.Mulligans · kept @h.KeptHandSize</p>}}else{<span>Unknown</span>}</td><td class="evidence">@if(slot.Result?.ManaFlags is {} flags){@foreach(var flag in flags){<p title="@flag.Evidence">@Name(flag.Player=="A"?slot.DeckA:slot.DeckB): @UiText.Label(flag.Kind) (own turns @flag.FirstOwnTurn–@flag.LastOwnTurn)</p>}@if(flags.Count==0){<span>No Flags</span>}}else{<span>Not Analyzed</span>}</td><td class="evidence">@(slot.Result?.TerminalReason??slot.Attempts.LastOrDefault()?.Error??"Awaiting Play")</td><td>@if(slot.CachedFromRunId is {} sourceId){@if(sourceRunIds.Contains(sourceId)){<a href="@($"/runs/{sourceId}/games/{slot.CachedFromGameId}")">Stored Source</a>}else{<span class="muted">Source Session Deleted</span>}<br />}@if(slot.Status=="completed"){<a href="@($"/runs/{Id}/games/{slot.Id}")">Replay</a>}</td></tr>
         }</tbody></table></div><div class="actions"><button disabled="@(page==0)" @onclick="()=>page--">Previous</button><span class="muted">Page @(page+1) · 25 games per page</span><button disabled="@(VisibleSlots().Count<25)" @onclick="()=>page++">Next</button></div>
     </section>
-    <details><summary>Reproducibility and limitations</summary><p>Pilot: @run.Config.Pilot<br />Engine hash: @run.Config.EngineHash<br />Adapter hash: @run.Config.AdapterHash<br />Seed scheme: @run.Config.SeedScheme<br />Opening policy: @run.Config.OpeningPolicy</p><p>Seeds are recorded; trace determinism and hidden-information fidelity have not yet passed independent validation. Loss evidence records the terminal event and does not claim causal attribution.</p></details>
+    <details><summary>Reproducibility and Limitations</summary><p>Pilot: @run.Config.Pilot<br />Engine Hash: @run.Config.EngineHash<br />Adapter Hash: @run.Config.AdapterHash<br />Seed Scheme: @run.Config.SeedScheme<br />Opening Policy: @run.Config.OpeningPolicy</p><p>Seeds are recorded; trace determinism and hidden-information fidelity have not yet passed independent validation. Loss evidence records the terminal event and does not claim causal attribution.</p></details>
+    <div class="session-delete">
+        <button class="danger" disabled="@(deleting||run.Status is "running" or "queued" or "cancelling")" @onclick="DeleteSession">@(deleting?"Deleting…":"Delete Session")</button>
+        <p class="small muted">@(run.Status is "running" or "queued" or "cancelling"?"Cancel the session and wait for it to stop before deleting it.":"Permanently deletes this session and its results. Replay files still used by other sessions are kept. You will be asked to confirm.")</p>
+        @if(deleteError is not null){<div class="error" role="alert">@deleteError</div>}
+    </div>
 }
+</div>
 @code{
-    [Parameter]public string Id{get;set;}="";private RunSummary? summary;private List<GameSlot> slots=[];private List<DeckManifest> deckVersions=[];private MatchupSummary? selected;private string? error;private string statusFilter="",manaFilter="";private int page;
+    protected override string SelectionKey => $"results:{Id}";
+    protected override ResultSelections CaptureSelections() => new(SelectedMatchupKey,statusFilter,manaFilter,page,timeUnit);
+    protected override void RestoreSelections(ResultSelections saved)
+    {
+        SelectedMatchupKey=saved.Matchup??"";
+        statusFilter=saved.Outcome is "completed" or "failed" or "cancelled" or "pending"?saved.Outcome:"";
+        manaFilter=saved.Mana is "mana-starved" or "mana-flooded"?saved.Mana:"";
+        timeUnit=saved.TimeUnit=="turns"?"turns":"rounds";
+        page=Math.Clamp(saved.Page,0,Math.Max(0,(FilteredSlots().Count()-1)/25));
+    }
+    private void ResetPage()=>page=0;
+    [Parameter]public string Id{get;set;}="";private RunSummary? summary;private RunSummary? view;private List<DeckManifest> viewDecks=[];private List<GameSlot> slots=[];private List<DeckManifest> deckVersions=[];private MatchupSummary? selected;private string? error;private string statusFilter="",manaFilter="",timeUnit="rounds";private int page;
     private readonly CancellationTokenSource lifetime=new();
-    protected override void OnInitialized(){Refresh();_ = Poll();}
-    private void Refresh(){var run=Store.Run(Id);slots=Store.Slots(Id);summary=Metrics.Summarize(run,slots);deckVersions=run.Config.DeckIds.Select(Store.Deck).ToList();selected=summary.Matchups.FirstOrDefault(m=>m.DeckA==selected?.DeckA&&m.DeckB==selected?.DeckB)??summary.Matchups.FirstOrDefault();}
+    private bool deleting;private string? deleteError;private HashSet<string> sourceRunIds=[];
+    private async Task DeleteSession()
+    {
+        if(deleting||summary is null)return;
+        deleting=true;deleteError=null;
+        try {
+            var confirmed=await JS.InvokeAsync<bool>("confirm",[$"Delete Session {Id[..Math.Min(8,Id.Length)]}?\n\nThis permanently deletes this session's {summary.Run.Total} scheduled games and results, plus replay files not used by other sessions. This cannot be undone."]);
+            if(!confirmed)return;
+            var cleanupComplete=await Coordinator.Delete(Id);
+            Navigation.NavigateTo(cleanupComplete?"/runs":"/runs?replayCleanupIncomplete=true");
+        }catch(Exception e){deleteError=e.Message;}
+        finally{deleting=false;}
+    }
+    private string? initializedId;
+    protected override void OnParametersSet(){if(initializedId==Id)return;initializedId=Id;selected=null;focusDeck=null;statusFilter="";manaFilter="";page=0;Refresh();_ = Poll();}
+    private void Refresh(){sourceRunIds=Store.Runs().Select(run=>run.Id).ToHashSet();var run=Store.Run(Id);slots=Store.Slots(Id);summary=Metrics.Summarize(run,slots);deckVersions=run.Config.DeckIds.Select(Store.Deck).ToList();selected=summary.Matchups.FirstOrDefault(m=>m.DeckA==selected?.DeckA&&m.DeckB==selected?.DeckB);RefreshView();}
     private bool polling;
-    private async Task Poll(){if(polling)return;polling=true;try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(3));while(await timer.WaitForNextTickAsync(lifetime.Token)){await InvokeAsync(()=>{Refresh();StateHasChanged();});if(summary?.Run.Status is "completed" or "failed" or "cancelled")break;}}catch(OperationCanceledException){}finally{polling=false;}}
+    private async Task Poll(){if(polling)return;polling=true;try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(3));while(await timer.WaitForNextTickAsync(lifetime.Token)){await InvokeAsync(()=>{if(!deleting){Refresh();StateHasChanged();}});if(summary?.Run.Status is "completed" or "failed" or "cancelled")break;}}catch(OperationCanceledException){}finally{polling=false;}}
     private string Name(string id){var d=deckVersions.FirstOrDefault(d=>d.Id==id)??Store.Deck(id);return d.Name+(d.SourceType=="personal"?" (saved)":"");}
-    private void Select(MatchupSummary pair){selected=pair;page=0;}
+    private static string PairKey(MatchupSummary pair)=>$"{pair.DeckA}:{pair.DeckB}";
+    private IEnumerable<(string Key,string Label)> MatchupChoices()=>summary!.Matchups
+        .SelectMany(pair=>new[]{
+            (Key:PairKey(pair),Label:$"{Name(pair.DeckA)} vs {Name(pair.DeckB)}"),
+            (Key:$"{pair.DeckB}:{pair.DeckA}",Label:$"{Name(pair.DeckB)} vs {Name(pair.DeckA)}")})
+        .OrderBy(choice=>choice.Label,StringComparer.OrdinalIgnoreCase)
+        .ThenBy(choice=>choice.Key,StringComparer.Ordinal);
+    private IEnumerable<MatchupSummary> OrderedMatchups()=>view!.Matchups
+        .Select(Orient)
+        .OrderBy(pair=>Name(pair.DeckA),StringComparer.OrdinalIgnoreCase)
+        .ThenBy(pair=>Name(pair.DeckB),StringComparer.OrdinalIgnoreCase);
+    private string? focusDeck;
+    private bool IsSelected(MatchupSummary pair,string row)=>selected is not null&&PairKey(selected)==PairKey(pair)&&focusDeck==row;
+    private string SelectedMatchupKey {
+        get=>selected is null?"":focusDeck==selected.DeckB?$"{selected.DeckB}:{selected.DeckA}":PairKey(selected);
+        set {var pair=summary?.Matchups.FirstOrDefault(m=>PairKey(m)==value||$"{m.DeckB}:{m.DeckA}"==value);Select(pair,pair is null?null:value.Split(':')[0]);}
+    }
+    private void SelectFromMatrix(MatchupSummary pair,string row)=>Select(pair,row);
+    private void Select(MatchupSummary? pair,string? first){selected=pair;focusDeck=first;page=0;RefreshView();}
+    private MatchupSummary Orient(MatchupSummary pair)=>selected is not null&&focusDeck==pair.DeckB?pair with{
+        DeckA=pair.DeckB,DeckB=pair.DeckA,WinsA=pair.WinsB,WinsB=pair.WinsA,
+        PlayA=pair.PlayB,PlayB=pair.PlayA,WinRateA=pair.WinRateB,WinRateB=pair.WinRateA,
+        IntervalA=pair.IntervalB,IntervalB=pair.IntervalA,
+        WinsAOnPlay=pair.WinsBOnPlay,WinsAOnDraw=pair.WinsBOnDraw,
+        WinsBOnPlay=pair.WinsAOnPlay,WinsBOnDraw=pair.WinsAOnDraw}:pair;
+    private void RefreshView(){
+        if(summary is null)return;
+        var filtered=PairSlots();
+        viewDecks=deckVersions.Where(d=>selected is null||d.Id==selected.DeckA||d.Id==selected.DeckB).OrderBy(d=>selected is not null&&d.Id==focusDeck?0:1).ThenBy(d=>d.Name,StringComparer.OrdinalIgnoreCase).ToList();
+        var scopedRun=summary.Run with {Total=filtered.Count,Config=summary.Run.Config with {DeckIds=viewDecks.Select(d=>d.Id).ToList()}};
+        view=selected is null?summary:Metrics.Summarize(scopedRun,filtered);
+    }
+    private List<GameSlot> MatchupSlots(MatchupSummary pair)=>slots.Where(s=>s.DeckA==pair.DeckA&&s.DeckB==pair.DeckB||s.DeckA==pair.DeckB&&s.DeckB==pair.DeckA).ToList();
     private List<GameSlot> PairSlots()=>slots.Where(s=>selected is null||s.DeckA==selected.DeckA&&s.DeckB==selected.DeckB).ToList();
-    private List<GameSlot> VisibleSlots()=>PairSlots().Where(s=>(statusFilter.Length==0||s.Status==statusFilter)&&(manaFilter.Length==0||s.Result?.ManaFlags?.Any(f=>f.Kind==manaFilter)==true)).Skip(page*25).Take(25).ToList();
-    private List<int> OutcomeTurns(string winner)=>PairSlots().Where(s=>s.Result?.Winner==winner).Select(s=>s.Result!.ActualTurns).ToList();
-    private List<ChartSeries> Chart(Func<TurnSample,int> value)=>deckVersions.Select((deck,i)=>{
-        var samples=slots.Where(s=>s.Status=="completed"&&s.Result is not null&&(s.DeckA==deck.Id||s.DeckB==deck.Id)).SelectMany(s=>s.Result!.Samples.Where(p=>p.Player==(s.DeckA==deck.Id?"A":"B")));
-        return new ChartSeries(Name(deck.Id),ChartPalette.Colors[i%ChartPalette.Colors.Length].Color,samples.GroupBy(s=>s.PlayerTurn).OrderBy(g=>g.Key).Select(g=>new ChartPoint(g.Key,g.Average(value),g.Count())).ToList());}).ToList();
+    private IEnumerable<GameSlot> FilteredSlots()=>PairSlots().Where(s=>(statusFilter.Length==0||s.Status==statusFilter)&&(manaFilter.Length==0||s.Result?.ManaFlags?.Any(f=>f.Kind==manaFilter)==true));
+    private List<GameSlot> VisibleSlots()=>FilteredSlots().Skip(page*25).Take(25).ToList();
+    private List<int> OutcomeTurns(MatchupSummary pair,string winner)=>MatchupSlots(pair).Where(s=>s.Result?.Winner==winner).Select(s=>s.Result!.ActualTurns).ToList();
+    private List<ChartSeries> Chart(Func<TurnSample,int?> value)=>viewDecks.Select(deck=>{
+        var i=deckVersions.FindIndex(d=>d.Id==deck.Id);
+        var samples=PairSlots().Where(s=>s.Status=="completed"&&s.Result is not null&&(s.DeckA==deck.Id||s.DeckB==deck.Id)).SelectMany(s=>s.Result!.Samples.Where(p=>p.Player==(s.DeckA==deck.Id?"A":"B")));
+        return new ChartSeries(Name(deck.Id),Branding.Palette[i%Branding.Palette.Length].Color,samples.Select(s=>new{Sample=s,Value=value(s)}).Where(p=>p.Value.HasValue).GroupBy(p=>timeUnit=="rounds"?(p.Sample.ActualTurn+1)/2:p.Sample.ActualTurn).OrderBy(g=>g.Key).Select(g=>new ChartPoint(g.Key,g.Average(p=>p.Value!.Value),g.Count())).ToList());}).ToList();
+    private List<ChartSeries> GameLengthChart()=>viewDecks.Select(deck=>{
+        var i=deckVersions.FindIndex(d=>d.Id==deck.Id);
+        return new ChartSeries(Name(deck.Id),Branding.Palette[i%Branding.Palette.Length].Color,Metrics.WinRatesByLength(PairSlots(),deck.Id,timeUnit=="rounds"));}).ToList();
     private static string Interval(double[]? value)=>value is null?"—":$"{value[0]:P1}–{value[1]:P1}";
     private static string Number(double? value)=>value?.ToString("0.##")??"—";
-    private string Eta(){if(summary is null)return "";var done=slots.Where(s=>s.Result is not null).ToList();if(done.Count==0)return "Runtime estimate pending measured games.";var seconds=done.Average(s=>s.Attempts.Last(a=>a.Status=="completed").FinishedAt!.Value.Subtract(s.Attempts.Last(a=>a.Status=="completed").StartedAt).TotalSeconds);var remaining=(summary.Pending+summary.Running)*seconds/summary.Run.Config.Workers;return summary.Run.Status=="running"?$"Measured estimate: {TimeSpan.FromSeconds(remaining):hh\\:mm\\:ss} remaining":"Local session stored.";}
+    private string Eta(){if(summary is null)return "";var done=slots.Where(s=>s.Result is not null&&s.CachedFromRunId is null).ToList();if(done.Count==0)return "Runtime estimate pending measured games.";var seconds=done.Average(s=>s.Attempts.Last(a=>a.Status=="completed").FinishedAt!.Value.Subtract(s.Attempts.Last(a=>a.Status=="completed").StartedAt).TotalSeconds);var remaining=(summary.Pending+summary.Running)*seconds/summary.Run.Config.Workers;if(summary.Run.Config.StaggerStarts&&summary.Run.Config.StartupSpacingSeconds is null){var cadence=Math.Max(seconds/summary.Run.Config.Workers,summary.Run.Config.EstimatedGameSeconds-summary.Run.Config.StartLeadSeconds);remaining=summary.Pending*cadence+(summary.Running>0?seconds:0);}return summary.Run.Status=="running"?$"Measured estimate: {RuntimeEstimate.Duration(remaining)} remaining":"Local session stored.";}
     private async Task Act(Func<Task> action){error=null;try{await action();Refresh();_ = Poll();}catch(Exception e){error=e.Message;}}
     public void Dispose(){lifetime.Cancel();lifetime.Dispose();}
 }

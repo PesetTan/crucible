@@ -1,0 +1,18 @@
+@using System.Text.RegularExpressions
+@foreach (Match segment in Regex.Matches(Text ?? "", @"(?:\{[^}]+\})+|[^{}]+|[{}]")) {
+    if (segment.Value.StartsWith('{') && segment.Value.EndsWith('}')) {
+        <ManaCost Cost="@Normalize(segment.Value)" Label="@($"Rules symbols {segment.Value}")" />
+    } else {
+        @segment.Value
+    }
+}
+@code {
+    [Parameter] public string? Text { get; set; }
+    // Arena groups symbols inside one brace pair: {o2oB}, {o(G/U)o(G/U)}.
+    private static string Normalize(string value) => Regex.Replace(value, @"\{([^}]+)\}", match => {
+        var body = match.Groups[1].Value;
+        const string pattern = @"o(?:\(([^)]+)\)|([0-9]+|[WUBRGCTQXYZSEP]))";
+        if (Regex.Replace(body, pattern, "").Length != 0) return match.Value;
+        return Regex.Replace(body, pattern, symbol => "{" + (symbol.Groups[1].Success ? symbol.Groups[1].Value : symbol.Groups[2].Value) + "}");
+    });
+}

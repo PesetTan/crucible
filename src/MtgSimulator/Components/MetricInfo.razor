@@ -1,0 +1,8 @@
+<details class="chart-help">
+    <summary aria-label="@($"About {Title}")"><span aria-hidden="true">i</span></summary>
+    <p>@Text</p>
+</details>
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Text { get; set; } = "";
+}

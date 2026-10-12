@@ -1,0 +1,7 @@
+@if(Deck.ArchetypeTier is {} tier){
+    <span class="archetype-tier tier-@tier.ToLowerInvariant()" title="Untapped.gg · Standard Bo1 · Bronze–Platinum · Sep 29–Oct 11, 2026 · Captured @Deck.TierSnapshotDate">Archetype Tier @tier</span>
+    <span class="small muted"> · @Deck.TierSnapshotDate</span>
+}else{
+    <span class="archetype-tier tier-unrated" title="No verified published archetype mapping for this saved list">Archetype Tier: Unrated</span>
+}
+@code { [Parameter, EditorRequired] public DeckManifest Deck { get; set; } = default!; }

@@ -2,6 +2,11 @@ namespace MtgSimulator;
 
 public static class Metrics
 {
+    public static List<ChartPoint> WinRatesByLength(IEnumerable<GameSlot> slots,string deckId,bool rounds=true)=>slots
+        .Where(s=>s.Status=="completed"&&s.Result is not null&&s.Result.ActualTurns>0&&(s.DeckA==deckId||s.DeckB==deckId))
+        .GroupBy(s=>rounds?(s.Result!.ActualTurns+1)/2:s.Result!.ActualTurns).OrderBy(g=>g.Key)
+        .Select(g=>new ChartPoint(g.Key,100.0*g.Count(s=>!s.Result!.Draw&&s.Result.Winner==deckId)/g.Count(),g.Count())).ToList();
+
     public static double[]? Wilson(int wins,int n)
     {
         if(n==0)return null;const double z=1.96;var p=(double)wins/n;var denominator=1+z*z/n;
@@ -19,7 +24,7 @@ public static class Metrics
         }).ToList();
         return new(run,slots.Count(s=>s.Status=="completed"),slots.Count(s=>s.Status=="failed"),slots.Count(s=>s.Status=="cancelled"),slots.Count(s=>s.Status=="running"),slots.Count(s=>s.Status=="pending"),
             matchups.All(m=>m.Valid==run.Config.GamesPerPair&&m.PlayA==run.Config.GamesPerPair/2&&m.PlayB==run.Config.GamesPerPair/2),matchups,
-            slots.Count(s=>s.Result?.ManaFlags?.Any(f=>f.Kind=="mana-starved")==true),slots.Count(s=>s.Result?.ManaFlags?.Any(f=>f.Kind=="mana-flooded")==true),slots.Count(s=>s.Result?.ManaDetectionVersion==ManaAnalyzer.Version),OpeningHandTracker.Summaries(run,slots));
+            slots.Count(s=>s.Result?.ManaFlags?.Any(f=>f.Kind=="mana-starved")==true),slots.Count(s=>s.Result?.ManaFlags?.Any(f=>f.Kind=="mana-flooded")==true),slots.Count(s=>s.Result?.ManaDetectionVersion==ManaAnalyzer.Version),OpeningHandTracker.Summaries(run,slots),slots.Count(s=>s.CachedFromRunId is not null),slots.Where(s=>s.CachedFromRunId is not null).Select(s=>s.CachedFromRunId!).Distinct().ToList());
     }
     public static string Rate(double? rate)=>rate is null?"—":$"{rate:P1}";
     public static double? Median(IEnumerable<int> values){var v=values.Order().ToArray();return v.Length==0?null:v.Length%2==1?v[v.Length/2]:(v[v.Length/2-1]+v[v.Length/2])/2.0;}

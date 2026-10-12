@@ -1,18 +1,22 @@
-<div class="chart"><h3>@Title</h3>
+<div class="chart"><div class="chart-title"><div class="chart-heading"><h3>@Title</h3><MetricInfo Title="@Title" Text="@HelpText" /></div></div>
     @if(Values.Count==0){<p class="muted">No games with this outcome yet.</p>}
     else{
-        <p class="muted">@Values.Count games · Typical ending: round @Metrics.Median(Rounds)?.ToString("0.#") (median)</p>
-        <div class="histogram" role="img" aria-label="@($"{Title}. Games by ending round. {string.Join("; ", Bins.Select(g => $"Round {g.Key}: {g.Count()} games"))}")">@foreach(var group in Bins){<div class="histogram-bin" title="@($"{group.Count()} games ended in round {group.Key}")"><span>@group.Count()</span><div style="height:@((group.Count()*110.0/Maximum).ToString("0.#",CultureInfo.InvariantCulture))px"></div><small>@group.Key</small></div>}</div>
-        <p class="small muted">Bottom: ending round · Above each bar: number of games</p>
-        <p class="small muted">One round = two player turns, normally one for each player. A game ending during either turn counts in that round. Extra or skipped turns can change this pairing.</p>
-        <p class="small">For example, the bar at round @Example.Key means @Example.Count() of these @Values.Count games ended during round @Example.Key.</p>
+        <p class="muted">@Values.Count games · Typical ending: @UnitSingular @Math.Ceiling(Metrics.Median(Lengths)!.Value).ToString("0",CultureInfo.InvariantCulture) (median)</p>
+        <div class="histogram" role="img" aria-label="@($"{Title}. Games by ending {UnitSingular}. {string.Join("; ", Bins.Select(g => $"{UnitTitle} {g.Key}: {g.Count()} games"))}")">@foreach(var group in Bins){<div class="histogram-bin" title="@($"{group.Count()} games ended in {UnitSingular} {group.Key}")"><span>@group.Count()</span><div style="height:@((group.Count()*110.0/Maximum).ToString("0.#",CultureInfo.InvariantCulture))px"></div><small>@group.Key</small></div>}</div>
+        <p class="small muted">Bottom: ending @UnitSingular · Above each bar: number of games</p>
+        @if(Rounds){<p class="small muted">One round groups two actual player turns. Extra or skipped turns can change this pairing.</p>}
+        <p class="small">For example, the bar at @UnitSingular @Example.Key means @Example.Count() of these @Values.Count games ended during @UnitSingular @Example.Key.</p>
     }
 </div>
 @code{
     [Parameter]public string Title{get;set;}="";
+    [Parameter]public string HelpText{get;set;}="Shows when games with this outcome ended. Bar height and the number above it show game count; the median is the middle ending length. Only completed games with this outcome appear.";
     [Parameter]public List<int> Values{get;set;}=[];
-    private List<int> Rounds=>Values.Select(turns=>(turns+1)/2).ToList();
-    private List<IGrouping<int,int>> Bins=>Rounds.GroupBy(round=>round).OrderBy(g=>g.Key).ToList();
+    [Parameter]public bool Rounds{get;set;}=true;
+    private string UnitSingular=>Rounds?"round":"turn";
+    private string UnitTitle=>Rounds?"Round":"Turn";
+    private List<int> Lengths=>Values.Select(turns=>Rounds?(turns+1)/2:turns).ToList();
+    private List<IGrouping<int,int>> Bins=>Lengths.GroupBy(length=>length).OrderBy(g=>g.Key).ToList();
     private int Maximum=>Math.Max(1,Bins.Select(g=>g.Count()).DefaultIfEmpty(1).Max());
     private IGrouping<int,int> Example=>Bins.OrderByDescending(g=>g.Count()).First();
 }
