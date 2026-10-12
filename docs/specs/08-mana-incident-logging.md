@@ -8,14 +8,14 @@ Status: Implemented exploratory diagnostics, requested during C# implementation.
 
 Version: `land-availability-v1`.
 
-Evaluate each player's own completed turn-end snapshots separately. A flag requires two consecutive own-turn indices satisfying its condition; missing data or a gap breaks the streak.
+Evaluate completed turn-end snapshots separately for each player. A flag requires two consecutive Player Turn indices satisfying its condition; missing data or a gap breaks the streak.
 
 | Flag | Conditions at each checkpoint |
 |---|---|
-| Mana-starved | Own turn 4 or later; fewer than 3 lands in play; no lands in hand; at least 2 nonland cards in hand |
-| Mana-flooded | Own turn 5 or later; at least 5 lands in play; at least 3 lands in hand; at most 1 nonland card in hand |
+| Mana-starved | Player turn 4 or later; fewer than 3 lands in play; no lands in hand; at least 2 nonland cards in hand |
+| Mana-flooded | Player turn 5 or later; at least 5 lands in play; at least 3 lands in hand; at most 1 nonland card in hand |
 
-Combine a continuous qualifying streak into one incident. Log player identity, first/last own-turn index, first/last actual-turn ordinal, exact board/hand counts at each qualifying checkpoint, and definition version. A game can contain incidents for either or both players, including the winner. Run-level game counts count a game once per flag kind, regardless of the number of incidents or affected players.
+Combine a continuous qualifying streak into one incident. Log player identity, first/last Player Turn index, first/last actual-turn ordinal, exact board/hand counts at each qualifying checkpoint, and definition version. A game can contain incidents for either or both players, including the winner. Run-level game counts count a game once per flag kind, regardless of the number of incidents or affected players.
 
 These are conservative land-availability indicators, not causal loss conclusions or a complete measurement of usable mana. Nonland mana production, restricted spending, colored-source availability, sequencing mistakes, and a deck's desired mana curve are not resolved by this profile. Unknown hand composition is not interpreted as zero. A short game with no qualifying streak receives no flag; that does not prove its mana was satisfactory.
 

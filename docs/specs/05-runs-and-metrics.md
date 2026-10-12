@@ -58,13 +58,13 @@ For a deck and a set of valid completed games, let `n = W + L + D`:
 
 For each individual matchup win proportion, display an approximate 95% Wilson interval with `z = 1.96`, treating draws as nonwins. This estimates Monte Carlo variation under the fixed setup, not human Arena performance or engine/pilot bias. Do not attach that binomial interval to score, a macro average, a policy difference, or a mixture of configurations without a separately appropriate method. For `n = 0`, return null rates and no interval.
 
-Turn-to-win/loss distributions condition on outcome. Report terminal actual-turn ordinal and the winning/losing player's own turns taken separately. Draws have their own distribution; administrative stops are not inserted as terminal game turns. Show histogram, median, quartiles, sample size, and incomplete-cycle labels. Extra-turn games retain actual turns rather than a guessed round conversion.
+Turn-to-win/loss distributions condition on outcome. Report the terminal actual-turn ordinal and each player's Player Turn count separately. Draws have their own distribution; administrative stops are not inserted as terminal game turns. Show histogram, median, quartiles, sample size, and incomplete-cycle labels. Extra-turn games retain actual turns rather than a guessed round conversion.
 
 ## Turn measurements
 
 Capture life, hand count, land count, creature count, creature power sum, artifact/enchantment counts, graveyard size, and available mana at explicit checkpoints. Only current creatures contribute to creature power; impending noncreatures do not. Treat unknown values as unknown, not zero. Power sum is descriptive and does not claim combat strength or account for evasion as a scalar score.
 
-Default charts use each player's own completed turn-end checkpoints; compare life and board measurements at matching own-turn indices. Show mean/median where useful, counts of observed games, and active-game denominators. Do not carry terminal states forward into later turns unless presenting a separately labeled cumulative series. Ended games create survivor selection, which must be visible.
+Default charts use completed turn-end checkpoints for each player; compare life and board measurements at matching Player Turn indices. Show mean/median where useful, counts of observed games, and active-game denominators. Do not carry terminal states forward into later turns unless presenting a separately labeled cumulative series. Ended games create survivor selection, which must be visible.
 
 ## Loss evidence
 
