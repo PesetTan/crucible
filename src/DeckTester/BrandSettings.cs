@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed class BrandSettings(IConfiguration configuration)
 {

@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public static class EngineSetup
 {
@@ -10,7 +10,7 @@ public static class EngineSetup
     {
         var root=Path.GetFullPath(projectRoot);if(!Directory.Exists(Path.Combine(root,"docs","specs")))throw new ArgumentException("Invalid project root.");
         var vendor=Path.Combine(root,"vendor");var data=Path.Combine(root,"data");Directory.CreateDirectory(vendor);Directory.CreateDirectory(data);
-        using var http=new HttpClient{Timeout=TimeSpan.FromMinutes(15)};http.DefaultRequestHeaders.UserAgent.ParseAdd("MtgSimulator-Local/1.0");
+        using var http=new HttpClient{Timeout=TimeSpan.FromMinutes(15)};http.DefaultRequestHeaders.UserAgent.ParseAdd("DeckTester-Local/1.0");
         var jar=Path.Combine(vendor,"forge-gui-desktop-2.0.15-jar-with-dependencies.jar");
         if(!File.Exists(jar)){
             Console.WriteLine("Downloading pinned Forge 2.0.15 (approximately 300 MB)…");

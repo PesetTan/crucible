@@ -1,4 +1,4 @@
-namespace MtgSimulator;
+namespace DeckTester;
 
 public static class OpeningHandTracker
 {

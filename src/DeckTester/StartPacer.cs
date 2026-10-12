@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 // Legacy saved sessions only. New sessions use GameScheduler's initial offsets.
 // One shared gate per session spaces launches across all workers. A late launch

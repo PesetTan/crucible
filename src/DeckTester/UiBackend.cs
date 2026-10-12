@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed record DeckSnapshot(DeckManifest Manifest,DeckCoverage Coverage);
 public sealed record CacheSnapshot(RunConfig Config,List<CachedGameKey> Keys);

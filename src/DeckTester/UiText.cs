@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public static class UiText
 {

@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Channels;
 using System.Diagnostics;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoordinator> logger,AppPaths paths) : BackgroundService
 {

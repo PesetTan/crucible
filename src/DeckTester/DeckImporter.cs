@@ -4,7 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed class DeckImporter(AppPaths paths, Store store)
 {

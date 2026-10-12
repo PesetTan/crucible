@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using MtgSimulator;
+using DeckTester;
 static void Check(bool condition,string text){if(!condition)throw new Exception(text);}
 var config=new RunConfig(["A","B"],2,1,180,150,42,true,"engine","adapter");
 var run=new SimulationRun("run",DateTimeOffset.UtcNow,"running",config,2);

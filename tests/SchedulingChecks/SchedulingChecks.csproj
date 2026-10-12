@@ -7,9 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/MtgSimulator/GameScheduler.cs" Link="GameScheduler.cs" />
-    <Compile Include="../../src/MtgSimulator/RuntimeEstimate.cs" Link="RuntimeEstimate.cs" />
-    <Compile Include="../../src/MtgSimulator/Models.cs" Link="Models.cs" />
-    <Compile Include="../../src/MtgSimulator/AttemptPolicy.cs" Link="AttemptPolicy.cs" />
+    <Compile Include="../../src/DeckTester/GameScheduler.cs" Link="GameScheduler.cs" />
+    <Compile Include="../../src/DeckTester/RuntimeEstimate.cs" Link="RuntimeEstimate.cs" />
+    <Compile Include="../../src/DeckTester/Models.cs" Link="Models.cs" />
+    <Compile Include="../../src/DeckTester/AttemptPolicy.cs" Link="AttemptPolicy.cs" />
   </ItemGroup>
 </Project>

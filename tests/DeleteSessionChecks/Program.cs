@@ -7,8 +7,8 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
-using MtgSimulator;
-using MtgSimulator.Components.Pages;
+using DeckTester;
+using DeckTester.Components.Pages;
 
 static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
 const BindingFlags instance=BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic;
@@ -127,6 +127,6 @@ sealed class TestNavigation:NavigationManager {
     protected override void NavigateToCore(string uri,bool forceLoad)=>Destination=uri;
 }
 sealed class TestEnvironment:IHostEnvironment {
-    public string EnvironmentName{get;set;}="Test";public string ApplicationName{get;set;}="MtgSimulator";
+    public string EnvironmentName{get;set;}="Test";public string ApplicationName{get;set;}="DeckTester";
     public string ContentRootPath{get;set;}="";public IFileProvider ContentRootFileProvider{get;set;}=new NullFileProvider();
 }

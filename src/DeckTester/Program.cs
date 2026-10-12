@@ -1,14 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Net;
-using MtgSimulator;
-using MtgSimulator.Components;
+using DeckTester;
+using DeckTester.Components;
 using Microsoft.AspNetCore.DataProtection;
 
 if(args.Contains("--setup",StringComparer.Ordinal))
 {
     var directory=Environment.GetEnvironmentVariable("MTG_PROJECT_ROOT")??Directory.GetCurrentDirectory();
-    while(!Directory.Exists(Path.Combine(directory,"docs","specs"))){directory=Path.GetDirectoryName(directory)??throw new ArgumentException("Run setup from the mtg-simulator project directory.");}
+    while(!Directory.Exists(Path.Combine(directory,"docs","specs"))){directory=Path.GetDirectoryName(directory)??throw new ArgumentException("Run setup from the Gauntlet project directory.");}
     await EngineSetup.Install(directory);return;
 }
 

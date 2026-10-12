@@ -1,4 +1,4 @@
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed record TimingSample(string DeckA, string DeckB, int Workers, int TimeoutSeconds, int TurnLimit, double Seconds,
     bool StaggerStarts = false, double? StartupSpacingSeconds = null);

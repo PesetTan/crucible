@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using MtgSimulator;
+using DeckTester;
 
 static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
 

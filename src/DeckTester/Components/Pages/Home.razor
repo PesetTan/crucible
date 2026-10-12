@@ -8,7 +8,7 @@
 @inject IUiBackend Coordinator
 @inject NavigationManager Navigation
 @if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
-<PageTitle>Gauntlet — Standard Simulator</PageTitle>
+<PageTitle>Gauntlet — Standard Deck Testing</PageTitle>
 <div inert="@(!SelectionsReady)">
 <div class="eyebrow">THE LOCAL PLAYTESTING DESK</div>
 <h1>Put Your Decks<br /><em>Across the Table.</em></h1>
@@ -172,7 +172,7 @@
     private List<ActiveSessionProgress> activeSessions=[];
     private bool HasActiveSession=>activeSessions.Count>0;
     private string ActiveDeckNames(SimulationRun run)=>string.Join(" + ",run.Config.DeckIds.Select(id=>decks.FirstOrDefault(d=>d.Id==id)?.Name??"Saved Deck"));
-    private SimulationRun? ExistingSession=>capabilities is null?null:savedRuns.Where(run=>MtgSimulator.Store.CompatibleSession(run.Config,new(selected.ToList(),games,workers,timeout,turnLimit,seed,true,capabilities.EngineHash,capabilities.AdapterHash))).OrderByDescending(run=>run.Config.GamesPerPair).FirstOrDefault();
+    private SimulationRun? ExistingSession=>capabilities is null?null:savedRuns.Where(run=>DeckTester.Store.CompatibleSession(run.Config,new(selected.ToList(),games,workers,timeout,turnLimit,seed,true,capabilities.EngineHash,capabilities.AdapterHash))).OrderByDescending(run=>run.Config.GamesPerPair).FirstOrDefault();
     private HashSet<CachedGameKey> cachedKeys=[];
     private int ScheduledCount=>selected.Count*(selected.Count-1)/2*games;
     private int CachedCount=>cachedKeys.Count(key=>selected.Contains(key.DeckA)&&selected.Contains(key.DeckB)&&key.Index<games/2);

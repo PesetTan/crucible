@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public static class Json
 {

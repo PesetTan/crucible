@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 
-namespace MtgSimulator.Components;
+namespace DeckTester.Components;
 
 // Browser storage is available only after the interactive render, never during prerendering.
 public abstract class PersistentSelectionPage<T> : ComponentBase where T : class

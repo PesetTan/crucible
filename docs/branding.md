@@ -1,6 +1,6 @@
 # Changing the logo and colors
 
-Edit `src/MtgSimulator/branding.json`. The `Branding` object controls:
+Edit `src/DeckTester/branding.json`. The `Branding` object controls:
 
 - `Logo`: the sidebar logo. Put a new SVG, PNG, or WebP in `wwwroot/assets/brand/`, then set its path relative to `wwwroot`, for example `assets/brand/new-logo.svg`.
 - `Icon`: the browser-tab icon. Use an SVG or PNG. Omit this setting to use the logo.

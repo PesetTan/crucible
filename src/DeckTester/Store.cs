@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed class Store
 {

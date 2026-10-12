@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed record ResourceSnapshot(int LogicalProcessors, long? AvailableMemoryBytes);
 public sealed record CapacityBadge(string Status, string Label, string Explanation);

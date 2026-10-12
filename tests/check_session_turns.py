@@ -4,7 +4,7 @@ import json
 import re
 import sqlite3
 
-source = (Path(__file__).resolve().parents[1] / 'src/MtgSimulator/Store.cs').read_text()
+source = (Path(__file__).resolve().parents[1] / 'src/DeckTester/Store.cs').read_text()
 method = source.split('public SessionTurnStats? SessionTurnStatistics()', 1)[1]
 query = re.search(r'cmd.CommandText\s*=\s*"""(.*?)""";', method, re.S)[1]
 db = sqlite3.connect(':memory:')

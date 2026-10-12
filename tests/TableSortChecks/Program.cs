@@ -1,4 +1,4 @@
-using MtgSimulator;
+using DeckTester;
 static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
 var sort=new TableSort();
 var rows=new[]{(Name:"ten",Value:(double?)10),(Name:"two",Value:(double?)2),(Name:"unknown",Value:(double?)null),(Name:"equal",Value:(double?)2)};

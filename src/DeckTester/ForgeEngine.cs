@@ -3,7 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public sealed class ForgeEngine(AppPaths paths, Store store)
 {

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace MtgSimulator;
+namespace DeckTester;
 
 public static class GameScheduler
 {
