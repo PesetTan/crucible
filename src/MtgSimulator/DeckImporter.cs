@@ -55,14 +55,27 @@ public sealed class DeckImporter(AppPaths paths, Store store)
         var imported = new List<DeckManifest>();
         foreach (var (name, fingerprint) in Expected)
         {
-            using var select = db.CreateCommand(); select.CommandText = "SELECT deck_id,snapshot_id,source_url,archetype_tier,tier_source_url,tier_snapshot_date FROM untapped_decks WHERE name=$name AND snapshot_id IN ('standard-bo1-bronze-platinum-2026-10-11','standard-bo1-tier-representatives-2026-10-11') ORDER BY matches_approx DESC, deck_id LIMIT 1";
+            using var select = db.CreateCommand(); select.CommandText = "SELECT deck_id,snapshot_id,source_url,archetype_tier,tier_source_url,tier_snapshot_date,win_rate_percent,matches_approx,matches_displayed FROM untapped_decks WHERE name=$name AND snapshot_id IN ('standard-bo1-bronze-platinum-2026-10-11','standard-bo1-tier-representatives-2026-10-11') ORDER BY matches_approx DESC, deck_id LIMIT 1";
             select.Parameters.AddWithValue("$name",name); using var reader = select.ExecuteReader(); if (!reader.Read()) throw new InvalidDataException($"Frozen source list missing: {name}.");
-            var sourceId = reader.GetString(0); var snapshot = reader.GetString(1); var url = reader.GetString(2); var tier = reader.IsDBNull(3) ? null : reader.GetString(3); var tierUrl = reader.IsDBNull(4) ? null : reader.GetString(4); var tierDate = reader.IsDBNull(5) ? null : reader.GetString(5); reader.Close();
+            var sourceId = reader.GetString(0); var snapshot = reader.GetString(1); var url = reader.GetString(2); var tier = reader.IsDBNull(3) ? null : reader.GetString(3); var tierUrl = reader.IsDBNull(4) ? null : reader.GetString(4); var tierDate = reader.IsDBNull(5) ? null : reader.GetString(5); var rate=reader.GetDouble(6); var matches=reader.GetInt32(7); var matchesLabel=reader.GetString(8); reader.Close();
             var cards = ReadCards(db,"SELECT dc.quantity,dc.zone,cc.arena_id,cc.name,cc.set_code,c.type_line,c.mana_cost,c.rules_text,c.standard_legal,c.linked_face_arena_ids FROM untapped_deck_cards dc JOIN card_catalog cc USING(arena_id) LEFT JOIN cards c USING(arena_id) WHERE dc.deck_id=$id AND dc.snapshot_id=$snapshot",sourceId,snapshot);
             var tierNote = snapshot == "standard-bo1-tier-representatives-2026-10-11" ? " Popular archetype-page representative with fewer than 200 matches (100+ filter)." : "";
             var deck = Manifest(name,"public",sourceId,snapshot,url,cards,"Frozen public snapshot, October 11, 2026; Bronze–Platinum, September 29–October 11. Legality and pilot behavior not independently validated." + tierNote);
             if (!deck.ListHash.StartsWith(fingerprint, StringComparison.Ordinal)) throw new InvalidDataException($"{name}: source composition differs from the plan. Import rejected.");
-            imported.Add(deck with { ArchetypeTier = tier, TierSourceUrl = tierUrl, TierSnapshotDate = tierDate });
+            imported.Add(deck with { ArchetypeTier = tier, TierSourceUrl = tierUrl, TierSnapshotDate = tierDate, PublishedWinRatePercent=rate, PublishedMatchesApprox=matches, PublishedMatchesDisplayed=matchesLabel });
+        }
+        // Include every exact A/C list, including lower-volume variants of an archetype.
+        var extraSources = new List<(string Id,string Snapshot,string Name,string Url,string Tier,string? TierUrl,string? TierDate,double Rate,int Matches,string MatchesLabel)>();
+        using (var select=db.CreateCommand()) {
+            select.CommandText="SELECT deck_id,snapshot_id,name,source_url,archetype_tier,tier_source_url,tier_snapshot_date,win_rate_percent,matches_approx,matches_displayed FROM untapped_decks WHERE archetype_tier IN ('A','C') ORDER BY archetype_tier,name,matches_approx DESC,deck_id";
+            using var reader=select.ExecuteReader();
+            while(reader.Read())extraSources.Add((reader.GetString(0),reader.GetString(1),reader.GetString(2),reader.GetString(3),reader.GetString(4),reader.IsDBNull(5)?null:reader.GetString(5),reader.IsDBNull(6)?null:reader.GetString(6),reader.GetDouble(7),reader.GetInt32(8),reader.GetString(9)));
+        }
+        foreach(var source in extraSources) {
+            if(imported.Any(d=>d.SourceDeckId==source.Id&&d.Snapshot==source.Snapshot))continue;
+            var cards=ReadCards(db,"SELECT dc.quantity,dc.zone,cc.arena_id,cc.name,cc.set_code,c.type_line,c.mana_cost,c.rules_text,c.standard_legal,c.linked_face_arena_ids FROM untapped_deck_cards dc JOIN card_catalog cc USING(arena_id) LEFT JOIN cards c USING(arena_id) WHERE dc.deck_id=$id AND dc.snapshot_id=$snapshot",source.Id,source.Snapshot);
+            var deck=Manifest(source.Name,"public",source.Id,source.Snapshot,source.Url,cards,"Frozen public snapshot, October 11, 2026; Standard Bo1, Bronze–Platinum, September 29–October 11. Legality and pilot behavior not independently validated.");
+            imported.Add(deck with {ArchetypeTier=source.Tier,TierSourceUrl=source.TierUrl,TierSnapshotDate=source.TierDate,PublishedWinRatePercent=source.Rate,PublishedMatchesApprox=source.Matches,PublishedMatchesDisplayed=source.MatchesLabel});
         }
         using (var cmd=db.CreateCommand())
         {
@@ -73,7 +86,7 @@ public sealed class DeckImporter(AppPaths paths, Store store)
                 imported.Add(Manifest(name,"personal","75c0271e-f980-47b3-bb01-a6b305f2430b",snapshot,null,cards,"Captured personal deck; source log changed after import. This is the saved snapshot, not a claim about your current deck. No ownership data is inferred."));
             }
         }
-        foreach(var deck in imported) { if(!store.Decks().Any(d=>d.Id==deck.Id)) await store.SaveDeck(deck); }
+        foreach(var deck in imported) await store.SaveDeck(deck);
         return imported;
     }
     private static List<CardEntry> ReadCards(SqliteConnection db,string sql,string id,string? snapshot)

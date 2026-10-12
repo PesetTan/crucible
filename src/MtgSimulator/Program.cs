@@ -12,25 +12,47 @@ if(args.Contains("--setup",StringComparer.Ordinal))
     await EngineSetup.Install(directory);return;
 }
 
+var mode=Environment.GetEnvironmentVariable("MTG_HOST_MODE")??"combined";
+if(mode is not ("ui" or "service" or "combined"))throw new ArgumentException("MTG_HOST_MODE must be ui, service, or combined.");
+var port=int.TryParse(Environment.GetEnvironmentVariable("MTG_PORT"),out var configuredPort)?configuredPort:mode=="service"?5079:5077;
+if(port is <1024 or >65535)throw new ArgumentException("MTG_PORT must be between 1024 and 65535.");
 var builder=WebApplication.CreateBuilder(args);
+builder.Services.AddResponseCompression(options=>{options.EnableForHttps=true;options.MimeTypes=Microsoft.AspNetCore.ResponseCompression.ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]);});
 builder.Configuration.AddJsonFile("branding.json", optional:false, reloadOnChange:true);
 builder.Services.AddSingleton<BrandSettings>();
-var lanAddress=Environment.GetEnvironmentVariable("MTG_LAN_ADDRESS");
+var lanAddress=mode=="service"?null:Environment.GetEnvironmentVariable("MTG_LAN_ADDRESS");
 if(lanAddress is not null && (!IPAddress.TryParse(lanAddress,out var lanIp)||lanIp.AddressFamily!=System.Net.Sockets.AddressFamily.InterNetwork||
     !(lanIp.GetAddressBytes()[0]==10 || (lanIp.GetAddressBytes()[0]==172 && lanIp.GetAddressBytes()[1] is >=16 and <=31) || (lanIp.GetAddressBytes()[0]==192 && lanIp.GetAddressBytes()[1]==168))))
     throw new ArgumentException("MTG_LAN_ADDRESS must be a private IPv4 address assigned to this computer.");
 var allowedHosts=new HashSet<string>(StringComparer.OrdinalIgnoreCase){"127.0.0.1","localhost"};
 if(lanAddress is not null)allowedHosts.Add(lanAddress);
-builder.WebHost.UseUrls(lanAddress is null ? ["http://127.0.0.1:5077"] : ["http://127.0.0.1:5077",$"http://{lanAddress}:5077"]);
+builder.WebHost.UseUrls(lanAddress is null ? [$"http://127.0.0.1:{port}"] : [$"http://127.0.0.1:{port}",$"http://{lanAddress}:{port}"]);
 builder.WebHost.UseStaticWebAssets();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
-var paths=new AppPaths(builder.Environment);
-builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(paths.Data,"protection-keys")));
-builder.Services.AddSingleton(paths);builder.Services.AddSingleton<Store>();builder.Services.AddSingleton<DeckImporter>();builder.Services.AddSingleton<ForgeEngine>();
-builder.Services.AddSingleton<ResourceCapacity>();
-builder.Services.AddSingleton<RunCoordinator>();builder.Services.AddHostedService(p=>p.GetRequiredService<RunCoordinator>());
+FileStream? serviceOwnership=null;
+if(mode=="ui"){
+    builder.Services.Configure<HostOptions>(options=>options.ShutdownTimeout=TimeSpan.FromSeconds(5));
+    var backendUri=new Uri(Environment.GetEnvironmentVariable("MTG_BACKEND_URL")??"http://127.0.0.1:5079/");
+    if(backendUri.Scheme!="http"||!backendUri.IsLoopback||backendUri.AbsolutePath!="/"||backendUri.Query.Length>0||backendUri.UserInfo.Length>0)
+        throw new ArgumentException("MTG_BACKEND_URL must be an HTTP loopback origin.");
+    builder.Services.AddHttpClient("simulation",client=>{client.BaseAddress=backendUri;client.Timeout=TimeSpan.FromSeconds(90);})
+        .ConfigurePrimaryHttpMessageHandler(()=>new HttpClientHandler{AutomaticDecompression=DecompressionMethods.All});
+    builder.Services.AddScoped<IUiBackend>(services=>new RemoteUiBackend(services.GetRequiredService<IHttpClientFactory>().CreateClient("simulation")));
+    var uiKeys=Path.Combine(builder.Environment.ContentRootPath,"ui-state","protection-keys");
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(uiKeys));
+}else{
+    var paths=new AppPaths(builder.Environment);
+    try{serviceOwnership=new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
+    catch(IOException error){throw new InvalidOperationException("Another simulation host already owns this data directory. Stop that host before starting a replacement.",error);}
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(paths.Data,"protection-keys")));
+    builder.Services.AddSingleton(paths);builder.Services.AddSingleton<Store>();builder.Services.AddSingleton<DeckImporter>();builder.Services.AddSingleton<ForgeEngine>();
+    builder.Services.AddSingleton<ResourceCapacity>();builder.Services.AddSingleton<RunCoordinator>();builder.Services.AddHostedService(p=>p.GetRequiredService<RunCoordinator>());
+    builder.Services.AddSingleton<LocalUiBackend>();builder.Services.AddSingleton<IUiBackend>(p=>p.GetRequiredService<LocalUiBackend>());
+}
 builder.Services.ConfigureHttpJsonOptions(options=>{options.SerializerOptions.PropertyNamingPolicy=Json.Options.PropertyNamingPolicy;});
 var app=builder.Build();
+app.Lifetime.ApplicationStopped.Register(()=>serviceOwnership?.Dispose());
+app.UseResponseCompression();
 app.MapGet("/branding.css", (BrandSettings branding, HttpContext context) => {
     context.Response.Headers.CacheControl="no-store";
     return Results.Text(branding.StyleSheet(), "text/css");
@@ -49,6 +71,23 @@ app.Use(async(context,next)=>{
     }
 });
 app.UseStaticFiles();app.UseAntiforgery();app.MapStaticAssets();
+if(mode=="ui"){
+    app.MapGet("/api/{**path}",async(HttpContext context,IHttpClientFactory factory)=>{
+        var path=context.Request.Path.Value!;
+        if(!path.StartsWith("/api/v1/runs/",StringComparison.Ordinal)){context.Response.StatusCode=404;return;}
+        if(path.EndsWith("/export",StringComparison.OrdinalIgnoreCase)||path.EndsWith("/replay-export",StringComparison.OrdinalIgnoreCase)){context.Response.StatusCode=404;return;}
+        try{
+            using var response=await factory.CreateClient("simulation").GetAsync(path.TrimStart('/')+context.Request.QueryString,HttpCompletionOption.ResponseHeadersRead,context.RequestAborted);
+            context.Response.StatusCode=(int)response.StatusCode;
+            context.Response.ContentType=response.Content.Headers.ContentType?.ToString();
+            if(response.Content.Headers.ContentDisposition is {} disposition)context.Response.Headers.ContentDisposition=disposition.ToString();
+            await response.Content.CopyToAsync(context.Response.Body,context.RequestAborted);
+        }catch(HttpRequestException){context.Response.StatusCode=503;await context.Response.WriteAsync("Simulation service unavailable.");}
+    });
+    app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+    await app.RunAsync();return;
+}
+app.MapGet("/api/v1/ui-state",async(string? runId,LocalUiBackend backend,HttpContext context)=>await backend.Snapshot(runId,context.RequestAborted));
 app.MapGet("/api/v1/session",()=>new{instanceToken});
 app.MapGet("/api/v1/capabilities",(ForgeEngine engine)=>engine.Capabilities());
 app.MapGet("/api/v1/decks",(Store store,ForgeEngine engine)=>store.Decks().Select(d=>new{manifest=d,coverage=engine.Coverage(d)}));
@@ -61,9 +100,9 @@ app.MapPost("/api/v1/runs/preflight",(RunRequest request,ForgeEngine engine,Stor
     var existing=store.ExistingSession(config);
     return new{blockers=engine.Preflight(request),limitations=capabilities.Limitations,cachedGames=cached,existingSessionId=existing?.Id,existingGamesPerPair=existing?.Config.GamesPerPair};
 });
-app.MapPost("/api/v1/runs",async(RunRequest request,HttpContext context,RunCoordinator coordinator)=>{
+app.MapPost("/api/v1/runs",async(RunRequest request,HttpContext context,RunCoordinator coordinator,bool requireIdle=false)=>{
     var key=context.Request.Headers["Idempotency-Key"].ToString();if(key.Length is <1 or >128)throw new ArgumentException("Provide an Idempotency-Key of 1–128 characters.");
-    return Results.Ok(new{id=await coordinator.Create(request,key)});
+    return Results.Ok(new{id=await coordinator.Create(request,key,requireIdle)});
 });
 app.MapGet("/api/v1/runs",(Store store,int offset=0,int limit=50)=>{if(offset<0||limit is <1 or >100)throw new ArgumentException("Invalid page range.");return store.Runs().Skip(offset).Take(limit);});
 app.MapGet("/api/v1/runs/{id}",(string id,Store store)=>store.Run(id));
@@ -105,7 +144,7 @@ app.MapGet("/api/v1/runs/{run}/games/{id}/replay-export",(string run,string id,S
     var path=Path.Combine(paths.Replays,attempt.Replay!);if(!File.Exists(path)||ForgeEngine.FileHash(path)!=attempt.ReplayHash)throw new InvalidDataException("Replay is missing or corrupt.");
     return Results.File(path,"application/gzip",attempt.Replay);
 });
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+if(mode=="combined")app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 await app.Services.GetRequiredService<DeckImporter>().Import();
 var startupStore=app.Services.GetRequiredService<Store>();var startupEngine=app.Services.GetRequiredService<ForgeEngine>();
 foreach(var run in startupStore.Runs())foreach(var slot in startupStore.Slots(run.Id).Where(s=>s.Result is not null&&(s.Result.ManaDetectionVersion!=ManaAnalyzer.Version||s.Result.OpeningTrackingVersion is null))){

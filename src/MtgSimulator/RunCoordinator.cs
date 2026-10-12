@@ -14,10 +14,12 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     private readonly ConcurrentDictionary<string,CancellationTokenSource> active=new();
     private readonly SemaphoreSlim mutations=new(1,1);
     private void Enqueue(string id){if(queued.TryAdd(id,0))queue.Writer.TryWrite(id);}
-    public async Task<string> Create(RunRequest request,string key)
+    public async Task<string> Create(RunRequest request,string key,bool requireIdle=false)
     {
-        var blockers=engine.Preflight(request);if(blockers.Count!=0)throw new InvalidOperationException(string.Join("\n",blockers));
         await mutations.WaitAsync();try {
+        if(requireIdle&&(active.Count>0||store.Runs().Any(r=>r.Status is "queued" or "running" or "cancelling")))
+            throw new InvalidOperationException("A session is active. Wait for it to finish or pause it from session details before setting up another run.");
+        var blockers=engine.Preflight(request);if(blockers.Count!=0)throw new InvalidOperationException(string.Join("\n",blockers));
         var capability=engine.Capabilities();var decks=request.DeckIds.Order(StringComparer.Ordinal).ToList();
         var config=new RunConfig(decks,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capability.EngineHash,capability.AdapterHash,
             StaggerStarts:request.StaggerStarts,EstimatedGameSeconds:request.EstimatedGameSeconds,StartLeadSeconds:request.StartLeadSeconds,StartupSpacingSeconds:request.StartupSpacingSeconds);
@@ -42,7 +44,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     {
         await mutations.WaitAsync();
         try {
-            if(active.ContainsKey(id))throw new InvalidOperationException("Cancel the session and wait for it to stop before deleting it.");
+            if(active.ContainsKey(id))throw new InvalidOperationException("Pause the session and wait for it to stop before deleting it.");
             var files=await store.DeleteRun(id);queued.TryRemove(id,out _);var cleanupComplete=true;
             foreach(var file in files){
                 if(Path.GetFileName(file)!=file){cleanupComplete=false;continue;}
@@ -74,9 +76,9 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             var run=store.Run(id);if(active.ContainsKey(id)||run.Status is "running" or "queued" or "cancelling")throw new InvalidOperationException("Run is already active.");
             var cap=engine.Capabilities();if(!cap.Available||cap.EngineHash!=run.Config.EngineHash||cap.AdapterHash!=run.Config.AdapterHash)throw new InvalidOperationException("Engine/adapter identity changed; create a new run.");
             foreach(var slot in store.Slots(id))if(slot.Result is null&&(slot.Status is "pending" or "cancelled"||retryFailures&&slot.Status=="failed")) {
-                if(slot.Attempts.Count>=4)continue;await store.SaveSlot(slot with{Status="pending"});
+                if(!AttemptPolicy.CanResume(slot))continue;await store.SaveSlot(slot with{Status="pending"});
             }
-            if(!store.Slots(id).Any(s=>s.Status=="pending"))throw new InvalidOperationException("No resumable slots; failed attempts require explicit retry (maximum four attempts per slot).");
+            if(!store.Slots(id).Any(s=>s.Status=="pending"))throw new InvalidOperationException("No resumable slots; failed attempts require explicit retry (maximum four failed attempts per game).");
             await store.SaveRun(run with{Status="queued",Error=null});Enqueue(id);
         }finally{mutations.Release();}
     }

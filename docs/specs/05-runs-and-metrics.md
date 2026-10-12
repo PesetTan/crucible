@@ -74,4 +74,6 @@ Optional contributing-condition tags are descriptive: missed land drops, availab
 
 ## Exports
 
-Export compact CSV/JSON summaries with manifests' hashes, configuration identities, rates/denominators, interval definition, failure counts, and qualified status. Replays are separate explicit local downloads. Ordinary exports exclude raw personal account logs and private trace data.
+The loopback simulation service can export compact CSV/JSON summaries with manifests' hashes, configuration identities, rates/denominators, interval definition, failure counts, and qualified status. Replays are separate explicit backend downloads. The frontend has no export or download controls, and the UI host does not proxy export endpoints. Ordinary exports exclude raw personal account logs and private trace data.
+
+Record session processing periods separately from queued and paused time. A Runtime Log page presents each period's start, finish or last recorded update, active and scheduled duration, new attempt count, and status with filtering, sorting, and pagination. An unfinished period is labeled by its last recorded update. The page keeps raw timing JSON available and links back to the session details through its session label.

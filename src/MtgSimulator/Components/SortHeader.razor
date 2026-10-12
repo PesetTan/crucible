@@ -1,0 +1,11 @@
+<th scope="col" aria-sort="@(State.Column==Column?(State.Descending?"descending":"ascending"):"none")">
+    <button type="button" class="sort-heading" @onclick="()=>OnSort.InvokeAsync(Column)">
+        @ChildContent <span class="sort-direction" aria-hidden="true">@(State.Column==Column?(State.Descending?"▼":"▲"):"↕")</span>
+    </button>
+</th>
+@code {
+    [Parameter,EditorRequired] public TableSort State{get;set;}=default!;
+    [Parameter,EditorRequired] public string Column{get;set;}="";
+    [Parameter] public RenderFragment? ChildContent{get;set;}
+    [Parameter] public EventCallback<string> OnSort{get;set;}
+}

@@ -61,6 +61,8 @@ public abstract class PersistentSelectionPage<T> : ComponentBase where T : class
 }
 
 public sealed record HomeSelections(List<string> DeckIds, int Games, int Workers, int Timeout,
-    int TurnLimit, long Seed, bool StaggerStarts, double StartupSpacingSeconds, bool FollowLongestGame);
+    int TurnLimit, long Seed, bool StaggerStarts, double StartupSpacingSeconds, bool FollowLongestGame,
+    bool ExplicitDeckSelection = false);
 public sealed record ResultSelections(string Matchup, string Outcome, string Mana, int Page, string TimeUnit = "rounds");
+public sealed record SessionLogSelections(string Deck,string Decision,string Status,string Matchup,string Outcome,string Mana,string TimeUnit,int Page);
 public sealed record ReplaySelections(bool Audit);

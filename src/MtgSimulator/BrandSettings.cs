@@ -22,5 +22,5 @@ public sealed class BrandSettings(IConfiguration configuration)
     }
 
     private static string Color(string? value) => value is not null && Regex.IsMatch(value, "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$") ? value : "#77D1BB";
-    private static string LocalAsset(string? value) => value is not null && Regex.IsMatch(value, "^assets/[a-zA-Z0-9/_-]+\\.(svg|png|webp|ico)$", RegexOptions.IgnoreCase) && !value.Contains("..", StringComparison.Ordinal) ? value : "assets/brand/matchlab-dual-flasks.svg";
+    private static string LocalAsset(string? value) => value is not null && Regex.IsMatch(value, "^assets/[a-zA-Z0-9/_-]+\\.(svg|png|webp|ico)$", RegexOptions.IgnoreCase) && !value.Contains("..", StringComparison.Ordinal) ? value : "assets/brand/crucible/master.svg";
 }

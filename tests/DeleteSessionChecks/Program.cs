@@ -33,6 +33,15 @@ try {
     await store.CreateRun(source,[sourceSlot],"source-key","source-hash");
     await store.CreateRun(copy,[copied],"copy-key","copy-hash");
     await store.CreateRun(unrelated,[otherSlot],"other-key","other-hash");
+    foreach(var activeStatus in new[]{"queued","running","cancelling"}){
+        await store.SaveRun(unrelated with{Status=activeStatus});
+        var progress=store.ActiveSessionProgress().Single();
+        Check(progress.Run.Id==unrelated.Id&&progress.Completed==1&&progress.Running==0,"Active progress must identify the session and count its game states.");
+        try{await coordinator.Create(new RunRequest(["A","B"]),"locked-start",requireIdle:true);throw new Exception("Setup started another session while one was active.");}
+        catch(InvalidOperationException e)when(e.Message.Contains("A session is active")){}
+    }
+    await store.SaveRun(unrelated);
+    Check(store.ActiveSessionProgress().Count==0,"Setup must unlock after all sessions become terminal.");
     var timingNow=DateTimeOffset.UtcNow;
     var timing=new SessionTiming("timing",source.Id,timingNow.AddMinutes(-2),timingNow,timingNow,120,10,100,"completed");
     await store.SaveSessionTiming(timing);
@@ -49,7 +58,7 @@ try {
     var page=new RunDetail();var js=new Confirmation();var navigation=new TestNavigation();
     typeof(RunDetail).GetProperty("Id",instance)!.SetValue(page,source.Id);
     typeof(RunDetail).GetProperty("JS",instance)!.SetValue(page,js);
-    typeof(RunDetail).GetProperty("Coordinator",instance)!.SetValue(page,coordinator);
+    typeof(RunDetail).GetProperty("Coordinator",instance)!.SetValue(page,new LocalUiBackend(store,new ForgeEngine(paths,store),coordinator,new DeckImporter(paths,store),new ResourceCapacity()));
     typeof(RunDetail).GetProperty("Navigation",instance)!.SetValue(page,navigation);
     typeof(RunDetail).GetField("summary",instance)!.SetValue(page,Metrics.Summarize(source,[sourceSlot]));
     async Task ClickDelete()=>await (Task)typeof(RunDetail).GetMethod("DeleteSession",instance)!.Invoke(page,null)!;

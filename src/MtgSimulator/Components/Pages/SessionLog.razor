@@ -1,0 +1,104 @@
+@page "/runs/{Id}/logs/{Kind}"
+@inherits PersistentSelectionPage<SessionLogSelections>
+@inject IUiBackend Backend
+<PageTitle>@Title — Gauntlet</PageTitle>
+<div inert="@(!SelectionsReady)">
+<a class="eyebrow log-session-link" href="@($"/runs/{Id}")" aria-label="Return to session details">SESSION / @(Id.Length>=8?Id[..8]:Id) / EVIDENCE <span aria-hidden="true">↗</span></a>
+<nav class="log-navigation" aria-label="Session logs"><NavLink href="@($"/runs/{Id}/logs/hands")" Match="NavLinkMatch.All">Hand Log</NavLink><NavLink href="@($"/runs/{Id}/logs/mana")" Match="NavLinkMatch.All">Mana Incident Log</NavLink><NavLink href="@($"/runs/{Id}/logs/runtime")" Match="NavLinkMatch.All">Runtime Log</NavLink><NavLink href="@($"/runs/{Id}/logs/games")" Match="NavLinkMatch.All">Game Evidence</NavLink></nav>
+<div class="section-head"><div><h1>@Title</h1><p class="muted">@Description</p></div></div>
+<div class="actions log-tools"><button @onclick="Load" disabled="@loading">Refresh</button></div>
+@if(loading){<div class="panel" role="status">Loading @Title…</div>}
+else if(error is not null){<div class="error" role="alert">@error <button @onclick="Load">Try again</button></div>}
+else{
+    @if(Kind=="hands" && hands is not null){
+        <p class="small muted">@hands.Interpretation Opening policy: @hands.OpeningPolicy. Records exist only for games with tracked opening hands; missing games remain unknown.</p>
+        <div class="log-filters"><label>Deck <select @bind="deckFilter" @bind:after="ResetPage"><option value="">All decks</option>@foreach(var deck in DeckChoices(hands.Players.Select(x=>x.DeckId))){<option value="@deck">@Name(deck)</option>}</select></label><label>Keep decision <select @bind="decisionFilter" @bind:after="ResetPage"><option value="">All decisions</option><option value="accepted">Accepted</option><option value="forced">Forced or rejected</option><option value="unknown">Unknown</option></select></label></div>
+        var rows=handSort.Apply(hands.Players.Where(h=>(deckFilter==""||h.DeckId==deckFilter)&&(decisionFilter==""||Decision(h.OpeningHand.PolicyAccepted)==decisionFilter)),HandValue).ToList();
+        <p class="small muted">@rows.Count recorded players</p>
+        @if(rows.Count==0){<div class="panel">No opening hand records match these filters.</div>}
+        else{<div class="table-scroll"><table class="log-table"><thead><tr><SortHeader State="handSort" Column="game" OnSort="SortHands">Game</SortHeader><SortHeader State="handSort" Column="deck" OnSort="SortHands">Deck</SortHeader><SortHeader State="handSort" Column="position" OnSort="SortHands">Position</SortHeader><SortHeader State="handSort" Column="mulligans" OnSort="SortHands">Mulligans</SortHeader><SortHeader State="handSort" Column="kept" OnSort="SortHands">Kept Cards</SortHeader><SortHeader State="handSort" Column="decision" OnSort="SortHands">Keep Decision</SortHeader><th scope="col">Evidence</th><th scope="col">Tracking Version</th></tr></thead><tbody>@foreach(var h in rows.Skip(page*PageSize).Take(PageSize)){<tr><td><a href="@($"/runs/{Id}/games/{h.GameId}")">@Short(h.GameId) ↗</a></td><td>@Name(h.DeckId)</td><td>@(h.OnPlay?"On play":"On draw")</td><td>@h.OpeningHand.Mulligans</td><td>@h.OpeningHand.KeptHandSize</td><td>@DecisionLabel(h.OpeningHand.PolicyAccepted)</td><td class="evidence">@h.OpeningHand.Evidence</td><td>@(h.TrackingVersion??"Unknown")</td></tr>}</tbody></table></div><div class="actions log-pagination"><button disabled="@(page==0)" @onclick="()=>page--">Previous</button><span class="muted">Page @(page+1) of @Math.Max(1,(rows.Count+PageSize-1)/PageSize) · @rows.Count records</span><button disabled="@((page+1)*PageSize>=rows.Count)" @onclick="()=>page++">Next</button></div>}
+    }else if(Kind=="mana" && mana is not null){
+        <details><summary>Incident definitions and limits</summary><p class="small muted">Mana-starved: @mana.ManaStarved</p><p class="small muted">Mana-flooded: @mana.ManaFlooded</p><p class="small muted">Definition version: @mana.DefinitionVersion. These are detected conditions, not proven causes of a result. Games without analysis are unknown.</p></details>
+        <div class="log-filters"><label>Deck <select @bind="deckFilter" @bind:after="ResetPage"><option value="">All decks</option>@foreach(var deck in DeckChoices(mana.Incidents.Select(x=>x.DeckId))){<option value="@deck">@Name(deck)</option>}</select></label></div>
+        var rows=manaSort.Apply(mana.Incidents.Where(m=>(deckFilter==""||m.DeckId==deckFilter)),ManaValue).ToList();
+        <p class="small muted">@rows.Count recorded incidents</p>
+        @if(rows.Count==0){<div class="panel">No mana incidents match these filters.</div>}
+        else{<div class="table-scroll"><table class="log-table"><thead><tr><SortHeader State="manaSort" Column="game" OnSort="SortMana">Game</SortHeader><SortHeader State="manaSort" Column="deck" OnSort="SortMana">Deck</SortHeader><SortHeader State="manaSort" Column="kind" OnSort="SortMana">Condition</SortHeader><SortHeader State="manaSort" Column="first" OnSort="SortMana">First Own Turn</SortHeader><SortHeader State="manaSort" Column="last" OnSort="SortMana">Last Own Turn</SortHeader><SortHeader State="manaSort" Column="outcome" OnSort="SortMana">Outcome</SortHeader><th scope="col">Evidence</th><th scope="col">Version</th></tr></thead><tbody>@foreach(var m in rows.Skip(page*PageSize).Take(PageSize)){<tr><td><a href="@($"/runs/{Id}/games/{m.GameId}")">@Short(m.GameId) ↗</a></td><td>@Name(m.DeckId)</td><td>@UiText.Label(m.Flag.Kind)</td><td>@m.Flag.FirstOwnTurn <span class="muted">(actual @m.Flag.FirstActualTurn)</span></td><td>@m.Flag.LastOwnTurn <span class="muted">(actual @m.Flag.LastActualTurn)</span></td><td>@Outcome(m)</td><td class="evidence">@m.Flag.Evidence</td><td>@m.Flag.DefinitionVersion</td></tr>}</tbody></table></div><div class="actions log-pagination"><button disabled="@(page==0)" @onclick="()=>page--">Previous</button><span class="muted">Page @(page+1) of @Math.Max(1,(rows.Count+PageSize-1)/PageSize) · @rows.Count records</span><button disabled="@((page+1)*PageSize>=rows.Count)" @onclick="()=>page++">Next</button></div>}
+    }else if(Kind=="runtime" && timings is not null){
+        <p class="small muted">Active processing time includes engine startup and saving results. Queued time and pauses between periods are excluded. An unfinished period uses its last recorded update.</p>
+        @if(timings.Select(t=>t.Status).Distinct().Count()>2){<div class="log-filters"><label>Status <select @bind="statusFilter" @bind:after="ResetPage"><option value="">All statuses</option>@foreach(var status in timings.Select(t=>t.Status).Distinct().OrderBy(s=>s)){<option value="@status">@UiText.Label(status)</option>}</select></label></div>}
+        var rows=runtimeSort.Apply(timings.Where(t=>statusFilter==""||t.Status==statusFilter),RuntimeValue).ToList();
+        <p class="small muted">@rows.Count recorded periods</p>
+        @if(rows.Count==0){<div class="panel">No runtime periods match this filter.</div>}
+        else{<div class="table-scroll"><table class="log-table"><thead><tr><SortHeader State="runtimeSort" Column="started" OnSort="SortRuntime">Started</SortHeader><SortHeader State="runtimeSort" Column="ended" OnSort="SortRuntime">Finished / Last Recorded</SortHeader><SortHeader State="runtimeSort" Column="active" OnSort="SortRuntime">Active Time</SortHeader><SortHeader State="runtimeSort" Column="scheduled" OnSort="SortRuntime">Scheduled Time</SortHeader><SortHeader State="runtimeSort" Column="attempts" OnSort="SortRuntime">New Attempts</SortHeader><SortHeader State="runtimeSort" Column="status" OnSort="SortRuntime">Status</SortHeader></tr></thead><tbody>@foreach(var t in rows.Skip(page*PageSize).Take(PageSize)){<tr><td>@Date(t.StartedAt)</td><td>@Date(t.FinishedAt??t.UpdatedAt)@if(t.FinishedAt is null){<span class="muted"> · last recorded</span>}</td><td>@RuntimeEstimate.Duration(t.ActiveSeconds)</td><td>@RuntimeEstimate.Duration(t.ScheduledSeconds)</td><td>@t.AttemptCount</td><td>@UiText.Label(t.Status)</td></tr>}</tbody></table></div><div class="actions log-pagination"><button disabled="@(page==0)" @onclick="()=>page--">Previous</button><span class="muted">Page @(page+1) of @Math.Max(1,(rows.Count+PageSize-1)/PageSize) · @rows.Count records</span><button disabled="@((page+1)*PageSize>=rows.Count)" @onclick="()=>page++">Next</button></div>}
+    }else if(Kind=="games" && gameSlots is not null){
+        <p class="small muted">Sort all filtered games before pagination. Mulligans sorts by both players' total; Mana Flags sorts by incident count. Unknown records stay unknown.</p>
+        <div class="log-filters game-evidence-filters">
+            <label>Matchup <select @bind="matchupFilter" @bind:after="ResetPage"><option value="">All matchups</option>@foreach(var choice in GameMatchupChoices()){<option value="@choice.Key">@choice.Label</option>}</select></label>
+            <label>Outcome <select @bind="outcomeFilter" @bind:after="ResetPage"><option value="">All outcomes</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Paused</option><option value="pending">Pending</option><option value="running">Running</option></select></label>
+            <label>Mana incident <select @bind="manaFilter" @bind:after="ResetPage"><option value="">All mana conditions</option><option value="mana-starved">Mana-starved</option><option value="mana-flooded">Mana-flooded</option></select></label>
+            <label>View by <select @bind="timeUnit" @bind:after="ResetPage"><option value="rounds">Rounds</option><option value="turns">Turns</option></select></label>
+        </div>
+        var rows=gameSort.Apply(FilteredGames(),GameValue).ToList();
+        <p class="small muted">@rows.Count games shown · @gameSlots.Count scheduled games</p>
+        @if(rows.Count==0){<div class="panel">No games match these filters.</div>}
+        else{<div class="table-scroll"><table class="log-table"><thead><tr><SortHeader State="gameSort" Column="matchup" OnSort="SortGames">Matchup</SortHeader><SortHeader State="gameSort" Column="starts" OnSort="SortGames">Starts</SortHeader><SortHeader State="gameSort" Column="outcome" OnSort="SortGames">Outcome</SortHeader><SortHeader State="gameSort" Column="turns" OnSort="SortGames">@(timeUnit=="rounds"?"Ending Round":"Actual Turns")</SortHeader><SortHeader State="gameSort" Column="mulligans" OnSort="SortGames">Mulligans</SortHeader><SortHeader State="gameSort" Column="mana" OnSort="SortGames">Mana Flags</SortHeader><SortHeader State="gameSort" Column="evidence" OnSort="SortGames">Terminal Evidence</SortHeader><SortHeader State="gameSort" Column="replay" OnSort="SortGames">Replay</SortHeader></tr></thead><tbody>@foreach(var slot in rows.Skip(page*PageSize).Take(PageSize)){
+            <tr><td>@Name(slot.DeckA)<br /><span class="muted">vs @Name(slot.DeckB)</span></td><td>@Name(slot.Starter)</td><td>@GameOutcome(slot)</td><td>@(slot.Result is {} resultLength?(timeUnit=="rounds"?(resultLength.ActualTurns+1)/2:resultLength.ActualTurns).ToString():"—")</td><td class="evidence">@if(slot.Result?.OpeningHands is {} openingHands){@foreach(var h in openingHands){<p>@Name(h.Player=="A"?slot.DeckA:slot.DeckB): @h.Mulligans · kept @h.KeptHandSize</p>}}else{<span>Unknown</span>}</td><td class="evidence">@if(slot.Result?.ManaFlags is {} flags){@foreach(var flag in flags){<p title="@flag.Evidence">@Name(flag.Player=="A"?slot.DeckA:slot.DeckB): @UiText.Label(flag.Kind) (own turns @flag.FirstOwnTurn–@flag.LastOwnTurn)</p>}@if(flags.Count==0){<span>No Flags</span>}}else{<span>Not Analyzed</span>}</td><td class="evidence">@(slot.Result?.TerminalReason??slot.Attempts.LastOrDefault()?.Error??"Awaiting Play")</td><td>@if(slot.CachedFromRunId is {} sourceId){@if(sourceRunIds.Contains(sourceId)){<a href="@($"/runs/{sourceId}/games/{slot.CachedFromGameId}")">Stored Source</a>}else{<span class="muted">Source Session Deleted</span>}<br />}@if(slot.Status=="completed"){<a href="@($"/runs/{Id}/games/{slot.Id}")">Replay</a>}</td></tr>
+        }</tbody></table></div><div class="actions log-pagination"><button disabled="@(page==0)" @onclick="()=>page--">Previous</button><span class="muted">Page @(page+1) of @Math.Max(1,(rows.Count+PageSize-1)/PageSize) · @rows.Count games</span><button disabled="@((page+1)*PageSize>=rows.Count)" @onclick="()=>page++">Next</button></div>}
+    }
+}
+</div>
+@code{
+    private const int PageSize=25;
+    [Parameter] public string Id{get;set;}="";
+    [Parameter] public string Kind{get;set;}="";
+    private HandLog? hands;private ManaLog? mana;private List<SessionTiming>? timings;private List<GameSlot>? gameSlots;private HashSet<string> sourceRunIds=[];
+    private List<DeckManifest> decks=[];private string? error;private bool loading=true;private int page;
+    private string deckFilter="",decisionFilter="",statusFilter="",matchupFilter="",outcomeFilter="",manaFilter="",timeUnit="rounds";
+    private readonly TableSort handSort=new(),manaSort=new(),runtimeSort=new(),gameSort=new();
+    private string Title=>Kind switch{"hands"=>"Opening Hand Log","mana"=>"Mana Incident Log","runtime"=>"Runtime Log","games"=>"Game Evidence",_=>"Session Log"};
+    private string Description=>Kind switch{"hands"=>"Every recorded player opening hand and mulligan choice.","mana"=>"Detected mana conditions with game evidence.","runtime"=>"Recorded processing periods for this session.","games"=>"Browse outcomes and open a game replay.",_=>"Unknown log type."};
+    protected override string SelectionKey=>$"log:{Id}:{Kind}";
+    protected override SessionLogSelections CaptureSelections()=>new(deckFilter,decisionFilter,statusFilter,matchupFilter,outcomeFilter,manaFilter,timeUnit,page);
+    protected override void RestoreSelections(SessionLogSelections saved){
+        deckFilter=decks.Any(d=>d.Id==saved.Deck)?saved.Deck:"";
+        decisionFilter=saved.Decision is "accepted" or "forced" or "unknown"?saved.Decision:"";
+        statusFilter=timings?.Select(t=>t.Status).Distinct().Count()>2&&timings.Any(t=>t.Status==saved.Status)?saved.Status:"";
+        matchupFilter=gameSlots?.Any(s=>GamePairKey(s)==saved.Matchup)==true?saved.Matchup:"";
+        outcomeFilter=saved.Outcome is "completed" or "failed" or "cancelled" or "pending" or "running"?saved.Outcome:"";
+        manaFilter=saved.Mana is "mana-starved" or "mana-flooded"?saved.Mana:"";
+        timeUnit=saved.TimeUnit=="turns"?"turns":"rounds";
+        page=Math.Clamp(saved.Page,0,Math.Max(0,(FilteredCount()-1)/PageSize));
+    }
+    private int FilteredCount()=>Kind switch{
+        "hands"=>hands?.Players.Count(h=>(deckFilter==""||h.DeckId==deckFilter)&&(decisionFilter==""||Decision(h.OpeningHand.PolicyAccepted)==decisionFilter))??0,
+        "mana"=>mana?.Incidents.Count(m=>deckFilter==""||m.DeckId==deckFilter)??0,
+        "runtime"=>timings?.Count(t=>statusFilter==""||t.Status==statusFilter)??0,
+        "games"=>gameSlots is null?0:FilteredGames().Count(),_=>0};
+    private string? loadedKey;
+    protected override async Task OnParametersSetAsync(){var key=Id+":"+Kind;if(key==loadedKey)return;loadedKey=key;deckFilter=decisionFilter=statusFilter=matchupFilter=outcomeFilter=manaFilter="";timeUnit="rounds";page=0;await Load();}
+    private async Task Load(){loading=true;error=null;try{if(Kind is not ("hands" or "mana" or "runtime" or "games"))throw new ArgumentException("Unknown log type.");await Backend.Refresh(Id);if(Backend.ConnectionError is not null)throw new HttpRequestException("The simulation service is unavailable. Please try again.");var run=Backend.Run(Id);decks=run.Config.DeckIds.Select(Backend.Deck).ToList();switch(Kind){case "hands":hands=await Backend.OpeningHands(Id);break;case "mana":mana=await Backend.ManaEvents(Id);break;case "runtime":timings=await Backend.RuntimeLog(Id);if(timings.Select(t=>t.Status).Distinct().Count()<=2)statusFilter="";break;case "games":gameSlots=Backend.Slots(Id);sourceRunIds=Backend.Runs().Select(r=>r.Id).ToHashSet();break;}page=0;}catch(Exception e)when(e is HttpRequestException or InvalidDataException or KeyNotFoundException or ArgumentException or System.Text.Json.JsonException or TaskCanceledException){error=e.Message;}finally{loading=false;}}
+    private string Name(string id)=>decks.FirstOrDefault(d=>d.Id==id) is {} d?d.Name+(d.SourceType=="personal"?" (saved)":""):id;
+    private IEnumerable<string> DeckChoices(IEnumerable<string> ids)=>ids.Distinct().OrderBy(Name,StringComparer.OrdinalIgnoreCase);
+    private static string Short(string id)=>id.Length>8?id[..8]:id;
+    private static string Date(DateTimeOffset date)=>date.ToLocalTime().ToString("MMM d, yyyy · h:mm:ss tt");
+    private static string Decision(bool? accepted)=>accepted switch{true=>"accepted",false=>"forced",_=>"unknown"};
+    private static string DecisionLabel(bool? accepted)=>accepted switch{true=>"Accepted",false=>"Forced / rejected",_=>"Unknown"};
+    private string Outcome(ManaLogRow row)=>row.Draw?"Rules draw":row.Winner is null?"Unknown":Name(row.Winner)+" wins";
+    private IComparable? HandValue(HandLogRow h,string c)=>c switch{"game"=>h.GameId,"deck"=>Name(h.DeckId),"position"=>h.OnPlay?0:1,"mulligans"=>h.OpeningHand.Mulligans,"kept"=>h.OpeningHand.KeptHandSize,"decision"=>DecisionLabel(h.OpeningHand.PolicyAccepted),_=>null};
+    private IComparable? ManaValue(ManaLogRow m,string c)=>c switch{"game"=>m.GameId,"deck"=>Name(m.DeckId),"kind"=>m.Flag.Kind,"first"=>m.Flag.FirstOwnTurn,"last"=>m.Flag.LastOwnTurn,"outcome"=>Outcome(m),_=>null};
+    private static IComparable? RuntimeValue(SessionTiming t,string c)=>c switch{"started"=>t.StartedAt,"ended"=>t.FinishedAt??t.UpdatedAt,"active"=>t.ActiveSeconds,"scheduled"=>t.ScheduledSeconds,"attempts"=>t.AttemptCount,"status"=>t.Status,_=>null};
+    private static string GamePairKey(GameSlot s)=>$"{s.DeckA}:{s.DeckB}";
+    private IEnumerable<(string Key,string Label)> GameMatchupChoices()=>gameSlots!.Select(s=>(Key:GamePairKey(s),Label:$"{Name(s.DeckA)} vs {Name(s.DeckB)}")).Distinct().OrderBy(c=>c.Label,StringComparer.OrdinalIgnoreCase);
+    private IEnumerable<GameSlot> FilteredGames()=>gameSlots!.Where(s=>(matchupFilter==""||GamePairKey(s)==matchupFilter)&&(outcomeFilter==""||s.Status==outcomeFilter)&&(manaFilter==""||s.Result?.ManaFlags?.Any(f=>f.Kind==manaFilter)==true));
+    private string GameOutcome(GameSlot s)=>s.Result is {} result?result.Draw?"Rules Draw":$"{Name(result.Winner!)} wins":UiText.Label(s.Status);
+    private IComparable? GameValue(GameSlot slot,string column)=>column switch{
+        "matchup"=>$"{Name(slot.DeckA)} vs {Name(slot.DeckB)}","starts"=>Name(slot.Starter),"outcome"=>GameOutcome(slot),
+        "turns"=>slot.Result is {} length?(timeUnit=="rounds"?(length.ActualTurns+1)/2:length.ActualTurns):null,
+        "mulligans"=>slot.Result?.OpeningHands is {} hands?hands.Sum(h=>h.Mulligans):null,
+        "mana"=>slot.Result?.ManaFlags is {} flags?flags.Count:null,
+        "evidence"=>slot.Result?.TerminalReason??slot.Attempts.LastOrDefault()?.Error,
+        "replay"=>(slot.Status=="completed"?"Replay":"")+(slot.CachedFromRunId is null?"":" Stored Source"),_=>null};
+    private void SortGames(string c){gameSort.Toggle(c);page=0;}
+    private void SortHands(string c){handSort.Toggle(c);page=0;}private void SortMana(string c){manaSort.Toggle(c);page=0;}private void SortRuntime(string c){runtimeSort.Toggle(c);page=0;}private void ResetPage()=>page=0;
+}

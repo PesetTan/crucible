@@ -22,10 +22,15 @@
         </div>
         <div class="chart-axis series-turn-axis @(MaxTurn>5?"has-turn-five":"")"><span>@AxisUnit 1</span>@if(MaxTurn>5){<span class="turn-five-label" style="left:@((TurnX(5)/600*100).ToString("0.##",CultureInfo.InvariantCulture))%">@AxisUnit 5</span>}<span class="@(MaxTurn==5?"turn-five-end":"")">@AxisUnit @MaxTurn</span></div>
         <div class="legend">@foreach(var s in Series){<span><i style="background:@s.Color"></i>@s.Name</span>}</div>
-        <details><summary>@(GameLength?"Win Rates and Games Ending at Each Length":"Measurements and Active-Game Counts")</summary><div class="table-scroll"><table><thead><tr><th>Deck</th><th>@(GameLength?$"Ending {AxisUnit}":Rounds?"Ending Round":"Actual Turn")</th><th>@(GameLength?"Win Rate":"Mean")</th><th>@(GameLength?"Completed Games":"Observed Games")</th></tr></thead><tbody>@foreach(var s in Series){@foreach(var p in s.Points){<tr><td>@s.Name</td><td>@p.Turn</td><td>@ValueLabel(p.Value)</td><td>@p.Count</td></tr>}}</tbody></table></div></details>
+        <details><summary>@(GameLength?"Win Rates and Games Ending at Each Length":"Measurements and Active-Game Counts")</summary><div class="table-scroll"><table><thead><tr><SortHeader State="tableSort" Column="deck" OnSort="tableSort.Toggle">Deck</SortHeader><SortHeader State="tableSort" Column="turn" OnSort="tableSort.Toggle">@(GameLength?$"Ending {AxisUnit}":Rounds?"Ending Round":"Actual Turn")</SortHeader><SortHeader State="tableSort" Column="value" OnSort="tableSort.Toggle">@(GameLength?"Win Rate":"Mean")</SortHeader><SortHeader State="tableSort" Column="count" OnSort="tableSort.Toggle">@(GameLength?"Completed Games":"Observed Games")</SortHeader></tr></thead><tbody>@foreach(var row in TableRows()){<tr><td>@row.Name</td><td>@row.Point.Turn</td><td>@ValueLabel(row.Point.Value)</td><td>@row.Point.Count</td></tr>}</tbody></table></div></details>
     }
 </div>
 @code{
+    private readonly TableSort tableSort=new();
+    private IEnumerable<(string Name,ChartPoint Point)> TableRows()=>tableSort.Apply(
+        Series.SelectMany(s=>s.Points.Select(p=>(Name:s.Name,Point:p))),
+        (row,column)=>column switch{"deck"=>row.Name,"turn"=>row.Point.Turn,"value"=>row.Point.Value,"count"=>row.Point.Count,_=>(IComparable?)null});
+
     [Parameter]public string Title{get;set;}="";
     [Parameter]public string? HelpText{get;set;}
     [Parameter]public bool GameLength{get;set;}

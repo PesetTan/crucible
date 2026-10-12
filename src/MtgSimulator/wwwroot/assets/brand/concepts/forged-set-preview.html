@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gauntlet · Forged icon family</title>
+<style>
+:root{font-family:system-ui,sans-serif;background:#f7f5f0;color:#222832}*{box-sizing:border-box}body{max-width:1080px;margin:0 auto;padding:32px 20px}h1{font-size:28px;margin:0 0 8px}p{color:#58616c;line-height:1.5}section{background:white;border:1px solid #d9dce0;border-radius:14px;padding:24px;margin:22px 0}h2{font-size:18px;margin:0 0 18px}.row{display:flex;align-items:center;gap:20px;flex-wrap:wrap}.tile{text-align:center;min-width:110px}.tile span{display:block;margin-top:8px;font-size:13px;color:#59616a}.mark{width:88px;height:88px}.mana{width:60px;height:60px}.small .mark{width:44px;height:44px}.small .mana{width:20px;height:20px}.small{gap:15px}.small .tile{min-width:80px}.dark{background:#202832;color:#fff}.dark .tile span{color:#cbd2d8}.dark p{color:#cbd2d8}.note{font-size:13px}svg{overflow:visible}.frame{fill:#e8edf0;stroke:#687786;stroke-width:3}.ink{fill:#263845}.cut{fill:#fff}.accent{fill:#6c9bc1}
+</style>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg">
+<symbol id="gauntlet" viewBox="0 0 96 96"><path class="ink" d="M25 36V19l5-5 6 5v24h4V12l5-5 6 5v31h4V17l5-5 6 5v26h4V26l5-5 6 5v33L70 77l-8 11H38L19 65l-7-19 5-7 8 5V36Z"/><path class="accent" d="M26 57h44l-5 15H36Z"/><path class="cut" d="m38 61 9 9 13-15-10 6-5-5Z"/><path class="cut" d="M32 22h3v21h-3zm15-7h3v28h-3zm15 5h3v23h-3zm15 9h3v14h-3z"/></symbol>
+<symbol id="white" viewBox="0 0 96 96"><path class="ink" d="M43 8h10v18H43zM43 70h10v18H43zM8 43h18v10H8zM70 43h18v10H70zM19 19l7-7 13 13-7 7zm45 45 7-7 13 13-7 7zM12 70l13-13 7 7-13 13zm45-45 13-13 7 7-13 13z"/><path class="ink" d="M34 34h28v28H34z"/><path class="cut" d="M42 42h12v12H42z"/></symbol>
+<symbol id="blue" viewBox="0 0 96 96"><path class="ink" d="M48 7 73 46c11 18 1 39-25 42-26-3-36-24-25-42Z"/><path class="cut" d="M50 29 37 51c-6 11-3 20 10 24-7-8-3-16 5-23l6-5Z"/></symbol>
+<symbol id="black" viewBox="0 0 96 96"><path class="ink" d="M25 19 34 9h28l9 10 9 14v27L65 70v16H31V70L16 60V33Z"/><path class="cut" d="m27 38 15 2-2 13H27zm42 0-15 2 2 13h13zM41 64l7-11 7 11zm-2 7h6v12h-6zm12 0h6v12h-6z"/></symbol>
+<symbol id="red" viewBox="0 0 96 96"><path class="ink" d="M48 7 60 37l10-10 14 33-7 18-14 10H33L19 78l-7-18 19-27 4 22Z"/><path class="cut" d="m49 45-17 25 8 10h16l8-10-9-8-4 7h-8l-3-4Z"/></symbol>
+<symbol id="green" viewBox="0 0 96 96"><path class="ink" d="M48 8c23 0 39 16 39 39S71 86 48 86 9 70 9 47 25 8 48 8Z"/><path class="cut" d="M48 22c-15 0-25 10-25 25 0 11 6 19 16 23V55H29l19-22 19 22H57v15c10-4 16-12 16-23 0-15-10-25-25-25Z"/></symbol>
+<symbol id="colorless" viewBox="0 0 96 96"><path class="ink" fill-rule="evenodd" d="M48 6 90 48 48 90 6 48Zm0 19L25 48l23 23 23-23Z"/><path class="accent" d="m48 35 13 13-13 13-13-13Z"/></symbol>
+</svg>
+<h1>Forged icon family</h1><p>One visual grammar: broad solid forms, straight cuts, and a small light facet. The gauntlet stays a hand silhouette; each mana mark keeps its familiar sun, drop, skull, flame, tree, or diamond cue.</p>
+<section><h2>Primary marks · 60–88 px</h2><div class="row" id="large"></div></section>
+<section><h2>Card cost scale · 20 px mana and 44 px brand</h2><div class="row small" id="small"></div><p class="note">Evaluate the silhouettes first at this size. Color is secondary.</p></section>
+<section class="dark"><h2>Dark surface · 20 px</h2><div class="row small" id="dark"></div></section>
+<script>const names=['gauntlet','white','blue','black','red','green','colorless'];for(const id of ['large','small','dark']){document.getElementById(id).innerHTML=names.map(n=>`<div class="tile"><svg class="${n==='gauntlet'?'mark':'mana'}" role="img" aria-label="${n}" viewBox="0 0 96 96"><use href="#${n}"/></svg><span>${n[0].toUpperCase()+n.slice(1)}</span></div>`).join('')}</script>
+</html>

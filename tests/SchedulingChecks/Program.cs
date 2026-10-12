@@ -66,7 +66,8 @@ Check(RuntimeEstimate.Duration(90000)=="25 hr","Long estimates must not wrap at 
 var config=new RunConfig(["A","B"],10,2,180,150,42,true,"engine","adapter",StaggerStarts:true);
 var oldJson=Json.Encode(config).Replace(",\"startupSpacingSeconds\":null","");
 Check(Json.Decode<RunConfig>(oldJson).StartupSpacingSeconds is null,"Old sessions must deserialize with the original scheduling policy.");
-Check(Json.Decode<RunRequest>("{\"deckIds\":[\"A\",\"B\"]}").StartupSpacingSeconds==1,"New requests must default to the throughput-oriented scheduler.");
+var defaultRequest=Json.Decode<RunRequest>("{\"deckIds\":[\"A\",\"B\"]}");
+Check(defaultRequest.StaggerStarts&&defaultRequest.Workers==2&&defaultRequest.StartupSpacingSeconds==1,"New requests must start two workers one second apart by default.");
 Console.WriteLine("Scheduling checks passed: immediate refill, concurrency cap, startup cancellation, short/empty queues, errors, runtime estimates, and saved-session compatibility.");
 
 // Session wall time calibrates only matching settings and deck versions.
@@ -85,3 +86,11 @@ Check(Json.Decode<SimulationRun>(Json.Encode(new SimulationRun("old",DateTimeOff
 var stopped=new SessionTiming("timing","run",DateTimeOffset.UtcNow.AddDays(-3),DateTimeOffset.UtcNow.AddDays(-2),DateTimeOffset.UtcNow.AddDays(-2),120,10,100,"completed");
 Check(RuntimeEstimate.SessionDuration([stopped])=="Active Runtime: 2 min","Time while paused must not inflate stored runtime.");
 Console.WriteLine("Session timing checks passed: calibration, setting isolation, minimum samples, parallel scheduling, and pause exclusion.");
+
+var pausedAttempts=Enumerable.Range(1,10).Select(n=>new Attempt(n,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,n%2==0?"interrupted":"cancelled",null,null,null)).ToList();
+var pausedGame=new GameSlot("game","run","A","B","A",1,0,"cancelled",pausedAttempts);
+Check(AttemptPolicy.CanResume(pausedGame),"Repeated pauses and service interruptions must not exhaust failure retries.");
+var failures=Enumerable.Range(11,3).Select(n=>new Attempt(n,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,"failed",null,null,null)).ToList();
+Check(AttemptPolicy.CanResume(pausedGame with{Attempts=pausedAttempts.Concat(failures).ToList()}),"Three genuine failures still permit a retry after any number of pauses.");
+Check(!AttemptPolicy.CanResume(pausedGame with{Attempts=pausedAttempts.Concat(failures).Append(failures[0] with{Number=14}).ToList()}),"Four genuine failures must stop retries.");
+Console.WriteLine("Pause retry checks passed: pauses and interruptions do not consume the four-failure allowance.");

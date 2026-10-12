@@ -14,10 +14,14 @@ The logo artwork keeps its own colors. To recolor the logo itself, edit its SVG 
 
 Layout, spacing, and typography remain in `wwwroot/app.css`. The styling includes defaults so a settings request failure does not leave the page unstyled.
 
-## Active animated logo
+## Active Crucible identity
 
-The sidebar now uses once-only armor assembly SVGs from wwwroot/assets/brand/assembly/. Each animation accelerates like magnetic attraction, completes in 0.8 seconds, and stays assembled. Reduced-motion preferences show the completed mark immediately. The matching browser icon is static.
+The selected Crucible master is `wwwroot/assets/brand/crucible/master.svg`. The browser favicon uses `small.svg`, an optical variant with fewer interior details and a light fill on dark browser chrome. The logo is static and no longer rotates through armor colors.
 
-Each full document load advances one step through silver → steel blue → cobalt steel → verdigris → red copper → silver. The next index is saved in browser local storage under gauntlet.logo.next-color.v1. App navigation and hydration reuse the current document color. If storage is unavailable, silver is used. The configured Logo and Icon are the silver fallback; brand-logo.js selects the active colorway. Generated assembly assets can be rebuilt with concepts/build_logo_assets.py.
+The shared `ManaLogo` component renders the matching sun, drop, skull, flame, tree, colorless diamond, and tap arrow across deck selection, deck library, results, and replays. CSS uses `assets/mana/crucible-*-small.svg` masks for the 16–24 px interface. Full glyph variants are saved alongside them as `crucible-*-master.svg`. These masks contain only the glyph; the colored circle comes from CSS so monochrome and forced-color modes continue working. Numbered, variable, and hybrid costs retain their labels and grouping.
 
-The wider assembly starts plates three times farther from their final positions. An expanded transparent viewport preserves the finished logo size and leaves room for the approach. The motion still accelerates magnetically, plays once, and holds; the five-color rotation remains unchanged.
+The approved master and small drawings are preserved in `assets/brand/concepts/full-and-small/01/`. Palette tones 49–56 in `branding.json` supply the selected neutral and mana colors. Update the `app.css` version in `App.razor` when changing cached styling. `brand-logo.js` remains an inert compatibility asset for older pages that still reference it.
+
+## Workspace navigation icons
+
+The approved trio uses a flask for Simulator, fanned cards for Deck Library, and a rewind clock for Run History. Production SVGs live in `wwwroot/assets/workspace/`. The sidebar displays them as 20 px CSS masks inheriting the link color for default, selected, hover, and focus states. The text labels supply accessible names; icon spans are decorative. The compact mobile header keeps its existing text-only navigation. The approval sheet and source vectors are archived under `assets/brand/concepts/workspace-selected/`.

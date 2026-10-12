@@ -27,5 +27,6 @@ For complete, integrity-checked replays produced under this app's fixed two-play
 - Count a kept opening seven as zero mulligans, not one hand attempt. Missing capture is unknown rather than zero.
 - Aggregates use completed games with recorded opening-hand data; publish the recorded-player denominator.
 - `/api/v1/runs/{id}/opening-hands` exposes compact game/player records. Summary JSON exports include the per-deck aggregate records.
+- The session actions menu opens a dedicated Hand Log page with deck and keep-decision filters; sortable game, deck, position, mulligan, kept-size, and decision columns; evidence and tracking versions; replay links; and pagination. The Position column groups on-play and on-draw records in either order, so the log has no separate position dropdown. Its session label returns to session details, while a selected log menu switches among Hand, Mana Incident, and Runtime logs. Raw JSON remains a separate option.
 
 Changes to the pilot keep policy, opening-hand procedure, or tracking method require a new relevant version. No language-model calls are used to decide or analyze mulligans. No automated tests were added, as requested by the user.

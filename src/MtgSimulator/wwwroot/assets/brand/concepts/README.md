@@ -30,7 +30,7 @@ Generated with the built-in image generation tool. Prompt direction: five distin
 
 ## Selected logo
 
-Option 23 was selected earlier. The current app logo is the corrected option 26 armored fist with once-only magnetic assembly and a predictable five-color cycle. Production asset: `../gauntlet-five-color-seal.png`, with transparent background. The existing SVG asset path embeds that PNG for compatibility with the running app and favicon. All alternative concept sheets remain saved.
+The active app identity is now **Crucible**, option 01 from `full-and-small/`. Production logo and favicon: `../crucible/master.svg` and `../crucible/small.svg`. Matching mana glyphs live in `../../mana/crucible-*.svg`. The older option 23/26 armored-hand artwork and assembly animations remain archived here as historical alternatives.
 
 Prepared with the built-in image generation tool. Edit prompt: isolate top-right option 23, preserve its five armor plates and central forge anvil, remove text and background, and center it on a transparent square canvas.
 

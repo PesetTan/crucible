@@ -21,6 +21,9 @@ public sealed record DeckManifest(string Id, string Name, string SourceType, str
     public string? ArchetypeTier { get; init; }
     public string? TierSourceUrl { get; init; }
     public string? TierSnapshotDate { get; init; }
+    public double? PublishedWinRatePercent { get; init; }
+    public int? PublishedMatchesApprox { get; init; }
+    public string? PublishedMatchesDisplayed { get; init; }
     public int MainCount => Cards.Where(c => c.Zone == "MainDeck").Sum(c => c.Quantity);
     public int CreatureCount => Cards.Where(c => c.Zone == "MainDeck" && c.Type.Contains("Creature", StringComparison.Ordinal)).Sum(c => c.Quantity);
     public int LandCount => Cards.Where(c => c.Zone == "MainDeck" && c.Type.Contains("Land", StringComparison.Ordinal)).Sum(c => c.Quantity);
@@ -29,14 +32,19 @@ public sealed record DeckManifest(string Id, string Name, string SourceType, str
 public sealed record CoverageItem(string Name, string Status, string? Script, string? Reason);
 public sealed record DeckCoverage(string DeckId, string Status, List<CoverageItem> Cards, List<string> Limitations);
 public sealed record Capabilities(bool Available, string Engine, string EngineHash, string AdapterHash, string JavaPath, List<string> Blockers, List<string> Limitations);
-public sealed record RunRequest(List<string> DeckIds, int GamesPerPair = 200, int Workers = 1, int TimeoutSeconds = 180, int TurnLimit = 150, long RootSeed = 42, bool Diagnostic = true,
-    bool StaggerStarts = false, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = 1);
+public sealed record RunRequest(List<string> DeckIds, int GamesPerPair = 200, int Workers = 2, int TimeoutSeconds = 180, int TurnLimit = 150, long RootSeed = 42, bool Diagnostic = true,
+    bool StaggerStarts = true, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = 1);
 public sealed record RunConfig(List<string> DeckIds, int GamesPerPair, int Workers, int TimeoutSeconds, int TurnLimit, long RootSeed, bool Diagnostic, string EngineHash, string AdapterHash,
     string Pilot = "Forge Default / forced starter v1", string OpeningPolicy = "London mulligan; Arena Bo1 opening hands approximated", string SeedScheme = "sha256-v1",
     bool StaggerStarts = false, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = null);
 public sealed record SimulationRun(string Id, DateTimeOffset CreatedAt, string Status, RunConfig Config, int Total, string? Error = null, List<RunExtension>? Extensions = null, DateTimeOffset? UpdatedAt = null);
 public sealed record SessionTiming(string Id,string RunId,DateTimeOffset StartedAt,DateTimeOffset UpdatedAt,
     DateTimeOffset? FinishedAt,double ActiveSeconds,int AttemptCount,double ScheduledSeconds,string Status);
+public sealed record ActiveSessionProgress(SimulationRun Run,int Completed,int Failed,int Cancelled,int Running,int Pending,int Reused)
+{
+    public int Processed=>Completed+Failed+Cancelled;
+    public double Percent=>Run.Total==0?0:Math.Clamp(100.0*Processed/Run.Total,0,100);
+}
 public sealed record SessionTurnStats(int Sessions,int Games,int LongestGame)
 {
     public int SuggestedLimit=>((Math.Clamp(LongestGame,10,1000)+9)/10)*10;

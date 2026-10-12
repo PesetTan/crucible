@@ -1,15 +1,21 @@
 @page "/runs"
-@inject Store Store
+@inject IUiBackend Store
+@implements IDisposable
+@if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
 <PageTitle>Run History — Gauntlet</PageTitle>
 <div class="eyebrow">YOUR LOCAL PLAYTESTS</div><div class="section-head"><h1>Run History.</h1><a class="button primary" href="/">New Session</a></div>
 @if(ReplayCleanupIncomplete){<div class="notice"><strong>Session Deleted</strong><span>Some replay files could not be removed from disk.</span></div>}
 @if(Store.Runs().Count==0){<section class="empty"><h2>The Table Is Ready.</h2><p>Choose your decks to start your first local session.</p><a href="/">Set Up a Run</a></section>}
-@foreach(var run in Store.Runs()){var gameSlots=Store.Slots(run.Id);var summary=Metrics.Summarize(run,gameSlots);<a class="history-row" href="@($"/runs/{run.Id}")"><div><span class="tag">EXPLORATORY</span><h3>@Combination(run)</h3><p>@run.Config.DeckIds.Count Decks · @run.Total Scheduled Games</p><p>@run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt") · Seed @run.Config.RootSeed</p>@if(run.UpdatedAt is {} updated){<p>Updated @updated.ToLocalTime().ToString("MMM d, yyyy · h:mm tt")</p>}</div><div><span class="pill">@UiText.Label(run.Status)</span><p>@summary.Valid valid · @summary.Failed failed</p><p>@RuntimeEstimate.SessionDuration(Store.SessionTimings(run.Id))</p>@if(gameSlots.Any(slot=>slot.CachedFromRunId is not null)){<p>@gameSlots.Count(slot=>slot.CachedFromRunId is not null) stored results reused</p>}</div></a>}
+@foreach(var run in Store.Runs()){var summary=Store.SessionProgress(run.Id);<a class="history-row" href="@($"/runs/{run.Id}")"><div><span class="tag">EXPLORATORY</span><h3>@Combination(run)</h3><p>@run.Config.DeckIds.Count Decks · @run.Total Scheduled Games</p><p>@run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt") · Seed @run.Config.RootSeed</p>@if(run.UpdatedAt is {} updated){<p>Updated @updated.ToLocalTime().ToString("MMM d, yyyy · h:mm tt")</p>}</div><div><span class="pill">@UiText.Label(run.Status)</span><p>@summary.Completed valid · @summary.Failed failed</p><p>@RuntimeEstimate.SessionDuration(Store.SessionTimings(run.Id))</p>@if(summary.Reused>0){<p>@summary.Reused stored results reused</p>}</div></a>}
 
 @code {
+    private async Task PollConnection(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(connectionLifetime.Token))await InvokeAsync(async()=>{await Store.Refresh(null,connectionLifetime.Token);deckLookup=Store.Decks().ToDictionary(deck=>deck.Id);StateHasChanged();});}catch(OperationCanceledException){}}
+    private readonly CancellationTokenSource connectionLifetime=new();
+    public void Dispose(){connectionLifetime.Cancel();connectionLifetime.Dispose();}
+
     [SupplyParameterFromQuery]public bool ReplayCleanupIncomplete{get;set;}
     private Dictionary<string, DeckManifest> deckLookup=[];
-    protected override void OnInitialized() => deckLookup=Store.Decks().ToDictionary(deck=>deck.Id);
+    protected override async Task OnInitializedAsync(){await Store.Refresh();_ = PollConnection();deckLookup=Store.Decks().ToDictionary(deck=>deck.Id);}
     private string Combination(SimulationRun run) => string.Join(" + ", run.Config.DeckIds.Select(id =>
         deckLookup.TryGetValue(id, out var deck) ? $"{deck.Name} ({(deck.SourceType == "personal" ? "saved" : "public")})" : "Unavailable deck version"));
 }

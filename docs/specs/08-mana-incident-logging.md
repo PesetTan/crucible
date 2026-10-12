@@ -25,6 +25,8 @@ Store incidents in the accepted game's result in the app SQLite database. Derive
 
 Show counts and detection definitions on the run page, support mana-starved/mana-flooded game filters, and show player-specific incident evidence in the game row and replay. Replay links jump to the first affected actual turn. `/api/v1/runs/{id}/mana-events` supplies a compact incident log with game and deck identities and supports an optional `kind` filter. Summary JSON includes incident game counts; game-result API records contain the individual incidents.
 
+The session actions menu opens a dedicated Mana Incident Log page. It shows the definition text and version, a deck filter, sortable game/deck/condition/turn/outcome columns, full incident evidence, replay links, and pagination. The two incident kinds are grouped by the Condition column sort, so this log has no separate condition dropdown. The session game list retains its incident-kind filter because its Mana Flags column sorts by incident count. The log's session label returns to session details. A selected log menu links to the Hand and Runtime logs; Raw JSON remains available separately. An empty filter result is distinguished from unanalysed games, which are not treated as incident-free evidence.
+
 ## Required behavior
 
 - One isolated checkpoint is insufficient; two consecutive qualifying checkpoints produce one incident.

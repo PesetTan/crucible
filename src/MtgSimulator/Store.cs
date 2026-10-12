@@ -64,6 +64,24 @@ public sealed class Store
         return decks;
     }
     public List<SimulationRun> Runs() => Read<SimulationRun>("runs").OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt).ToList();
+    public List<ActiveSessionProgress> ActiveSessionProgress()=>Runs().Where(r=>r.Status is "queued" or "running" or "cancelling").Select(SessionProgress).ToList();
+    public ActiveSessionProgress SessionProgress(string id)=>SessionProgress(Run(id));
+    public ActiveSessionProgress SessionProgress(SimulationRun run)
+    {
+            using var db=Open();using var cmd=db.CreateCommand();
+            cmd.CommandText="""
+                SELECT
+                    coalesce(sum(json_extract(payload,'$.status')='completed'),0),
+                    coalesce(sum(json_extract(payload,'$.status')='failed'),0),
+                    coalesce(sum(json_extract(payload,'$.status')='cancelled'),0),
+                    coalesce(sum(json_extract(payload,'$.status')='running'),0),
+                    coalesce(sum(json_extract(payload,'$.status')='pending'),0),
+                    coalesce(sum(json_extract(payload,'$.cachedFromRunId') IS NOT NULL),0)
+                FROM slots WHERE run_id=$run
+                """;
+            cmd.Parameters.AddWithValue("$run",run.Id);using var reader=cmd.ExecuteReader();reader.Read();
+            return new(run,reader.GetInt32(0),reader.GetInt32(1),reader.GetInt32(2),reader.GetInt32(3),reader.GetInt32(4),reader.GetInt32(5));
+    }
     public List<SessionTiming> SessionTimings(string run)=>Read<SessionTiming>("session_timings",run).OrderBy(t=>t.StartedAt).ToList();
     public List<SessionTimingSample> SessionTimingSamples(string engineHash,string adapterHash)
     {
@@ -187,7 +205,7 @@ public sealed class Store
             cmd.Parameters.AddWithValue("$id",id);cmd.CommandText="SELECT payload FROM runs WHERE id=$id";
             var payload=cmd.ExecuteScalar() as string??throw new KeyNotFoundException("Session not found.");
             if(Json.Decode<SimulationRun>(payload).Status is "running" or "queued" or "cancelling")
-                throw new InvalidOperationException("Cancel the session and wait for it to stop before deleting it.");
+                throw new InvalidOperationException("Pause the session and wait for it to stop before deleting it.");
             cmd.CommandText="SELECT payload FROM slots WHERE run_id=$id";
             var candidates=new HashSet<string>(StringComparer.Ordinal);
             using(var reader=cmd.ExecuteReader())while(reader.Read()){
@@ -250,7 +268,7 @@ public sealed class Store
                 foreach(var slot in original){
                     if(slot.Status=="completed"||slot.Status=="running")merged.Add(slot);
                     else if(incoming.TryGetValue(CacheKey(slot),out var reusable)&&reusable.Status=="completed")merged.Add(reusable with{Id=slot.Id,RunId=existing.Id});
-                    else merged.Add(slot.Attempts.Count<4?slot with{Status="pending"}:slot);
+                    else merged.Add(AttemptPolicy.CanResume(slot)?slot with{Status="pending"}:slot);
                 }
                 var additions=slots.Where(slot=>!keys.Contains(CacheKey(slot))).Select(slot=>slot with{RunId=existing.Id}).ToList();merged.AddRange(additions);
                 var target=Math.Max(existing.Config.GamesPerPair,run.Config.GamesPerPair);

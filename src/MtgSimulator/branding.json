@@ -1,7 +1,7 @@
 {
   "Branding": {
-    "Logo": "assets/brand/assembly/silver-static.svg",
-    "Icon": "assets/brand/assembly/silver-static.svg",
+    "Logo": "assets/brand/crucible/master.svg",
+    "Icon": "assets/brand/crucible/small.svg",
     "UiColors": {
       "bg": "#faf8f2",
       "panel": "#fffefa",
@@ -95,14 +95,14 @@
       "tone-46": "#a99f90",
       "tone-47": "#d7cfc1",
       "tone-48": "#dcd5c7",
-      "tone-49": "#d1d8dd",
-      "tone-50": "#172026",
+      "tone-49": "#ccd3d5",
+      "tone-50": "#29373a",
       "tone-51": "#ffffff50",
-      "tone-52": "#f1dfb3",
-      "tone-53": "#9bb9c9",
-      "tone-54": "#a99bb2",
-      "tone-55": "#d39c87",
-      "tone-56": "#a6b99b",
+      "tone-52": "#eddba7",
+      "tone-53": "#aac7d9",
+      "tone-54": "#beaccb",
+      "tone-55": "#e6ab97",
+      "tone-56": "#b4c49d",
       "tone-57": "#0005",
       "tone-58": "#0006"
     }

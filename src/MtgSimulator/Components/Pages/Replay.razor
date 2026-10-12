@@ -1,8 +1,9 @@
 @page "/runs/{RunId}/games/{Id}"
 @implements IDisposable
 @inherits PersistentSelectionPage<ReplaySelections>
-@inject Store Store
-@inject ForgeEngine Engine
+@inject IUiBackend Store
+@inject IUiBackend Engine
+@if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
 <PageTitle>Game Replay — Gauntlet</PageTitle>
 <div inert="@(!SelectionsReady)">
 <div class="eyebrow">GAME EVIDENCE / @Id[..Math.Min(8,Id.Length)]</div><div class="section-head"><h1>Every Turn,<br /><em>on the Record.</em></h1><a class="button" href="@($"/runs/{RunId}")">Session Results</a></div>
@@ -11,7 +12,7 @@
 @if(slot?.Result?.OpeningHands is {} openings){<section class="panel"><h3>Opening Hand Choices</h3>@foreach(var h in openings){<p><strong>@Store.Deck(h.Player=="A"?slot.DeckA:slot.DeckB).Name</strong> · @h.Mulligans mulligans before keep · @h.KeptHandSize cards kept<br /><span class="small muted">@h.Evidence</span></p>}<p class="small muted">Pilot keep policy, not a guarantee that the hand will perform well.</p></section>}
 @if(slot?.Result?.ManaFlags is {} manaFlags&&manaFlags.Count>0){<section class="panel"><h3>Recorded Mana Incidents</h3>@foreach(var flag in manaFlags){<p><strong>@Store.Deck(flag.Player=="A"?slot.DeckA:slot.DeckB).Name · @UiText.Label(flag.Kind)</strong><br /><span class="muted">@flag.Evidence</span></p><button @onclick="()=>JumpTurn(flag.FirstActualTurn)">Jump to Actual Turn @flag.FirstActualTurn</button>}<p class="small muted">Land-availability indicators · @ManaAnalyzer.Version · no causal loss inference</p></section>}
 <div class="notice"><strong>Engine Snapshots</strong><span>Actual turns are authoritative. Extra Turns are tagged; skipped-turn cycle grouping is unavailable. Private hands appear only in the explicit audit view.</span></div>
-<div class="replay-toolbar"><button @onclick="Previous" disabled="@(offset==0&&index==0)">Previous Event</button><button @onclick="Next" disabled="@ended">Next Event</button><button @onclick="NextTurn" disabled="@ended">Next Turn</button><button @onclick="TogglePlay">@(playing?"Pause":"Autoplay")</button><label><input type="checkbox" @bind="audit" /> Omniscient Hand Audit</label><a href="@($"/api/v1/runs/{RunId}/games/{Id}/replay-export")">Download Replay</a></div>
+<div class="replay-toolbar"><button @onclick="Previous" disabled="@(offset==0&&index==0)">Previous Event</button><button @onclick="Next" disabled="@ended">Next Event</button><button @onclick="NextTurn" disabled="@ended">Next Turn</button><button @onclick="TogglePlay">@(playing?"Pause":"Autoplay")</button><label><input type="checkbox" @bind="audit" @bind:after="ReloadAudit" /> Omniscient Hand Audit</label></div>
 @if(Current is {} record){
     <div class="checkpoint"><span class="pill">Actual Turn @record.ActualTurn</span><strong>@record.Event?.Replace("GameEvent","")</strong><span>@(record.ExtraTurn==true?"Extra Turn":"")</span><span class="muted">Event @record.Sequence</span></div>
     @if(state is {} snapshot){
@@ -30,14 +31,17 @@
 <details><summary>Events on This Page</summary><div class="event-list">@for(int i=0;i<records.Count;i++){var position=i;var r=records[i];<button @onclick="()=>Choose(position)"><span>Turn @r.ActualTurn · #@r.Sequence</span><strong>@(r.Event?.Replace("GameEvent","")??r.Kind)</strong></button>}</div></details>
 </div>
 @code{
+    private async Task PollConnection(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(lifetime.Token))await InvokeAsync(async()=>{await Store.Refresh(RunId,lifetime.Token);if(slot is null&&Store.ConnectionError is null){slot=Store.Slot(RunId,Id);await Load();Choose(0);error=null;}StateHasChanged();});}catch(OperationCanceledException){}}
+
     protected override string SelectionKey => "replay";
     protected override ReplaySelections CaptureSelections() => new(audit);
-    protected override void RestoreSelections(ReplaySelections saved) => audit=saved.Audit;
+    protected override void RestoreSelections(ReplaySelections saved){audit=saved.Audit;_ = ReloadAudit();}
     [Parameter]public string RunId{get;set;}="";[Parameter]public string Id{get;set;}="";
     private GameSlot? slot;private List<ReplayRecord> records=[];private int offset,index;private bool ended,audit,playing;private string? error;private ReplayState? state;private readonly CancellationTokenSource lifetime=new();
     private ReplayRecord? Current=>records.Count>index?records[index]:null;
-    protected override async Task OnInitializedAsync(){try{slot=Store.Slot(RunId,Id);await Load();Choose(0);}catch(Exception e){error=e.Message;}}
-    private async Task Load(){records=await Engine.Replay(slot!,offset,100);ended=records.Count==0;}
+    protected override async Task OnInitializedAsync(){try{await Store.Refresh(RunId);_ = PollConnection();slot=Store.Slot(RunId,Id);await Load();Choose(0);}catch(Exception e){error=e.Message;}}
+    private async Task ReloadAudit(){playing=false;var previous=index;state=null;await Load();Choose(Math.Min(previous,Math.Max(0,records.Count-1)));}
+    private async Task Load(){records=await Engine.Replay(slot!,offset,100,audit);ended=records.Count==0;}
     private void Choose(int i){index=i;var found=records.Take(index+1).LastOrDefault(r=>r.State is not null)?.State;if(found is not null)state=found;ended=Current?.Kind=="game_finished";}
     private async Task Next(){try{if(index+1<records.Count)Choose(index+1);else{var oldState=state;offset+=records.Count;await Load();index=0;state=oldState;Choose(0);}}catch(Exception e){error=e.Message;playing=false;}}
     private async Task Previous(){playing=false;if(index>0){Choose(index-1);return;}if(offset==0)return;try{offset=Math.Max(0,offset-100);await Load();state=null;Choose(records.Count-1);}catch(Exception e){error=e.Message;}}

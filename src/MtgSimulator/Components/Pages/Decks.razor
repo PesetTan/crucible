@@ -1,27 +1,28 @@
 @page "/decks"
 @using Microsoft.JSInterop
-@inject Store Store
-@inject ForgeEngine Engine
-@inject DeckImporter Importer
+@inject IUiBackend Store
+@inject IUiBackend Engine
+@inject IUiBackend Importer
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
+@if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
 <PageTitle>Deck Library — Gauntlet</PageTitle>
-<div class="eyebrow">EXACT LISTS / IMMUTABLE SNAPSHOTS</div><div class="section-head"><h1>Deck Library.</h1><button @onclick="Import">Check Source Snapshot</button></div>
+<div class="eyebrow">EXACT LISTS / IMMUTABLE SNAPSHOTS</div><div class="section-head"><h1>Deck Library.</h1><button disabled="@(Store.ConnectionError is not null)" @onclick="Import">Check Source Snapshot</button></div>
 <p class="lead">Public representatives and your personal deck are kept separate.<br />Each run is tied to an exact list.</p>
 <p class="small muted">Archetype tiers: <a href="https://mtga.untapped.gg/constructed/standard/tier-list" target="_blank" rel="noreferrer">Untapped.gg</a> · Standard Bo1 · Bronze–Platinum · September 29–October 11, 2026. Ratings describe the archetype, not simulated results.</p>
 <div class="deck-navigation" role="navigation" aria-label="Deck navigation">
     <label for="library-deck">Choose Deck</label>
     <select id="library-deck" @bind="selectedDeck" @bind:after="JumpToDeck">
         <option value="">Jump to a deck…</option>
-        @foreach(var deck in decks){<option value="@deck.Id">@deck.Name · @UiText.Label(deck.SourceType)</option>}
+        @foreach(var group in decks.GroupBy(d=>d.SourceType=="personal"?"Your Deck":d.ArchetypeTier is {} tier?$"Tier {tier}":"Unrated").OrderBy(g=>g.Key=="Your Deck"?0:g.Key=="Tier A"?1:g.Key=="Tier B"?2:g.Key=="Tier C"?3:4)){<optgroup label="@group.Key">@foreach(var deck in group){<option value="@deck.Id">@deck.Name @if(VariantNumber(deck) is {} variant){<text>· Variant @variant</text>} · @UiText.Label(deck.SourceType) @if(deck.PublishedMatchesApprox is {} n){<text>· @n.ToString("N0") matches</text>}</option>}</optgroup>}
     </select>
 </div>
 @if(message is not null){<div class="notice">@message</div>}
 @foreach(var deck in decks){
     var coverage=Engine.Coverage(deck);
-    <section class="panel library-deck" id="@deck.Id"><div class="section-head"><div><span class="tag">@UiText.Label(deck.SourceType) · @UiText.Label(deck.Variant)</span><h2>@deck.Name</h2><DeckColors Deck="deck" /><p>@deck.CreatureCount creatures · @deck.LandCount lands · @deck.SideCount sideboard</p></div><span class="pill">@UiText.Label(coverage.Status)</span></div>
+    <section class="panel library-deck" id="@deck.Id"><div class="section-head"><div><span class="tag">@UiText.Label(deck.SourceType) · @UiText.Label(deck.Variant)</span><h2>@deck.Name @if(VariantNumber(deck) is {} variant){<span class="deck-variant">Variant @variant · @deck.ListHash[..8]</span>}</h2><DeckColors Deck="deck" /><p>@deck.CreatureCount creatures · @deck.LandCount lands · @deck.SideCount sideboard</p></div><span class="pill">@UiText.Label(coverage.Status)</span></div>
         <p class="muted">@deck.FreshnessNote</p>
-        <div class="deck-tier"><ArchetypeTier Deck="deck" /></div><p class="muted">Captured: @deck.Snapshot · Fingerprint: @deck.ListHash[..12]</p>
+        <div class="deck-tier"><ArchetypeTier Deck="deck" /></div>@if(deck.PublishedWinRatePercent is {} publishedRate){<p class="muted">Published exact-list win rate: @publishedRate.ToString("0.0",System.Globalization.CultureInfo.InvariantCulture)% across approximately @deck.PublishedMatchesApprox?.ToString("N0") matches · @deck.Snapshot. These are public observed results, separate from simulated pilot results.</p>}<p class="muted">Captured: @deck.Snapshot · Fingerprint: @deck.ListHash[..12]</p>
         <div class="card-list">
         @foreach(var category in new[]{"Creatures","Non-Creatures","Lands"}){
             var cards=SortCards(deck.Cards.Where(c=>c.Zone=="MainDeck"&&Category(c)==category)).ToList();
@@ -36,21 +37,25 @@
     </section>
 }
 @code{
+    private async Task PollConnection(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(connectionLifetime.Token))await InvokeAsync(async()=>{await Store.Refresh(null,connectionLifetime.Token);LoadDecks();manaValues=Importer.ReadManaValues();StateHasChanged();});}catch(OperationCanceledException){}}
+    private readonly CancellationTokenSource connectionLifetime=new();
+
+    private int? VariantNumber(DeckManifest deck) { var variants=decks.Where(d=>d.SourceType=="public"&&d.Name==deck.Name).OrderByDescending(d=>d.PublishedMatchesApprox).ThenBy(d=>d.SourceDeckId,StringComparer.Ordinal).ToList(); return variants.Count>1?variants.FindIndex(d=>d.Id==deck.Id)+1:null; }
     private Dictionary<int, int> manaValues = new();
     private List<DeckManifest> decks=[];
     private string selectedDeck="";
     private Microsoft.JSInterop.IJSObjectReference? navigationModule;
-    protected override void OnInitialized(){manaValues=Importer.ReadManaValues();LoadDecks();}
+    protected override async Task OnInitializedAsync(){await Store.Refresh();_ = PollConnection();manaValues=Importer.ReadManaValues();LoadDecks();}
     private void LoadDecks()=>decks=Store.Decks().OrderBy(d=>d.SourceType).ThenBy(d=>d.Name).ToList();
     private async Task JumpToDeck(){
         if(!decks.Any(d=>d.Id==selectedDeck))return;
         navigationModule??=await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import","./deck-navigation.js?v=1");
         await navigationModule.InvokeVoidAsync("jumpToDeck",selectedDeck);
     }
-    public async ValueTask DisposeAsync(){if(navigationModule is not null)try{await navigationModule.DisposeAsync();}catch(Microsoft.JSInterop.JSDisconnectedException){}}
+    public async ValueTask DisposeAsync(){connectionLifetime.Cancel();connectionLifetime.Dispose();if(navigationModule is not null)try{await navigationModule.DisposeAsync();}catch(Microsoft.JSInterop.JSDisconnectedException){}}
     private IOrderedEnumerable<CardEntry> SortCards(IEnumerable<CardEntry> cards) => cards
         .OrderBy(card => manaValues.GetValueOrDefault(card.ArenaId, int.MaxValue))
         .ThenBy(card => card.Name, StringComparer.OrdinalIgnoreCase);
     private static string Category(CardEntry card){var type=card.Type.Split("//",StringSplitOptions.None)[0];return type.Contains("Land",StringComparison.Ordinal)?"Lands":type.Contains("Creature",StringComparison.Ordinal)?"Creatures":"Non-Creatures";}
-    private string? message;private async Task Import(){try{var d=await Importer.Import();LoadDecks();message=$"Checked {d.Count} exact source lists. Existing run manifests remain unchanged.";}catch(Exception e){message=e.Message;}}
+    private string? message;private async Task Import(){try{var d=await Importer.Import();await Store.Refresh();manaValues=Importer.ReadManaValues();LoadDecks();message=$"Checked {d.Count} exact source lists. Existing run manifests remain unchanged.";}catch(Exception e){message=e.Message;}}
 }

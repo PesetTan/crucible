@@ -10,5 +10,6 @@
     <Compile Include="../../src/MtgSimulator/GameScheduler.cs" Link="GameScheduler.cs" />
     <Compile Include="../../src/MtgSimulator/RuntimeEstimate.cs" Link="RuntimeEstimate.cs" />
     <Compile Include="../../src/MtgSimulator/Models.cs" Link="Models.cs" />
+    <Compile Include="../../src/MtgSimulator/AttemptPolicy.cs" Link="AttemptPolicy.cs" />
   </ItemGroup>
 </Project>

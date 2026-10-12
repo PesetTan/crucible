@@ -18,10 +18,12 @@ Exclude deck optimization, collection-aware crafting, automated database refresh
 
 | Component | Proposed implementation | Responsibility |
 |---|---|---|
-| Web client | C# Blazor Server | Deck selection, runs, charts, replay, export |
+| Web client | C# Blazor Server | Deck selection, runs, charts, replay |
 | Local service | C# ASP.NET Core on .NET 10 | Import, preflight, scheduling, persistence, aggregation, local HTTP API |
 | Engine adapter | Java around a pinned Forge build | Full rules execution, pilot integration, structured events |
 | App storage | SQLite plus compressed replay files | Immutable manifests, run history, summaries, detailed evidence |
+
+The implemented local app can launch its simulation service and Blazor UI as separate processes from the shared .NET project. The service owns SQLite, Java engines, replays, and scheduling on loopback port 5079; the UI host uses `IUiBackend` and service APIs on port 5077 and may expose that UI to an iPad on the local network. Session log pages fetch structured API records through this boundary. Restarting only the UI preserves an active simulation. See [host separation](../host-separation.md) for launch commands and recovery details.
 
 The user selected C# when approving implementation on October 11, 2026; this supersedes the earlier Python/React proposal. The existing Forge engine remains Java and uses a minimal interop shim. Record compatible runtime and package versions in lockfiles. See [implementation status](../implementation-status.md) for actual capability and validation limits; specifications are not proof that their gates have passed.
 
