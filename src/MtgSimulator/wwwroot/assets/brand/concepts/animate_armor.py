@@ -108,7 +108,7 @@ def main():
         frames=[frame(name,label,source,pieces,t) for t in TIMES]
         frames[0].save(OUT/f'gauntlet-{name}-assembly.gif',save_all=True,append_images=frames[1:],duration=DURATIONS,loop=0,optimize=False,disposal=2)
         all_frames.append(frames)
-    
+
     comparison=[]
     for k in range(len(TIMES)):
         canvas=Image.new('RGB',(1050,700),BG)
