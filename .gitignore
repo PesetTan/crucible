@@ -1,0 +1,8 @@
+bin/
+obj/
+data/
+vendor/
+engine/build/
+*.user
+*.log
+.DS_Store

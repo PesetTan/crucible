@@ -1,0 +1,6 @@
+@page "/runs"
+@inject Store Store
+<PageTitle>Run history — Gauntlet</PageTitle>
+<div class="eyebrow">YOUR LOCAL PLAYTESTS</div><div class="section-head"><h1>Run history.</h1><a class="button primary" href="/">New session →</a></div>
+@if(Store.Runs().Count==0){<section class="empty"><h2>The table is ready.</h2><p>Choose your decks to start your first local session.</p><a href="/">Set up a run →</a></section>}
+@foreach(var run in Store.Runs()){var summary=Metrics.Summarize(run,Store.Slots(run.Id));<a class="history-row" href="@($"/runs/{run.Id}")"><div><span class="tag">EXPLORATORY</span><h3>@run.Config.DeckIds.Count decks · @run.Total scheduled games</h3><p>@run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt") · Seed @run.Config.RootSeed</p></div><div><span class="pill">@run.Status</span><p>@summary.Valid valid · @summary.Failed failed</p></div><span>↗</span></a>}

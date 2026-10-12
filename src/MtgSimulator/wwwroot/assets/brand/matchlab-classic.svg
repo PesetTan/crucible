@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Gauntlet — Classic Duel Flask</title>
+  <path fill="#f1f2e9" d="M90 13h76v12a4 4 0 0 1-4 4h-9v46l13 7-7 15-22-11V29h-18v48l-16 8V29h-9a4 4 0 0 1-4-4Z"/>
+  <defs>
+    <path id="card" fill-rule="evenodd" d="M107 76q8-3 5 8L76 219q-3 12 9 12h17v16H74q-9 0-17-4L11 220q-8-4-4-13L48 108q3-7 10-11ZM99 89 58 110 18 209 58 229 61 221 28 205 64 116 97 99Z"/>
+  </defs>
+  <use href="#card" fill="#77d1bb"/>
+  <use href="#card" transform="translate(256 0) scale(-1 1)" fill="#f1f2e9"/>
+  <path fill="#dcb777" d="M128 113c-5 38-9 44-27 49 18 5 22 11 27 49 5-38 9-44 27-49-18-5-22-11-27-49Z"/>
+</svg>

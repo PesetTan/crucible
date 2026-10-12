@@ -1,0 +1,19 @@
+@page "/decks"
+@inject Store Store
+@inject ForgeEngine Engine
+@inject DeckImporter Importer
+<PageTitle>Deck library — Gauntlet</PageTitle>
+<div class="eyebrow">EXACT LISTS / IMMUTABLE SNAPSHOTS</div><div class="section-head"><h1>Deck library.</h1><button @onclick="Import">Check source snapshot</button></div>
+<p class="lead">Public representatives and your personal deck are kept separate.<br />Each run is tied to an exact list.</p>
+@if(message is not null){<div class="notice">@message</div>}
+@foreach(var deck in Store.Decks().OrderBy(d=>d.SourceType).ThenBy(d=>d.Name)){
+    var coverage=Engine.Coverage(deck);
+    <section class="panel" id="@deck.Id"><div class="section-head"><div><span class="tag">@deck.SourceType · @deck.Variant</span><h2>@deck.Name</h2><DeckColors Deck="deck" /><p>@deck.CreatureCount creatures · @deck.LandCount lands · @deck.SideCount sideboard</p></div><span class="pill">@coverage.Status</span></div>
+        <p class="muted">@deck.FreshnessNote</p><p class="muted">Captured: @deck.Snapshot · Fingerprint: @deck.ListHash[..12]</p>
+        <div class="card-list">@foreach(var c in deck.Cards.Where(c=>c.Zone=="MainDeck")){var supported=coverage.Cards.First(x=>x.Name==c.Name);<details class="card-row"><summary><span class="quantity">@c.Quantity</span><strong>@c.Name</strong><span>@c.Cost</span>@if(supported.Status=="missing"){<span class="support missing">Missing</span>}</summary><div class="card-text">@c.Type · @c.Set<br />@c.Text</div></details>}</div>
+        @if(deck.SideCount>0){<details><summary>Sideboard provenance — excluded from game decks</summary>@foreach(var c in deck.Cards.Where(c=>c.Zone=="Sideboard")){<p>@c.Quantity @c.Name</p>}</details>}
+        <p class="small muted">Script presence does not validate interaction correctness, tokens, faces, or pilot behavior.</p>
+        @if(deck.SourceUrl is {} url){<a href="@url" target="_blank" rel="noreferrer">Original public list ↗</a>}
+    </section>
+}
+@code{private string? message;private async Task Import(){try{var d=await Importer.Import();message=$"Checked {d.Count} exact source lists. Existing run manifests remain unchanged.";}catch(Exception e){message=e.Message;}}}

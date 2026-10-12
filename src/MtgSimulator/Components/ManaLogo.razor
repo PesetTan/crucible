@@ -1,0 +1,5 @@
+<span class="mana-logo mana-@Name" role="img" aria-label="@($"{Name} mana")" title="@($"{Name} mana")"></span>
+@code {
+    [Parameter] public char Symbol { get; set; } = 'C';
+    private string Name => char.ToUpperInvariant(Symbol) switch { 'W' => "white", 'U' => "blue", 'B' => "black", 'R' => "red", 'G' => "green", _ => "colorless" };
+}

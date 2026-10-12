@@ -1,0 +1,31 @@
+<span class="deck-colors">
+    <span class="mana-symbols">
+        @foreach (var symbol in Symbols) { <ManaLogo Symbol="symbol" /> }
+    </span>
+    @if (CombinationName is { } name) {
+        <small class="color-combination-name">@name</small>
+    }
+</span>
+@code {
+    [Parameter, EditorRequired] public DeckManifest Deck { get; set; } = default!;
+    // Costs, including hybrid and Phyrexian symbols, identify the deck's spell colors.
+    private IEnumerable<char> Symbols {
+        get {
+            var costs = string.Join(" ", Deck.Cards.Where(c => c.Zone == "MainDeck").Select(c => c.Cost));
+            var colors = "WUBRG".Where(c => costs.Contains(c)).ToArray();
+            return colors.Length == 0 ? new[] { 'C' } : colors;
+        }
+    }
+    // Keys follow the same WUBRG order as the displayed icons.
+    private string? CombinationName => new string(Symbols.ToArray()) switch {
+        "WU" => "Azorius", "WB" => "Orzhov", "WR" => "Boros", "WG" => "Selesnya",
+        "UB" => "Dimir", "UR" => "Izzet", "UG" => "Simic",
+        "BR" => "Rakdos", "BG" => "Golgari", "RG" => "Gruul",
+        "WUB" => "Esper", "WUR" => "Jeskai", "WUG" => "Bant",
+        "WBR" => "Mardu", "WBG" => "Abzan", "WRG" => "Naya",
+        "UBR" => "Grixis", "UBG" => "Sultai", "URG" => "Temur", "BRG" => "Jund",
+        "WUBR" => "Artifice", "WUBG" => "Growth", "WURG" => "Altruism",
+        "WBRG" => "Aggression", "UBRG" => "Chaos", "WUBRG" => "Five-color",
+        _ => null
+    };
+}

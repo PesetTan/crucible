@@ -1,0 +1,28 @@
+<div class="chart" aria-label="@Title">
+    <div class="chart-title"><div class="chart-heading"><h3>@Title</h3>@if(HelpText is not null){<details class="chart-help"><summary aria-label="@($"About {Title}")" title="@HelpText"><span aria-hidden="true">?</span></summary><p>@HelpText</p></details>}</div><span class="muted">Own completed turns</span></div>
+    @if(Series.All(s=>s.Points.Count==0)){<p class="muted">No turn-end measurements yet.</p>}
+    else{
+        <div class="series-plot">
+        <div class="series-scale chart-range" aria-label="Value scale"><span>@Maximum.ToString("0.#")</span><span>@Minimum.ToString("0.#")</span></div>
+        <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="8" y1="145" x2="592" y2="145" class="gridline" /><line x1="8" y1="77" x2="592" y2="77" class="gridline" /><line x1="8" y1="10" x2="592" y2="10" class="gridline" />
+            @if(MaxTurn>=5){<line x1="@TurnFiveX" y1="10" x2="@TurnFiveX" y2="145" class="turn-five-guide" vector-effect="non-scaling-stroke" />}
+            @foreach(var s in Series){<polyline points="@Points(s.Points)" fill="none" stroke="@s.Color" stroke-width="2.5" vector-effect="non-scaling-stroke" />}
+        </svg>
+        </div>
+        <div class="chart-axis series-turn-axis"><span>Turn 1</span>@if(MaxTurn>5){<span class="turn-five-label" style="left:@((TurnX(5)/600*100).ToString("0.##",CultureInfo.InvariantCulture))%">Turn 5</span>}<span class="@(MaxTurn==5?"turn-five-end":"")">Turn @MaxTurn</span></div>
+        <div class="legend">@foreach(var s in Series){<span><i style="background:@s.Color"></i>@s.Name</span>}</div>
+        <details><summary>Measurements and active-game counts</summary><div class="table-scroll"><table><thead><tr><th>Deck</th><th>Own turn</th><th>Mean</th><th>Observed games</th></tr></thead><tbody>@foreach(var s in Series){@foreach(var p in s.Points){<tr><td>@s.Name</td><td>@p.Turn</td><td>@p.Value.ToString("0.##")</td><td>@p.Count</td></tr>}}</tbody></table></div></details>
+    }
+</div>
+@code{
+    [Parameter]public string Title{get;set;}="";
+    [Parameter]public string? HelpText{get;set;}
+    [Parameter]public List<ChartSeries> Series{get;set;}=[];
+    private int MaxTurn=>Math.Max(2,Series.SelectMany(s=>s.Points).Select(p=>p.Turn).DefaultIfEmpty(2).Max());
+    private double Minimum=>Math.Min(0,Series.SelectMany(s=>s.Points).Select(p=>p.Value).DefaultIfEmpty(0).Min());
+    private double Maximum=>Math.Max(1,Series.SelectMany(s=>s.Points).Select(p=>p.Value).DefaultIfEmpty(1).Max());
+    private double TurnX(int turn)=>8+(turn-1)*584.0/(MaxTurn-1);
+    private string TurnFiveX=>TurnX(5).ToString("0.##",CultureInfo.InvariantCulture);
+    private string Points(List<ChartPoint> data)=>string.Join(" ",data.Select(p=>$"{(8+(p.Turn-1)*584.0/(MaxTurn-1)).ToString("0.##",CultureInfo.InvariantCulture)},{(145-(p.Value-Minimum)*135/(Maximum-Minimum)).ToString("0.##",CultureInfo.InvariantCulture)}"));
+}

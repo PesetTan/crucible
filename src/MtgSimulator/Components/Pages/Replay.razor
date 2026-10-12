@@ -1,0 +1,42 @@
+@page "/runs/{RunId}/games/{Id}"
+@implements IDisposable
+@inject Store Store
+@inject ForgeEngine Engine
+<PageTitle>Game replay — Gauntlet</PageTitle>
+<div class="eyebrow">GAME EVIDENCE / @Id[..Math.Min(8,Id.Length)]</div><div class="section-head"><h1>Every turn,<br /><em>on the record.</em></h1><a class="button" href="@($"/runs/{RunId}")">← Session results</a></div>
+@if(error is not null){<div class="error">@error</div>}
+@if(slot is not null){<p class="lead">@Store.Deck(slot.DeckA).Name <span class="muted">vs</span> @Store.Deck(slot.DeckB).Name</p><p class="muted">Starts: @Store.Deck(slot.Starter).Name · Seed @slot.Seed · @slot.Result?.TerminalReason</p>}
+@if(slot?.Result?.OpeningHands is {} openings){<section class="panel"><h3>Opening hand choices</h3>@foreach(var h in openings){<p><strong>@Store.Deck(h.Player=="A"?slot.DeckA:slot.DeckB).Name</strong> · @h.Mulligans mulligans before keep · @h.KeptHandSize cards kept<br /><span class="small muted">@h.Evidence</span></p>}<p class="small muted">Pilot keep policy, not a guarantee that the hand will perform well.</p></section>}
+@if(slot?.Result?.ManaFlags is {} manaFlags&&manaFlags.Count>0){<section class="panel"><h3>Recorded mana incidents</h3>@foreach(var flag in manaFlags){<p><strong>@Store.Deck(flag.Player=="A"?slot.DeckA:slot.DeckB).Name · @flag.Kind</strong><br /><span class="muted">@flag.Evidence</span></p><button @onclick="()=>JumpTurn(flag.FirstActualTurn)">Jump to actual turn @flag.FirstActualTurn →</button>}<p class="small muted">Land-availability indicators · @ManaAnalyzer.Version · no causal loss inference</p></section>}
+<div class="notice"><strong>Engine snapshots</strong><span>Actual turns are authoritative. Extra turns are tagged; skipped-turn cycle grouping is unavailable. Private hands appear only in the explicit audit view.</span></div>
+<div class="replay-toolbar"><button @onclick="Previous" disabled="@(offset==0&&index==0)">← Previous event</button><button @onclick="Next" disabled="@ended">Next event →</button><button @onclick="NextTurn" disabled="@ended">Next turn ↗</button><button @onclick="TogglePlay">@(playing?"Pause":"Autoplay")</button><label><input type="checkbox" @bind="audit" /> Omniscient hand audit</label><a href="@($"/api/v1/runs/{RunId}/games/{Id}/replay-export")">Download replay ↓</a></div>
+@if(Current is {} record){
+    <div class="checkpoint"><span class="pill">Actual turn @record.ActualTurn</span><strong>@record.Event?.Replace("GameEvent","")</strong><span>@(record.ExtraTurn==true?"Extra turn":"")</span><span class="muted">Event @record.Sequence</span></div>
+    @if(state is {} snapshot){
+        <div class="board-grid">@foreach(var player in snapshot.Players){
+            <section class="player-board"><div class="player-head"><div><span class="tag">@(snapshot.ActivePlayer==player.Id?"ACTIVE PLAYER":"OPPONENT")</span><h2>@Store.Deck(player.Id=="A"?slot!.DeckA:slot!.DeckB).Name</h2></div><div class="life-total">@player.Life<small>LIFE</small></div></div>
+                <div class="zone-stats"><span>Hand <strong>@player.HandCount</strong></span><span>Library <strong>@player.LibraryCount</strong></span><span>Graveyard <strong>@player.Graveyard.Count</strong></span><span>Own turns <strong>@player.PersonalTurn</strong></span></div>
+                <div class="eyebrow">BATTLEFIELD</div><div class="permanents">@foreach(var card in player.Battlefield){<details class="permanent @(card.Tapped?"tapped":"")"><summary><span class="small">@card.Cost</span><strong>@card.Name</strong><span>@(card.Power is not null?$"{card.Power}/{card.Toughness}":card.Type)</span><small>@(card.Tapped?"Tapped":"Untapped") · #@card.Id</small></summary><p>@card.Text.Replace("\\n"," ")</p><p>Counters: @card.Counters<br />Attached to: @(card.AttachedTo??"—")<br />Owner: @card.Owner · Controller: @card.Controller</p></details>}@if(player.Battlefield.Count==0){<p class="muted">No permanents in play.</p>}</div>
+                <details><summary>Graveyard · @player.Graveyard.Count cards</summary>@foreach(var card in player.Graveyard){<p>@card.Name</p>}</details><details><summary>Exile · @player.Exile.Count cards</summary>@foreach(var card in player.Exile){<p>@card.Name</p>}</details>
+                @if(audit){<details open><summary>Private hand — audit view</summary>@foreach(var card in player.Hand){<p>@card.Name · @card.Cost</p>}</details>}
+            </section>
+        }</div>
+        <section class="panel"><div class="section-head"><h3>@(snapshot.Phase??"Pregame")</h3><span class="muted">Engine turn @snapshot.EngineTurn</span></div><div class="eyebrow">THE STACK</div>@if(snapshot.Stack.Count==0){<p class="muted">Empty at this checkpoint.</p>}else{@foreach(var item in snapshot.Stack){<p>@item</p>}}</section>
+    }
+    <section class="panel"><h3>Event detail</h3><p class="event-detail">@(audit||record.Event is null?record.Detail??record.Reason??record.Kind:"Detailed choices are available in the audit view.")</p><p class="small muted">Stored full-state checksum: @(record.StateHash??"No new snapshot; preceding checkpoint shown.")</p></section>
+}
+<details><summary>Events in this page</summary><div class="event-list">@for(int i=0;i<records.Count;i++){var position=i;var r=records[i];<button @onclick="()=>Choose(position)"><span>Turn @r.ActualTurn · #@r.Sequence</span><strong>@(r.Event?.Replace("GameEvent","")??r.Kind)</strong></button>}</div></details>
+@code{
+    [Parameter]public string RunId{get;set;}="";[Parameter]public string Id{get;set;}="";
+    private GameSlot? slot;private List<ReplayRecord> records=[];private int offset,index;private bool ended,audit,playing;private string? error;private ReplayState? state;private readonly CancellationTokenSource lifetime=new();
+    private ReplayRecord? Current=>records.Count>index?records[index]:null;
+    protected override async Task OnInitializedAsync(){try{slot=Store.Slot(RunId,Id);await Load();Choose(0);}catch(Exception e){error=e.Message;}}
+    private async Task Load(){records=await Engine.Replay(slot!,offset,100);ended=records.Count==0;}
+    private void Choose(int i){index=i;var found=records.Take(index+1).LastOrDefault(r=>r.State is not null)?.State;if(found is not null)state=found;ended=Current?.Kind=="game_finished";}
+    private async Task Next(){try{if(index+1<records.Count)Choose(index+1);else{var oldState=state;offset+=records.Count;await Load();index=0;state=oldState;Choose(0);}}catch(Exception e){error=e.Message;playing=false;}}
+    private async Task Previous(){playing=false;if(index>0){Choose(index-1);return;}if(offset==0)return;try{offset=Math.Max(0,offset-100);await Load();state=null;Choose(records.Count-1);}catch(Exception e){error=e.Message;}}
+    private async Task NextTurn(){var turn=Current?.ActualTurn;do{await Next();}while(!ended&&Current is not null&&Current.ActualTurn==turn);}
+    private async Task JumpTurn(int turn){playing=false;offset=0;index=0;state=null;await Load();Choose(0);while(!ended&&Current is not null&&Current.ActualTurn<turn)await Next();}
+    private async Task TogglePlay(){playing=!playing;if(!playing)return;try{while(playing&&!ended){await Task.Delay(550,lifetime.Token);await InvokeAsync(async()=>{await Next();StateHasChanged();});}}catch(OperationCanceledException){}}
+    public void Dispose(){lifetime.Cancel();lifetime.Dispose();}
+}

@@ -1,0 +1,64 @@
+@page "/"
+@inject Store Store
+@inject ForgeEngine Engine
+@inject RunCoordinator Coordinator
+@inject NavigationManager Navigation
+<PageTitle>Gauntlet — Standard simulator</PageTitle>
+<div class="eyebrow">THE LOCAL PLAYTESTING DESK</div>
+<h1>Put your decks<br /><em>across the table.</em></h1>
+<p class="lead">Run complete head-to-head games. Follow every turn.<br />Compare what happens when your deck has an opponent.</p>
+<div class="notice"><strong>Exploratory mode</strong><span>Forge resolves the games. Its pilots and card interactions still need independent validation. These rates describe the automated pilots, not your Arena win rate.</span></div>
+@if(capabilities is not null&&capabilities.Blockers.Count>0){<div class="error">@foreach(var blocker in capabilities.Blockers){<p>@blocker</p>}</div>}
+<section class="panel">
+    <div class="section-head"><div><div class="eyebrow">01 / THE FIELD</div><h2>Choose the decks for a round robin</h2></div><span class="muted">@selected.Count / @ChartPalette.MaximumDecks decks selected</span></div>
+    <p class="small muted">Choose 2–5 decks. Each selected deck gets one color across all line charts.</p>
+    <div class="chart-palette">@foreach(var color in ChartPalette.Colors){<span><i style="background:@color.Color"></i>@color.Name</span>}</div>
+    @if(selected.Count>=ChartPalette.MaximumDecks){<p class="small" role="status">Five decks selected. Deselect a deck to choose another.</p>}
+    <div class="matchup-explainer" role="note">
+        <div><strong>Every selected deck plays every other selected deck.</strong><p>Click a deck to include it in the field. Public decks also play each other. Your deck joins the same round robin when selected. For example, selecting A, B, and C creates A ↔ B, A ↔ C, and B ↔ C.</p></div>
+        <div class="matchup-count"><strong>@(selected.Count*(selected.Count-1)/2)</strong><span>matchups from @selected.Count selected decks</span></div>
+    </div>
+    <div class="deck-grid">
+    @foreach(var deck in decks){var coverage=Engine.Coverage(deck);var blocked=coverage.Status=="blocked";
+        <label class="deck-card @(selected.Contains(deck.Id)?"selected":"") @(blocked?"blocked":"")">
+            <div class="deck-card-top"><DeckColors Deck="deck" /><input type="checkbox" checked="@selected.Contains(deck.Id)" disabled="@(blocked||(!selected.Contains(deck.Id)&&selected.Count>=ChartPalette.MaximumDecks))" @onchange="e=>Toggle(deck.Id,(bool)e.Value!)" />
+                <details class="deck-menu" name="deck-details">
+                    <summary aria-label="@($"Details for {deck.Name}")"><span aria-hidden="true">⋯</span></summary>
+                    <div class="deck-menu-content">
+                        <p>@deck.CreatureCount creatures · @deck.LandCount lands</p>
+                        @if(selected.Contains(deck.Id)){var color=ChartPalette.Colors[selected.Order(StringComparer.Ordinal).ToList().IndexOf(deck.Id)];<span class="deck-chart-color"><i style="background:@color.Color"></i>Chart color: @color.Name</span>}
+                        @if(!blocked){<details class="pilot-help"><summary aria-label="About exploratory pilot">Exploratory pilot <span aria-hidden="true">?</span></summary><p>Forge AI plays this deck. Its strategy is unvalidated; results may differ from human play.</p></details>}
+                        <a href="@($"/decks#{deck.Id}")">List ↗</a>
+                    </div>
+                </details>
+            </div>
+            <span class="tag">@(deck.SourceType=="personal"?"YOUR SAVED SNAPSHOT":"PUBLIC REPRESENTATIVE")</span>
+            <h3>@deck.Name</h3>
+            @if(blocked){<div class="deck-bottom"><span>Missing card support</span></div>}
+        </label>
+    }
+    </div>
+</section>
+<section class="panel">
+    <div class="section-head"><div><div class="eyebrow">02 / THE SESSION</div><h2>Set up the run</h2></div><span class="tag">EVEN PLAY / DRAW SPLIT</span></div>
+    <div class="config-grid session-options"><label>Games per matchup<InputNumber @bind-Value="games" min="2" max="1000" step="2" /></label><fieldset class="parallel-options" aria-describedby="parallel-help"><legend>Parallel games</legend><InputRadioGroup @bind-Value="workers" Name="parallel-games"><div class="parallel-choices">@for(var count=1;count<=4;count++){var choice=count;<label><InputRadio Value="choice" /><span>@choice</span></label>}</div></InputRadioGroup><div id="parallel-help"><small>Engine memory allowance: ~1.2 GB per game (4 games: ~4.8 GB), plus app and engine overhead.</small></div></fieldset></div>
+    <details><summary>Advanced options</summary>
+        <div class="config-grid advanced-options">
+            <label>Time limit per game (seconds)<InputNumber @bind-Value="timeout" min="10" max="1800" /><small>10–1,800 seconds; default 180. Stops a stalled attempt. Games can finish sooner; engine startup counts toward this limit.</small></label>
+            <label>Root seed<InputNumber @bind-Value="seed" /><small>Starting value for game randomness. Keep it the same to reuse the same scheduled game seeds.</small></label>
+            <label>Maximum actual player turns<InputNumber @bind-Value="turnLimit" min="10" max="1000" /></label>
+        </div>
+        <p>Ordinary London mulligans approximate Arena Bo1 opening hands. No hand smoothing is guessed. Forge Default pilots make the mulligan and bottom choices.</p>
+        <p>A timeout or turn limit is an incomplete attempt, never a rules draw.</p>
+    </details>
+    <div class="run-bar"><div><strong>@(selected.Count*(selected.Count-1)/2) matchups</strong><span> · @(selected.Count*(selected.Count-1)/2*games) full games</span><small>@(games/2) starts per deck in each matchup · No sideboarding</small></div><button class="primary" disabled="@(busy||selected.Count<2||capabilities?.Available!=true)" @onclick="Start">@(busy?"Preparing…":"Run exploratory games →")</button></div>
+    @if(error is not null){<div class="error">@error</div>}
+</section>
+@if(Store.Runs().FirstOrDefault() is {} latest){<a class="recent-link" href="@($"/runs/{latest.Id}")"><span>YOUR LATEST SESSION</span><strong>@latest.Total games · @latest.Status</strong><span>View results ↗</span></a>}
+@code {
+    private List<DeckManifest> decks=[];private HashSet<string> selected=[];private Capabilities? capabilities;
+    private int games=200,workers=1,timeout=180,turnLimit=150;private long seed=42;private bool busy;private string? error;
+    protected override void OnInitialized(){decks=Store.Decks().OrderBy(d=>d.SourceType).ThenBy(d=>d.Name).ToList();capabilities=Engine.Capabilities();foreach(var d in decks.Where(d=>d.SourceType=="public"&&Engine.Coverage(d).Status!="blocked").Take(ChartPalette.MaximumDecks))selected.Add(d.Id);}
+    private void Toggle(string id,bool value){if(value){if(selected.Count<ChartPalette.MaximumDecks)selected.Add(id);}else selected.Remove(id);}
+    private async Task Start(){busy=true;error=null;try{var id=await Coordinator.Create(new(selected.ToList(),games,workers,timeout,turnLimit,seed,true),Guid.NewGuid().ToString("N"));Navigation.NavigateTo($"/runs/{id}");}catch(Exception e){error=e.Message;}finally{busy=false;}}
+}

@@ -1,0 +1,73 @@
+@page "/runs/{Id}"
+@implements IDisposable
+@inject Store Store
+@inject RunCoordinator Coordinator
+<PageTitle>Session results — Gauntlet</PageTitle>
+@if(summary is null){<h1>Loading session…</h1>}
+else{
+    var run=summary.Run;
+    <div class="eyebrow">SESSION / @run.Id[..8]</div><div class="section-head"><div><h1>Across the table.</h1><p class="muted">@run.Config.DeckIds.Count decks · @run.Total scheduled games · Root seed @run.Config.RootSeed</p></div><span class="pill">@run.Status</span></div>
+    <div class="notice"><strong>Exploratory pilot results</strong><span>Rules and pilot gates remain unvalidated. @run.Config.OpeningPolicy. Extra/skipped turn-cycle grouping and mana-pool replay are unavailable.</span></div>
+    <div class="stats-grid"><div><span>VALID GAMES</span><strong>@summary.Valid <small>/ @run.Total</small></strong></div><div><span>IN PROGRESS</span><strong>@summary.Running</strong></div><div><span>TECHNICAL FAILURES</span><strong>@summary.Failed</strong></div><div><span>SCHEDULE</span><strong class="stat-word">@(summary.FullMatrix?"Complete":"Incomplete")</strong></div></div>
+    <div class="progress"><div style="width:@((100.0*summary.Valid/Math.Max(1,run.Total)).ToString("0.#",CultureInfo.InvariantCulture))%"></div></div>
+    <div class="notice"><strong>Mana incidents</strong><span>@summary.ManaStarvedGames games flagged mana-starved · @summary.ManaFloodedGames flagged mana-flooded · @summary.ManaAnalyzedGames / @summary.Valid valid games analyzed. Either player can trigger a flag.</span></div>
+    <details><summary>Mana detection rules</summary><p><strong>Mana-starved:</strong> @ManaAnalyzer.StarvedDefinition</p><p><strong>Mana-flooded:</strong> @ManaAnalyzer.FloodedDefinition</p><p class="muted">Version @ManaAnalyzer.Version. These are land-availability indicators, not proof of the cause of a loss. Nonland mana production and color-specific starvation are not measured by this detector.</p><a href="@($"/api/v1/runs/{Id}/mana-events")" target="_blank">Open the per-player incident log ↗</a></details>
+    <div class="actions">
+        @if(run.Status is "running" or "queued" or "cancelling"){<button disabled="@(run.Status=="cancelling")" @onclick="()=>Act(()=>Coordinator.Cancel(Id))">Cancel session</button>}
+        else{<button @onclick="()=>Act(()=>Coordinator.Resume(Id))">Resume unfinished games</button>@if(summary.Failed>0){<button @onclick="()=>Act(()=>Coordinator.Resume(Id,true))">Retry failed attempts</button>}}
+        <a class="button" href="@($"/api/v1/runs/{Id}/export?format=csv")">Export CSV ↓</a><a class="button" href="@($"/api/v1/runs/{Id}/export")">Export JSON ↓</a>
+        <span class="muted small">@(Eta())</span>
+    </div>
+    @if(error is not null||run.Error is not null){<div class="error">@(error??run.Error)</div>}
+    <section class="panel"><div class="section-head"><div><div class="eyebrow">OPENING HANDS</div><h2>Mulligans before keep</h2></div><a href="@($"/api/v1/runs/{Id}/opening-hands")" target="_blank">Per-player hand log ↗</a></div>
+        <div class="table-scroll"><table><thead><tr><th>Deck</th><th>Recorded players</th><th>Mean</th><th>Median / max</th><th>0 mulligans</th><th>1</th><th>2</th><th>3+</th><th>Kept size</th><th>Mean on play / draw</th></tr></thead><tbody>@foreach(var m in summary.Mulligans){<tr><td>@Name(m.DeckId)</td><td>@m.RecordedPlayers</td><td>@Number(m.Mean)</td><td>@Number(m.Median) / @(m.Maximum?.ToString()??"—")</td><td>@m.Zero</td><td>@m.One</td><td>@m.Two</td><td>@m.ThreePlus</td><td>@Number(m.MeanKeptSize)</td><td>@Number(m.MeanOnPlay) / @Number(m.MeanOnDraw)</td></tr>}</tbody></table></div><p class="small muted">Count is the number of mulligans before a final keep. Playable means accepted by the Forge pilot policy; forced keeps are identified in the game log. Completed games only; missing records remain unknown.</p>
+    </section>
+    <section class="panel"><div class="section-head"><div><div class="eyebrow">01 / THE MATCHUPS</div><h2>Who wins against whom?</h2></div><span class="muted">Row deck's win rate</span></div>
+        <div class="table-scroll"><table class="matrix"><thead><tr><th>Deck</th>@foreach(var deck in deckVersions){<th>@Name(deck.Id)</th>}</tr></thead><tbody>
+        @foreach(var row in deckVersions){<tr><th>@Name(row.Id)</th>@foreach(var col in deckVersions){
+            var matchup=summary.Matchups.FirstOrDefault(m=>m.DeckA==row.Id&&m.DeckB==col.Id||m.DeckA==col.Id&&m.DeckB==row.Id);
+            <td>@if(row.Id==col.Id){<span class="muted">—</span>}else if(matchup is not null){var rate=matchup.DeckA==row.Id?matchup.WinRateA:matchup.WinRateB;<button class="matrix-cell" @onclick="()=>Select(matchup)"><strong>@Metrics.Rate(rate)</strong><small>@matchup.Valid games</small></button>}</td>
+        }</tr>}
+        </tbody></table></div><p class="small muted">Rules draws mean reverse cells may sum to less than 100%. Pending, failed, and cancelled slots are excluded from rates and shown separately.</p>
+        <details><summary>Overall performance — equal weight per selected opponent</summary><div class="table-scroll"><table><thead><tr><th>Deck</th><th>Mean opponent win rate</th><th>Opponents with data</th></tr></thead><tbody>@foreach(var deck in deckVersions){var rates=summary.Matchups.Where(m=>m.DeckA==deck.Id||m.DeckB==deck.Id).Select(m=>m.DeckA==deck.Id?m.WinRateA:m.WinRateB).Where(r=>r.HasValue).Select(r=>r!.Value).ToList();<tr><td>@Name(deck.Id)</td><td>@(rates.Count==0?"—":Metrics.Rate(rates.Average()))</td><td>@rates.Count / @(deckVersions.Count-1)</td></tr>}</tbody></table></div><p class="small muted">An aggregate with missing opponents is partial. No population Arena inference or binomial interval is attached to this average.</p></details>
+    </section>
+    <section class="panel"><div class="eyebrow">02 / THE FIELD OVER TIME</div><h2>Every deck, one line</h2>
+        <p class="muted">Each line follows one selected deck across all its opponents. Deck colors stay the same across charts.</p>
+        <div class="chart-grid"><SeriesChart Title="Life totals" Series="Chart(s=>s.Life)" /><SeriesChart Title="Board power" HelpText="Total current power of your creatures, including tokens, boosts and tapped creatures. Lines show the average at turn end—not damage you can deal." Series="Chart(s=>s.Power)" /><SeriesChart Title="Creatures in play" Series="Chart(s=>s.Creatures)" /><SeriesChart Title="Lands in play" Series="Chart(s=>s.Lands)" /><SeriesChart Title="Cards in hand" Series="Chart(s=>s.Hand)" /><SeriesChart Title="Graveyard development" Series="Chart(s=>s.Graveyard)" /></div>
+        <p class="small muted">Averages at each player's completed turn end, pooled across completed games against all opponents. Later points include only games still active; expand a chart to see the observed-game counts. Power is descriptive, not a combat-strength estimate.</p>
+    </section>
+    @if(selected is {} pair){
+        <section class="panel"><div class="eyebrow">03 / MATCHUP DETAIL</div><h2>@Name(pair.DeckA) <span class="muted">vs</span> @Name(pair.DeckB)</h2>
+            <div class="matchup-cards"><div><h3>@Name(pair.DeckA)</h3><strong>@Metrics.Rate(pair.WinRateA)</strong><p>@pair.WinsA wins · @pair.WinsB losses · @pair.Draws draws</p><p class="muted">95% Wilson interval: @Interval(pair.IntervalA)</p><p>On play: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsAOnPlay/pair.PlayA) (@pair.PlayA games)<br />On draw: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsAOnDraw/pair.PlayB) (@pair.PlayB games)</p></div><div><h3>@Name(pair.DeckB)</h3><strong>@Metrics.Rate(pair.WinRateB)</strong><p>@pair.WinsB wins · @pair.WinsA losses · @pair.Draws draws</p><p class="muted">95% Wilson interval: @Interval(pair.IntervalB)</p><p>On play: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsBOnPlay/pair.PlayB) (@pair.PlayB games)<br />On draw: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsBOnDraw/pair.PlayA) (@pair.PlayA games)</p></div></div>
+            <p class="small muted">@pair.Valid valid / @pair.Scheduled scheduled · @pair.Failed failed · @pair.Cancelled cancelled · @pair.AttemptFailures historical failed attempts. Wilson intervals describe sampling variation under this fixed setup; draws count as nonwins.</p>
+            <div class="chart-grid"><Distribution Title="@($"{Name(pair.DeckA)} — wins")" Values="OutcomeTurns(pair.DeckA)" /><Distribution Title="@($"{Name(pair.DeckA)} — losses")" Values="OutcomeTurns(pair.DeckB)" /><Distribution Title="Rules draws" Values="PairSlots().Where(s=>s.Result?.Draw==true).Select(s=>s.Result!.ActualTurns).ToList()" /></div>
+        </section>
+    }
+    <section class="panel"><div class="section-head"><div><div class="eyebrow">04 / GAME EVIDENCE</div><h2>Open the replay</h2></div><div class="actions"><select aria-label="Outcome filter" @bind="statusFilter"><option value="">All outcomes</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="pending">Pending</option></select><select aria-label="Mana incident filter" @bind="manaFilter"><option value="">All mana conditions</option><option value="mana-starved">Mana-starved</option><option value="mana-flooded">Mana-flooded</option></select></div></div>
+        <div class="table-scroll"><table><thead><tr><th>Matchup</th><th>Starts</th><th>Outcome</th><th>Actual turns</th><th>Mulligans</th><th>Mana flags</th><th>Terminal evidence</th><th></th></tr></thead><tbody>@foreach(var slot in VisibleSlots()){
+            <tr><td>@Name(slot.DeckA)<br /><span class="muted">vs @Name(slot.DeckB)</span></td><td>@Name(slot.Starter)</td><td>@(slot.Result is {} result?result.Draw?"Rules draw":$"{Name(result.Winner!)} wins":slot.Status)</td><td>@(slot.Result?.ActualTurns.ToString()??"—")</td><td class="evidence">@if(slot.Result?.OpeningHands is {} openingHands){@foreach(var h in openingHands){<p>@Name(h.Player=="A"?slot.DeckA:slot.DeckB): @h.Mulligans · kept @h.KeptHandSize</p>}}else{<span>Unknown</span>}</td><td class="evidence">@if(slot.Result?.ManaFlags is {} flags){@foreach(var flag in flags){<p title="@flag.Evidence">@Name(flag.Player=="A"?slot.DeckA:slot.DeckB): @flag.Kind (own turns @flag.FirstOwnTurn–@flag.LastOwnTurn)</p>}@if(flags.Count==0){<span>No flags</span>}}else{<span>Not analyzed</span>}</td><td class="evidence">@(slot.Result?.TerminalReason??slot.Attempts.LastOrDefault()?.Error??"Awaiting play")</td><td>@if(slot.Status=="completed"){<a href="@($"/runs/{Id}/games/{slot.Id}")">Replay ↗</a>}</td></tr>
+        }</tbody></table></div><div class="actions"><button disabled="@(page==0)" @onclick="()=>page--">Previous</button><span class="muted">Page @(page+1) · 25 games per page</span><button disabled="@(VisibleSlots().Count<25)" @onclick="()=>page++">Next</button></div>
+    </section>
+    <details><summary>Reproducibility and limitations</summary><p>Pilot: @run.Config.Pilot<br />Engine hash: @run.Config.EngineHash<br />Adapter hash: @run.Config.AdapterHash<br />Seed scheme: @run.Config.SeedScheme<br />Opening policy: @run.Config.OpeningPolicy</p><p>Seeds are recorded; trace determinism and hidden-information fidelity have not yet passed independent validation. Loss evidence records the terminal event and does not claim causal attribution.</p></details>
+}
+@code{
+    [Parameter]public string Id{get;set;}="";private RunSummary? summary;private List<GameSlot> slots=[];private List<DeckManifest> deckVersions=[];private MatchupSummary? selected;private string? error;private string statusFilter="",manaFilter="";private int page;
+    private readonly CancellationTokenSource lifetime=new();
+    protected override void OnInitialized(){Refresh();_ = Poll();}
+    private void Refresh(){var run=Store.Run(Id);slots=Store.Slots(Id);summary=Metrics.Summarize(run,slots);deckVersions=run.Config.DeckIds.Select(Store.Deck).ToList();selected=summary.Matchups.FirstOrDefault(m=>m.DeckA==selected?.DeckA&&m.DeckB==selected?.DeckB)??summary.Matchups.FirstOrDefault();}
+    private bool polling;
+    private async Task Poll(){if(polling)return;polling=true;try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(3));while(await timer.WaitForNextTickAsync(lifetime.Token)){await InvokeAsync(()=>{Refresh();StateHasChanged();});if(summary?.Run.Status is "completed" or "failed" or "cancelled")break;}}catch(OperationCanceledException){}finally{polling=false;}}
+    private string Name(string id){var d=deckVersions.FirstOrDefault(d=>d.Id==id)??Store.Deck(id);return d.Name+(d.SourceType=="personal"?" (saved)":"");}
+    private void Select(MatchupSummary pair){selected=pair;page=0;}
+    private List<GameSlot> PairSlots()=>slots.Where(s=>selected is null||s.DeckA==selected.DeckA&&s.DeckB==selected.DeckB).ToList();
+    private List<GameSlot> VisibleSlots()=>PairSlots().Where(s=>(statusFilter.Length==0||s.Status==statusFilter)&&(manaFilter.Length==0||s.Result?.ManaFlags?.Any(f=>f.Kind==manaFilter)==true)).Skip(page*25).Take(25).ToList();
+    private List<int> OutcomeTurns(string winner)=>PairSlots().Where(s=>s.Result?.Winner==winner).Select(s=>s.Result!.ActualTurns).ToList();
+    private List<ChartSeries> Chart(Func<TurnSample,int> value)=>deckVersions.Select((deck,i)=>{
+        var samples=slots.Where(s=>s.Status=="completed"&&s.Result is not null&&(s.DeckA==deck.Id||s.DeckB==deck.Id)).SelectMany(s=>s.Result!.Samples.Where(p=>p.Player==(s.DeckA==deck.Id?"A":"B")));
+        return new ChartSeries(Name(deck.Id),ChartPalette.Colors[i%ChartPalette.Colors.Length].Color,samples.GroupBy(s=>s.PlayerTurn).OrderBy(g=>g.Key).Select(g=>new ChartPoint(g.Key,g.Average(value),g.Count())).ToList());}).ToList();
+    private static string Interval(double[]? value)=>value is null?"—":$"{value[0]:P1}–{value[1]:P1}";
+    private static string Number(double? value)=>value?.ToString("0.##")??"—";
+    private string Eta(){if(summary is null)return "";var done=slots.Where(s=>s.Result is not null).ToList();if(done.Count==0)return "Runtime estimate pending measured games.";var seconds=done.Average(s=>s.Attempts.Last(a=>a.Status=="completed").FinishedAt!.Value.Subtract(s.Attempts.Last(a=>a.Status=="completed").StartedAt).TotalSeconds);var remaining=(summary.Pending+summary.Running)*seconds/summary.Run.Config.Workers;return summary.Run.Status=="running"?$"Measured estimate: {TimeSpan.FromSeconds(remaining):hh\\:mm\\:ss} remaining":"Local session stored.";}
+    private async Task Act(Func<Task> action){error=null;try{await action();Refresh();_ = Poll();}catch(Exception e){error=e.Message;}}
+    public void Dispose(){lifetime.Cancel();lifetime.Dispose();}
+}

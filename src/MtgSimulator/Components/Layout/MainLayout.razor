@@ -1,0 +1,11 @@
+@inherits LayoutComponentBase
+<div class="shell">
+    <aside class="sidebar">
+        <a class="brand" href="/" aria-label="Gauntlet home"><img class="brand-logo" src="assets/brand/matchlab-dual-flasks.svg" alt="" width="44" height="44" /><span>Gauntlet<small>STANDARD · BO1</small></span></a>
+        <div class="nav-label">WORKSPACE</div>
+        <nav><NavLink href="/" Match="NavLinkMatch.All"><span>◈</span> Simulator</NavLink><NavLink href="/decks"><span>▤</span> Deck library</NavLink><NavLink href="/runs"><span>↗</span> Run history</NavLink></nav>
+        <div class="sidebar-note"><span class="status-dot"></span> Local execution<p>Full games. Every turn recorded.<br />No model calls during play.</p></div>
+    </aside>
+    <div class="main"><header class="topbar"><span>MAGIC ARENA / GAUNTLET</span><span class="pill">Local workspace</span></header><main>@Body</main><footer>Forge rules engine · London mulligans · Automated pilot results</footer></div>
+</div>
+<div id="blazor-error-ui">The connection was interrupted. <a href="">Reload the app</a><a class="dismiss">×</a></div>
