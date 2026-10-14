@@ -1,0 +1,24 @@
+@if (Records.Count > 0)
+{
+    var latest = Records[0];
+    <details class="pilot-match-evidence">
+        <summary>Latest session · @latest.Run.CreatedAt.ToLocalTime().ToString("MMM d, h:mm tt")@(latest.Partial ? " · Partial" : "")</summary>
+        <p class="small muted">Each session is reported separately. Reused games appear once within their session. Rates count wins / completed player appearances, including draws; same-pilot games contribute one record per side.</p>
+        @foreach (var record in Records)
+        {
+            var config = record.Run.Config;
+            <div class="pilot-match-session">
+                <a href="@($"/runs/{record.Run.Id}")">@record.Run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt") · @Metrics.Rate(record.Rate)</a>
+                <p>@record.Wins W / @record.Losses L / @record.Draws D · @record.Games.ToString("N0") appearances · @record.DeckVersions deck versions · @record.Matchups matchups@(record.Partial ? " · Partial session" : "")</p>
+                <details><summary>Recorded settings · @(record.MatchesBuild(Active) ? "Active build and attributes" : "Historical build or attributes")</summary>
+                    <p>Profile: <code>@record.Profile</code><br />Policy: <code>@config.Pilot</code><br />Engine: <code>@config.EngineHash</code><br />Bridge: <code>@config.AdapterHash</code><br />Attributes: <code>@(config.AttributesHash ?? "Not recorded")</code><br />Performance Mode: @(config.PerformanceMode ? "On" : "Off") · Seed: @config.RootSeed · @config.SeedScheme<br />Opening hands: @config.OpeningPolicy</p>
+                    @if (config.OptimizerPolicy is {} tuning){<p>Optimizer policy: <code>@tuning.Id</code> · Tuning: <code>@tuning.TuningHash</code></p>}
+                </details>
+            </div>
+        }
+    </details>
+}
+@code {
+    [Parameter, EditorRequired] public List<PilotSessionRate> Records { get; set; } = [];
+    [Parameter, EditorRequired] public Capabilities Active { get; set; } = default!;
+}

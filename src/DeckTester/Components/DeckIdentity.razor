@@ -1,0 +1,18 @@
+@inject IUiBackend Backend
+@if(Manifest is {} deck){
+    <span class="deck-identity @(Compact?"deck-identity-compact":"") @(Stacked?"deck-identity-stacked":SingleRow?"deck-identity-single-row":"")">
+        <DeckColors Deck="deck" />
+        <span class="deck-identity-text">
+            <span class="deck-identity-primary">@DeckDisplay.Subtype(deck)</span>
+            <small class="deck-identity-variant">@DeckDisplay.Variant(deck)</small>
+        </span>
+    </span>
+}else{<span class="deck-identity muted">Unavailable deck version</span>}
+@code {
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool Stacked { get; set; }
+    [Parameter] public bool SingleRow { get; set; }
+    [Parameter] public DeckManifest? Deck { get; set; }
+    [Parameter] public string? DeckId { get; set; }
+    private DeckManifest? Manifest => Deck ?? Backend.Decks().FirstOrDefault(d => d.Id == DeckId);
+}

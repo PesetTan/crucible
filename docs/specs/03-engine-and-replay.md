@@ -12,7 +12,11 @@ The adapter contract below is an app-owned interface to be implemented after fea
 
 ## Process contract
 
-Each worker accepts a versioned JSON request by stdin and emits versioned JSON Lines on stdout. Diagnostic output goes to stderr. Use app-generated paths and IDs. Initial implementation uses a fresh game process for each attempt to isolate static engine state; a warmed process pool requires separate determinism and leakage tests before adoption.
+Each worker accepts a versioned JSON request by stdin and emits versioned JSON Lines on stdout. Diagnostic output goes to stderr. Use app-generated paths and IDs. Bundles advertising `workerProtocolVersion=1` reuse initialized JVMs within a session, bounded by its worker count. Older bundles retain a fresh process per attempt. Each JVM handles one game at a time, with a new Match, Game, players/controllers, seeded RNG, attributes and pilot observations. Loaded card resources remain shared. Reset bridge maps, AI caches, coordinated zone-choice state and pinned Forge identity counters between games; no match objects are reused.
+
+The worker transport emits `worker_complete` only after one valid terminal result and state cleanup. Its attempt ID and protocol version must match; it is excluded from the stored replay and game sequence. EOF without this boundary fails a worker attempt. Timeout, cancellation, invalid replay/transport, or an engine error destroys that worker. Successful workers retire after 32 games or a reported used heap of 900 MiB. Session completion, pause/failure and service shutdown release the pool. Each session remains pinned to its immutable adapter/engine identity, keeping historical results and timing calibration separate.
+
+Validate reuse with complete fresh-versus-reused games across matchups, changed seeds/profiles/settings and repeated earlier requests. Compare all normalized records, decisions, terminal outcomes and state hashes; test cancellation, timeout, invalid boundaries, worker replacement, recycling, parallel capacity and historical fallback. `tests/forge_worker_reuse.py` records real-game evidence; `tests/ForgeWorkerChecks` exercises transport/lifecycle faults separately. These focused checks do not establish universal Forge rules or pilot correctness.
 
 Request fields: `protocol_version`, `run_id`, `game_slot_id`, `attempt_id`, engine/adapter revision, two immutable deck manifest references, two pilot profile references, requested starting player, mulligan profile, game seed, pilot seed configuration, and administrative limits.
 

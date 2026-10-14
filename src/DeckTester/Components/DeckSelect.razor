@@ -1,0 +1,20 @@
+<AppSelect Id="@Id" Label="@Label" Placeholder="@Placeholder" IncludeEmpty="true" EmptyText="No decks available." Options="options" Disabled="Disabled" Value="@Value" ValueChanged="ValueChanged">
+    <OptionTemplate Context="option"><DeckChoiceLabel Choice="choices[option.Value]" /></OptionTemplate>
+</AppSelect>
+@code {
+    [Parameter] public string? Id { get; set; }
+    [Parameter, EditorRequired] public string Label { get; set; } = "Deck";
+    [Parameter] public string Placeholder { get; set; } = "Choose a deck…";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IEnumerable<DeckManifest> Decks { get; set; } = [];
+    [Parameter] public IEnumerable<DeckChoice>? Choices { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    private List<SelectOption> options=[];
+    private Dictionary<string,DeckChoice> choices=[];
+    protected override void OnParametersSet(){
+        var ordered=DeckChoiceGroups.Group(Choices??Decks.Select(d=>new DeckChoice(d.Id,d))).SelectMany(g=>g).ToList();
+        choices=ordered.ToDictionary(c=>c.Value);
+        options=ordered.Select(c=>new SelectOption(c.Value,c.Label,c.Group)).ToList();
+    }
+}

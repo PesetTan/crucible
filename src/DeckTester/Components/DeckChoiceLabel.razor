@@ -1,0 +1,13 @@
+@if(Choice.Deck is {} deck){
+    <span class="deck-choice-label">
+        @if(Choice.Opponent is {} opponent){
+            <span class="deck-choice-matchup"><DeckIdentity Deck="deck" Compact="true" /><span class="deck-choice-vs">vs</span><DeckIdentity Deck="opponent" Compact="true" /></span>
+        }else{
+            <span class="deck-choice-line"><span><span class="deck-choice-primary"><DeckName Deck="deck" /></span><small>@DeckDisplay.Variant(deck)<span> · @UiText.Label(deck.SourceType)@if(deck.PublishedMatchesApprox is {} matches){<span> · @matches.ToString("N0") source matches</span>}</span></small></span></span>
+        }
+        @if(Choice.Context is {} context){<small class="deck-choice-context">@context</small>}
+    </span>
+}else{<span>Unavailable deck version</span>}
+@code {
+    [Parameter, EditorRequired] public DeckChoice Choice { get; set; } = default!;
+}

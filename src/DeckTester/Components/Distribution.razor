@@ -1,4 +1,4 @@
-<div class="chart"><div class="chart-title"><div class="chart-heading"><h3>@Title</h3><MetricInfo Title="@Title" Text="@HelpText" /></div></div>
+<div class="chart"><div class="chart-title"><div class="chart-heading"><h3>@Title</h3>@if(Deck is not null){<DeckIdentity Deck="Deck" Compact="true" SingleRow="true" />}<MetricInfo Title="@Title" Text="@HelpText" /></div></div>
     @if(Values.Count==0){<p class="muted">No games with this outcome yet.</p>}
     else{
         <p class="muted">@Values.Count games · Typical ending: @UnitSingular @Math.Ceiling(Metrics.Median(Lengths)!.Value).ToString("0",CultureInfo.InvariantCulture) (median)</p>
@@ -9,6 +9,7 @@
     }
 </div>
 @code{
+    [Parameter]public DeckManifest? Deck{get;set;}
     [Parameter]public string Title{get;set;}="";
     [Parameter]public string HelpText{get;set;}="Shows when games with this outcome ended. Bar height and the number above it show game count; the median is the middle ending length. Only completed games with this outcome appear.";
     [Parameter]public List<int> Values{get;set;}=[];

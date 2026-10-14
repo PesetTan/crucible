@@ -37,3 +37,7 @@ When documents conflict, resolve the conflict before implementation. The plan de
 October 11, 2026: the plan's independent read-only review found no actionable issues. A separate independent review of the initial specifications 01–07 and their index identified two issues: cancelled slots lacked an explicit resume transition, and full-matrix acceptance lacked a minimum valid sample per pairing and starting player. Both were resolved in specifications 05 and 07. The same specification reviewer rechecked the revisions and reported no remaining actionable findings. Dates and local document links were also checked successfully. Specifications 08 and 09 were added during implementation in response to the user's mana and mulligan requests and were not part of that earlier independent review.
 
 This review validates the documentation's consistency; it does not establish engine capability, card correctness, pilot quality, measured runtime, or approval to implement the application.
+
+## Deck Workshop extension
+
+October 12, 2026: Deck Workshop is specified in 02, 05, 06, and 07. It adds custom immutable deck versions, browser drafts, one-matchup reruns, and scoped comparisons. The user authorized implementation of this extension. Specification contracts were checked against the current service/UI separation, exact-version cache keys, and existing seed scheme before feature implementation.

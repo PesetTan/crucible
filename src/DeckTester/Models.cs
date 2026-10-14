@@ -3,6 +3,11 @@ using System.Text.Json.Serialization;
 
 namespace DeckTester;
 
+public sealed record WorkshopBaseline(string RunId,string DeckId,string OpponentId);
+
+public sealed record RunMatchupNote(string RunId,string DeckA,string DeckB,string Title,string Context,List<RunNoteSection> Sections);
+public sealed record RunNoteSection(string Heading,List<string> Paragraphs);
+
 public static class Json
 {
     public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
@@ -14,11 +19,18 @@ public static class Json
     public static T Decode<T>(string value) => JsonSerializer.Deserialize<T>(value, Options) ?? throw new InvalidDataException("Empty JSON document.");
 }
 
-public sealed record CardEntry(int ArenaId, string Name, int Quantity, string Zone, string Set, string Type, string Cost, string Text, bool LocallyLegal, string LinkedFaces);
+public sealed record CardEntry(int ArenaId, string Name, int Quantity, string Zone, string Set, string Type, string Cost, string Text, bool LocallyLegal, string LinkedFaces)
+{
+    public JsonElement? Attributes { get; init; }
+}
 public sealed record DeckManifest(string Id, string Name, string SourceType, string Variant, string SourceDeckId, string Snapshot, string? SourceUrl,
     string ListHash, string ManifestHash, DateTimeOffset ImportedAt, List<CardEntry> Cards, string FreshnessNote)
 {
+    public string? FriendlyName { get; init; }
+    public string? ParentDeckId { get; init; }
     public string? ArchetypeTier { get; init; }
+    public string? Strategy { get; init; }
+    public string? Subtype { get; init; }
     public string? TierSourceUrl { get; init; }
     public string? TierSnapshotDate { get; init; }
     public double? PublishedWinRatePercent { get; init; }
@@ -31,13 +43,32 @@ public sealed record DeckManifest(string Id, string Name, string SourceType, str
 }
 public sealed record CoverageItem(string Name, string Status, string? Script, string? Reason);
 public sealed record DeckCoverage(string DeckId, string Status, List<CoverageItem> Cards, List<string> Limitations);
-public sealed record Capabilities(bool Available, string Engine, string EngineHash, string AdapterHash, string JavaPath, List<string> Blockers, List<string> Limitations);
+public sealed record Capabilities(bool Available, string Engine, string EngineHash, string AdapterHash, string JavaPath, List<string> Blockers, List<string> Limitations)
+{
+    public string? AttributesHash { get; init; }
+}
 public sealed record RunRequest(List<string> DeckIds, int GamesPerPair = 200, int Workers = 2, int TimeoutSeconds = 180, int TurnLimit = 150, long RootSeed = 42, bool Diagnostic = true,
-    bool StaggerStarts = true, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = 1);
+    bool StaggerStarts = true, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = 1, bool PerformanceMode = false, string PilotMode = ReanimatorPilots.CurrentAggroMode)
+{
+    public string? OptimizerPolicyId { get; init; }
+    public WorkshopBaseline? WorkshopBaseline { get; init; }
+    public string? WorkshopDeckId { get; init; }
+}
 public sealed record RunConfig(List<string> DeckIds, int GamesPerPair, int Workers, int TimeoutSeconds, int TurnLimit, long RootSeed, bool Diagnostic, string EngineHash, string AdapterHash,
-    string Pilot = "Forge Default / forced starter v1", string OpeningPolicy = "London mulligan; Arena Bo1 opening hands approximated", string SeedScheme = "sha256-v1",
-    bool StaggerStarts = false, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = null);
-public sealed record SimulationRun(string Id, DateTimeOffset CreatedAt, string Status, RunConfig Config, int Total, string? Error = null, List<RunExtension>? Extensions = null, DateTimeOffset? UpdatedAt = null);
+    string Pilot = ReanimatorPilots.Adaptive, string OpeningPolicy = "London mulligan; Arena Bo1 opening hands approximated", string SeedScheme = "sha256-v1",
+    bool StaggerStarts = false, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = null, bool PerformanceMode = false,
+    Dictionary<string,string>? PilotProfiles = null)
+{
+    public OptimizerPolicy? OptimizerPolicy { get; init; }
+    public Dictionary<string,JsonElement>? CardAttributes { get; init; }
+    public string? AttributesHash { get; init; }
+}
+public sealed record OptimizerPolicy(int Version,string Id,string Profile,Dictionary<string,int> Tuning,string TuningHash,string EngineHash,string AdapterHash);
+public sealed record SimulationRun(string Id, DateTimeOffset CreatedAt, string Status, RunConfig Config, int Total, string? Error = null, List<RunExtension>? Extensions = null, DateTimeOffset? UpdatedAt = null)
+{
+    public WorkshopBaseline? WorkshopBaseline { get; init; }
+    public string? WorkshopDeckId { get; init; }
+}
 public sealed record SessionTiming(string Id,string RunId,DateTimeOffset StartedAt,DateTimeOffset UpdatedAt,
     DateTimeOffset? FinishedAt,double ActiveSeconds,int AttemptCount,double ScheduledSeconds,string Status);
 public sealed record ActiveSessionProgress(SimulationRun Run,int Completed,int Failed,int Cancelled,int Running,int Pending,int Reused)
@@ -62,10 +93,19 @@ public sealed record RunSummary(SimulationRun Run, int Valid, int Failed, int Ca
 public sealed record ReplayPlayer(string Id, int Life, int HandCount, int LibraryCount, int PersonalTurn, List<ReplayCard> Battlefield, List<ReplayCard> Graveyard, List<ReplayCard> Exile, List<ReplayCard> Hand);
 public sealed record ReplayCard(int Id, string Name, string Type, bool Tapped, int? Power, int? Toughness, string Counters, string? AttachedTo, string Owner, string Controller, string Cost, string Text);
 public sealed record ReplayState(string? ActivePlayer, string? Phase, int EngineTurn, List<ReplayPlayer> Players, List<string> Stack);
+public sealed record ReplayTurnPosition(int Turn,int Offset);
 public sealed record ReplayRecord(string Kind, long Sequence, int ActualTurn, string? Event, string? Detail, ReplayState? State, string? StateHash,
-    string? AttemptId, string? Winner, bool? Draw, string? Reason, int? Starter, bool? ExtraTurn,string? Player=null,int? Mulligans=null,int? KeptHandSize=null,bool? PolicyAccepted=null);
+    string? AttemptId, string? Winner, bool? Draw, string? Reason, int? Starter, bool? ExtraTurn,string? Player=null,int? Mulligans=null,int? KeptHandSize=null,bool? PolicyAccepted=null,
+    string? TriggerCategory=null,string? TriggerText=null,string? TriggerSource=null,string? TriggerCaptureVersion=null,
+    string? PilotProfile=null,string? PilotVersion=null,string? Decision=null,List<string>? Options=null,string? Selected=null,
+    string? OpponentClass=null,int? OpponentConfidence=null,List<string>? VisibleEvidence=null);
+public sealed record TriggerEventSummary(int ActualTurn,string Category);
+public sealed record TriggerGameSummary(string GameId,int ActualTurns,List<TriggerEventSummary> Events);
 public sealed record ChartPoint(int Turn,double Value,int Count);
-public sealed record ChartSeries(string Name,string Color,List<ChartPoint> Points);
+public sealed record ChartSeries(string Name,string Color,List<ChartPoint> Points)
+{
+    public DeckManifest? Deck { get; init; }
+}
 
 public sealed record CachedGameKey(string DeckA, string DeckB, string Starter, long Seed, int Index);
 

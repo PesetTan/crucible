@@ -1,0 +1,63 @@
+@using System.Globalization
+<div class="trigger-chart-heading"><h3>Triggered Abilities</h3><span class="small muted">@Games.Count / @CompletedGames completed games recorded</span></div>
+@if (Games.Count == 0) {
+    <p class="small muted">@(Loading?"Reading trigger records…":"No trigger-aware replays in this matchup yet.")</p>
+} else {
+    <div class="chart-grid">
+        <div class="chart" aria-label="Average triggers per game by category">
+            <div class="chart-title"><h3>Trigger Mix</h3><span class="muted">Per game</span></div>
+            <div class="trigger-bars">
+                @foreach (var row in Mix) {
+                    <div class="trigger-bar-row"><span>@row.Category</span><div class="trigger-bar-track"><div style="width:@Percent(row.Mean/MaxMean*100);background:@Color(row.Category)"></div></div><strong>@row.Mean.ToString("0.0",CultureInfo.InvariantCulture)</strong></div>
+                }
+            </div>
+            <p class="small muted">Both players combined. Includes games with zero triggers.</p>
+        </div>
+        <div class="chart" aria-label="Average triggers by game turn">
+            <div class="chart-title"><h3>Trigger Timing</h3><span class="muted">Per active game</span></div>
+            <div class="trigger-filter"><label for="@categoryId">Category</label><AppSelect Id="@categoryId" Label="Category" Options="@(new[]{new SelectOption("","All categories")}.Concat(Categories.Select(n=>new SelectOption(n,n))))" @bind-Value="category" /></div>
+            @if(Timing.Count==0){<p class="muted">No triggers in this category.</p>}
+            else {
+                <div class="trigger-timing-plot"><div class="trigger-scale"><span>@MaxRate.ToString("0.0",CultureInfo.InvariantCulture)</span><span>0</span></div><svg viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="Trigger rate from @AxisUnit 1 through @AxisUnit @Timing.Last().Turn">
+                    <line x1="8" y1="145" x2="592" y2="145" class="gridline" /><line x1="8" y1="77" x2="592" y2="77" class="gridline" /><line x1="8" y1="10" x2="592" y2="10" class="gridline" />
+                    <polyline points="@TimingPoints" fill="none" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke" />
+                </svg></div>
+                <div class="chart-axis"><span>@AxisUnit 1</span><span>@AxisUnit @Timing.Last().Turn</span></div>
+                <details><summary>Turn counts</summary><div class="table-scroll"><table><thead><tr><th>@AxisUnit</th><th>Mean triggers</th><th>Games reached</th></tr></thead><tbody>@foreach(var point in Timing){<tr><td>@point.Turn</td><td>@point.Mean.ToString("0.00",CultureInfo.InvariantCulture)</td><td>@point.Games</td></tr>}</tbody></table></div></details>
+            }
+        </div>
+    </div>
+    <p class="small muted">Categories come from ability text and may be approximate. Only trigger-aware replays count; older replays without a capture marker are excluded unless they contain trigger entries.</p>
+}
+@code {
+    [Parameter] public List<TriggerGameSummary> Games { get; set; } = [];
+    [Parameter] public int CompletedGames { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public bool Rounds { get; set; } = true;
+    private readonly string categoryId="trigger-category-"+Guid.NewGuid().ToString("N");
+    private string category="";
+    private static readonly string[] Categories=["Zone change","Turn or phase","Combat","Spell or ability","Other or unclassified"];
+    private static readonly string[] Colors=["var(--theme-trigger-zone)","var(--theme-trigger-turn)","var(--theme-trigger-combat)","var(--theme-trigger-spell)","var(--theme-trigger-other)"];
+    private static string Color(string name){var index=Array.IndexOf(Categories,name);return Colors[index<0?Colors.Length-1:index];}
+    private static string Percent(double value)=>value.ToString("0.##",CultureInfo.InvariantCulture)+"%";
+    private string AxisUnit=>Rounds?"Round":"Turn";
+    private List<(string Category,double Mean)> Mix=>Categories.Select(name=>(Category:name,Mean:Games.Sum(g=>g.Events.Count(e=>e.Category==name))/(double)Games.Count)).ToList();
+    private double MaxMean=>Math.Max(1,Mix.Max(row=>row.Mean));
+    private List<(int Turn,double Mean,int Games)> Timing {
+        get {
+            var max=Games.Select(g=>Rounds?(g.ActualTurns+1)/2:g.ActualTurns).DefaultIfEmpty(0).Max();
+            return Enumerable.Range(1,max).Select(turn=>{
+                var active=Games.Count(g=>(Rounds?(g.ActualTurns+1)/2:g.ActualTurns)>=turn);
+                var count=Games.Sum(g=>g.Events.Count(e=>(Rounds?(e.ActualTurn+1)/2:e.ActualTurn)==turn&&(category==""||e.Category==category)));
+                return (Turn:turn,Mean:active==0?0:(double)count/active,Games:active);
+            }).ToList();
+        }
+    }
+    private string TimingPoints {
+        get {
+            var points=Timing;
+            return string.Join(" ",points.Select(p=>$"{(8+(p.Turn-1)*584.0/Math.Max(1,points.Count-1)).ToString("0.##",CultureInfo.InvariantCulture)},{(145-p.Mean/MaxRate*135).ToString("0.##",CultureInfo.InvariantCulture)}"));
+        }
+    }
+    private double MaxRate=>Math.Max(1,Timing.Select(p=>p.Mean).DefaultIfEmpty(0).Max());
+}

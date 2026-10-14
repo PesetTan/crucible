@@ -15,7 +15,7 @@ public sealed class AppPaths
     {
         var supplied = Environment.GetEnvironmentVariable("MTG_PROJECT_ROOT");
         Root = supplied is not null ? Path.GetFullPath(supplied) : Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", ".."));
-        if (!Directory.Exists(Path.Combine(Root, "docs", "specs"))) throw new InvalidOperationException("Set MTG_PROJECT_ROOT to the Gauntlet project directory.");
+        if (!Directory.Exists(Path.Combine(Root, "docs", "specs"))) throw new InvalidOperationException("Set MTG_PROJECT_ROOT to the Crucible project directory.");
         Directory.CreateDirectory(Data); Directory.CreateDirectory(Replays); Directory.CreateDirectory(Decks);
     }
 }

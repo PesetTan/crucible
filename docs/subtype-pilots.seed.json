@@ -1,0 +1,524 @@
+{
+  "Optimistic Scavenger": {
+    "subtypePilot": {
+      "developOnPass": {
+        "auras-v001": 90
+      }
+    }
+  },
+  "Veteran Survivor": {
+    "subtypePilot": {
+      "developOnPass": {
+        "auras-v001": 80
+      }
+    }
+  },
+  "Spellbook Vendor": {
+    "subtypePilot": {
+      "developOnPass": {
+        "auras-v001": 70
+      }
+    }
+  },
+  "Hinterland Sanctifier": {
+    "subtypePilot": {
+      "developOnPass": {
+        "lifegain-v001": 90
+      }
+    }
+  },
+  "Ajani's Pridemate": {
+    "subtypePilot": {
+      "developOnPass": {
+        "lifegain-v001": 80
+      }
+    }
+  },
+  "Essence Channeler": {
+    "subtypePilot": {
+      "developOnPass": {
+        "lifegain-v001": 70
+      }
+    }
+  },
+  "Simulacrum Synthesizer": {
+    "subtypePilot": {
+      "developOnPass": {
+        "artifacts-v001": 90
+      }
+    }
+  },
+  "The Enigma Jewel": {
+    "subtypePilot": {
+      "developOnPass": {
+        "artifacts-v001": 80
+      }
+    }
+  },
+  "Clay-Fired Bricks": {
+    "subtypePilot": {
+      "developOnPass": {
+        "artifacts-v001": 70
+      }
+    }
+  },
+  "Forsaken Miner": {
+    "subtypePilot": {
+      "developOnPass": {
+        "skeletons-v001": 90
+      }
+    }
+  },
+  "Corpses of the Lost": {
+    "subtypePilot": {
+      "developOnPass": {
+        "skeletons-v001": 80
+      }
+    }
+  },
+  "Case of the Stashed Skeleton": {
+    "subtypePilot": {
+      "developOnPass": {
+        "skeletons-v001": 70
+      }
+    }
+  },
+  "Jace, Reality Sculptor": {
+    "subtypePilot": {
+      "developOnPass": {
+        "jace-control-v001": 90,
+        "planeswalkers-v001": 80,
+        "jace-exile-v001": 90
+      }
+    }
+  },
+  "The Theorist, Jace Beleren": {
+    "subtypePilot": {
+      "developOnPass": {
+        "jace-control-v001": 80,
+        "planeswalkers-v001": 90,
+        "jace-exile-v001": 80,
+        "superfriends-v001": 70
+      }
+    }
+  },
+  "Vengeful Bloodwitch": {
+    "subtypePilot": {
+      "developOnPass": {
+        "sacrifice-v001": 90
+      }
+    }
+  },
+  "Infestation Sage": {
+    "subtypePilot": {
+      "developOnPass": {
+        "sacrifice-v001": 80
+      }
+    }
+  },
+  "Greedy Freebooter": {
+    "subtypePilot": {
+      "developOnPass": {
+        "sacrifice-v001": 70
+      }
+    }
+  },
+  "Sarkhan, Dragon Ascendant": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dragons-v001": 90
+      }
+    }
+  },
+  "Momo, Friendly Flier": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dragons-v001": 80
+      }
+    }
+  },
+  "Magmatic Hellkite": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dragons-v001": 70
+      }
+    }
+  },
+  "Dwarven Mauler": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dwarves-v001": 90
+      }
+    }
+  },
+  "Dwalin, Weaponmaster": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dwarves-v001": 80
+      }
+    }
+  },
+  "Lavaspur Boots": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dwarves-v001": 70
+      }
+    }
+  },
+  "Liliana, Dreadhorde General": {
+    "subtypePilot": {
+      "developOnPass": {
+        "planeswalkers-v001": 70
+      }
+    }
+  },
+  "Marauding Mako": {
+    "subtypePilot": {
+      "developOnPass": {
+        "discard-v001": 90
+      }
+    }
+  },
+  "Inti, Seneschal of the Sun": {
+    "subtypePilot": {
+      "developOnPass": {
+        "discard-v001": 80
+      }
+    }
+  },
+  "Hardened Academic": {
+    "subtypePilot": {
+      "developOnPass": {
+        "discard-v001": 70
+      }
+    }
+  },
+  "Llanowar Elves": {
+    "subtypePilot": {
+      "developOnPass": {
+        "landfall-v001": 90,
+        "big-creatures-v001": 90
+      }
+    }
+  },
+  "Mossborn Hydra": {
+    "subtypePilot": {
+      "developOnPass": {
+        "landfall-v001": 80
+      }
+    }
+  },
+  "Pawpatch Recruit": {
+    "subtypePilot": {
+      "developOnPass": {
+        "landfall-v001": 70
+      }
+    }
+  },
+  "Valley Mightcaller": {
+    "subtypePilot": {
+      "developOnPass": {
+        "rabbits-v001": 90
+      }
+    }
+  },
+  "Burrowguard Mentor": {
+    "subtypePilot": {
+      "developOnPass": {
+        "rabbits-v001": 80
+      }
+    }
+  },
+  "Valley Questcaller": {
+    "subtypePilot": {
+      "developOnPass": {
+        "rabbits-v001": 70
+      }
+    }
+  },
+  "Kona, Rescue Beastie": {
+    "subtypePilot": {
+      "developOnPass": {
+        "omniscience-v001": 90
+      }
+    }
+  },
+  "Omniscience": {
+    "subtypePilot": {
+      "developOnPass": {
+        "omniscience-v001": 80
+      }
+    }
+  },
+  "Formidable Speaker": {
+    "subtypePilot": {
+      "developOnPass": {
+        "omniscience-v001": 70
+      }
+    }
+  },
+  "Voice of Victory": {
+    "subtypePilot": {
+      "developOnPass": {
+        "flash-v001": 90,
+        "tokens-v001": 80
+      }
+    }
+  },
+  "High Noon": {
+    "subtypePilot": {
+      "developOnPass": {
+        "flash-v001": 80
+      }
+    }
+  },
+  "Drake Hatcher": {
+    "subtypePilot": {
+      "developOnPass": {
+        "fling-v001": 90
+      }
+    }
+  },
+  "Emberheart Challenger": {
+    "subtypePilot": {
+      "developOnPass": {
+        "fling-v001": 80,
+        "burn-v001": 80
+      }
+    }
+  },
+  "Callous Sell-Sword": {
+    "subtypePilot": {
+      "developOnPass": {
+        "fling-v001": 70
+      }
+    }
+  },
+  "Giada, Font of Hope": {
+    "subtypePilot": {
+      "developOnPass": {
+        "angels-v001": 90
+      }
+    }
+  },
+  "Youthful Valkyrie": {
+    "subtypePilot": {
+      "developOnPass": {
+        "angels-v001": 80
+      }
+    }
+  },
+  "Resplendent Angel": {
+    "subtypePilot": {
+      "developOnPass": {
+        "angels-v001": 70
+      }
+    }
+  },
+  "Melded Moxite": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dinosaur-reanimator-v001": 90
+      }
+    }
+  },
+  "Palani's Hatcher": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dinosaur-reanimator-v001": 80
+      }
+    }
+  },
+  "Vaultborn Tyrant": {
+    "subtypePilot": {
+      "developOnPass": {
+        "dinosaur-reanimator-v001": 70
+      }
+    }
+  },
+  "Hired Claw": {
+    "subtypePilot": {
+      "developOnPass": {
+        "burn-v001": 90,
+        "creature-aggro-v001": 90
+      }
+    }
+  },
+  "Spyglass Siren": {
+    "subtypePilot": {
+      "developOnPass": {
+        "midrange-v001": 90
+      }
+    }
+  },
+  "Dream Beavers": {
+    "subtypePilot": {
+      "developOnPass": {
+        "midrange-v001": 80
+      }
+    }
+  },
+  "Ouroboroid": {
+    "subtypePilot": {
+      "developOnPass": {
+        "midrange-v001": 70
+      }
+    }
+  },
+  "Stadium Headliner": {
+    "subtypePilot": {
+      "developOnPass": {
+        "tokens-v001": 90
+      }
+    }
+  },
+  "Warleader's Call": {
+    "subtypePilot": {
+      "developOnPass": {
+        "tokens-v001": 70
+      }
+    }
+  },
+  "Iridescent Vinelasher": {
+    "subtypePilot": {
+      "developOnPass": {
+        "creature-aggro-v001": 80
+      }
+    }
+  },
+  "Gev, Scaled Scorch": {
+    "subtypePilot": {
+      "developOnPass": {
+        "creature-aggro-v001": 70
+      }
+    }
+  },
+  "Earth King's Lieutenant": {
+    "subtypePilot": {
+      "developOnPass": {
+        "allies-v001": 90
+      }
+    }
+  },
+  "Earthen Ally": {
+    "subtypePilot": {
+      "developOnPass": {
+        "allies-v001": 80
+      }
+    }
+  },
+  "Great Divide Guide": {
+    "subtypePilot": {
+      "developOnPass": {
+        "allies-v001": 70
+      }
+    }
+  },
+  "Tablet of Discovery": {
+    "subtypePilot": {
+      "developOnPass": {
+        "spell-control-v001": 90,
+        "lessons-v001": 90
+      }
+    }
+  },
+  "Pyromancer's Goggles": {
+    "subtypePilot": {
+      "developOnPass": {
+        "spell-control-v001": 80
+      }
+    }
+  },
+  "Eddymurk Crab": {
+    "subtypePilot": {
+      "developOnPass": {
+        "spellementals-v001": 90,
+        "elementals-v001": 90
+      }
+    }
+  },
+  "Hearth Elemental": {
+    "subtypePilot": {
+      "developOnPass": {
+        "spellementals-v001": 80
+      }
+    }
+  },
+  "Thor, God of Thunder": {
+    "subtypePilot": {
+      "developOnPass": {
+        "lessons-v001": 80
+      }
+    }
+  },
+  "Chandra, Torch of Defiance": {
+    "subtypePilot": {
+      "developOnPass": {
+        "superfriends-v001": 90
+      }
+    }
+  },
+  "Elspeth, Storm Slayer": {
+    "subtypePilot": {
+      "developOnPass": {
+        "superfriends-v001": 80
+      }
+    }
+  },
+  "Deep-Cavern Bat": {
+    "subtypePilot": {
+      "developOnPass": {
+        "demons-v001": 90
+      }
+    }
+  },
+  "Unstoppable Slasher": {
+    "subtypePilot": {
+      "developOnPass": {
+        "demons-v001": 80
+      }
+    }
+  },
+  "Bloodletter of Aclazotz": {
+    "subtypePilot": {
+      "developOnPass": {
+        "demons-v001": 70
+      }
+    }
+  },
+  "Hydro-Man, Fluid Felon": {
+    "subtypePilot": {
+      "developOnPass": {
+        "elementals-v001": 80
+      }
+    }
+  },
+  "Namor the Sub-Mariner": {
+    "subtypePilot": {
+      "developOnPass": {
+        "elementals-v001": 70
+      }
+    }
+  },
+  "Hulking Raptor": {
+    "subtypePilot": {
+      "developOnPass": {
+        "big-creatures-v001": 80
+      }
+    }
+  },
+  "Studious First-Year": {
+    "subtypePilot": {
+      "developOnPass": {
+        "big-creatures-v001": 70
+      }
+    }
+  },
+  "Resonating Lute": {
+    "subtypePilot": {
+      "developOnPass": {
+        "spell-control-v001": 70
+      }
+    }
+  }
+}

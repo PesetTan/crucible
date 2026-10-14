@@ -62,3 +62,11 @@ Reports expose engine/pilot versions, list identities, sample sizes, draws/failu
 Review the specifications independently before implementation. Check cross-document consistency, requirements that cannot be fulfilled by the selected engine, exact metric definitions, outcome/recovery integrity, information boundaries, and measurable acceptance criteria. Return discrete actionable findings with file locations; a clean review is valid. Resolve accepted findings in the documents and record the result before seeking implementation approval.
 
 After implementation is approved and built, review the actual implementation and evidence separately. A document review does not pass rules, pilot, replay, or runtime gates.
+
+## Deck Workshop acceptance
+
+Verify copying library and custom versions, Arena text with/without printing IDs, split faces, repeated rows, malformed lines, unknown/ambiguous identities, quantity changes/removal, 60-card validation, copy exceptions, and unsupported/local-illegal cards. Unknown entries cannot disappear during resolution. Structural validation runs again on save and preflight.
+
+Verify browser draft restoration, explicit-entry precedence, sideboard preservation, source-database immutability, immutable original manifests, new edit fingerprints, legacy payload compatibility, and cache isolation across deck versions. Validate baseline matchup metadata and single-matchup rerun settings.
+
+Exercise the visible flow from Library and results: edit, save, rerun, compare against the stored scoped baseline, choose a prior baseline, and open both sessions' replays. Check incomplete/zero-result/missing-diagnostic cases, deleted baselines, service outages, active-session restrictions, and desktop/narrow layouts. Comparison counts, play/draw orientation, lengths, mulligans, and mana incidents must agree with stored records. Results remain exploratory Forge pilot results.

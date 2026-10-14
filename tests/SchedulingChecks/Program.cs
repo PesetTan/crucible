@@ -66,12 +66,15 @@ Check(RuntimeEstimate.Duration(90000)=="25 hr","Long estimates must not wrap at 
 var config=new RunConfig(["A","B"],10,2,180,150,42,true,"engine","adapter",StaggerStarts:true);
 var oldJson=Json.Encode(config).Replace(",\"startupSpacingSeconds\":null","");
 Check(Json.Decode<RunConfig>(oldJson).StartupSpacingSeconds is null,"Old sessions must deserialize with the original scheduling policy.");
+Check(!Json.Decode<RunConfig>("{\"deckIds\":[\"A\",\"B\"],\"gamesPerPair\":2,\"workers\":2,\"timeoutSeconds\":180,\"turnLimit\":150,\"rootSeed\":42,\"diagnostic\":true,\"engineHash\":\"engine\",\"adapterHash\":\"adapter\"}").PerformanceMode,"Legacy runs must default to normal Forge mode.");
 var defaultRequest=Json.Decode<RunRequest>("{\"deckIds\":[\"A\",\"B\"]}");
 Check(defaultRequest.StaggerStarts&&defaultRequest.Workers==2&&defaultRequest.StartupSpacingSeconds==1,"New requests must start two workers one second apart by default.");
 Console.WriteLine("Scheduling checks passed: immediate refill, concurrency cap, startup cancellation, short/empty queues, errors, runtime estimates, and saved-session compatibility.");
 
 // Session wall time calibrates only matching settings and deck versions.
 var calibrationConfig=new RunConfig(["B","A"],100,4,180,150,42,true,"engine","adapter");
+var modeTiming=RuntimeEstimate.Calculate(["A","B"],10,2,180,150,false,15,5,[new TimingSample("A","B",2,180,150,100,false,null,true)],performanceMode:false);
+Check(modeTiming is not null&&modeTiming.Observations==0,"Runtime estimates must not use timings from another Forge mode.");
 var sessions=new List<SessionTimingSample>{new(calibrationConfig,500,250,100)};
 var calibrated=RuntimeEstimate.Calculate(["A","B"],100,4,180,150,false,15,5,normal,sessions:sessions)!;
 Check(calibrated.SessionObservations==1&&calibrated.LowerSeconds==plain.LowerSeconds*2&&calibrated.UpperSeconds==plain.UpperSeconds*2,"Measured whole-session time must adjust the next comparable estimate.");

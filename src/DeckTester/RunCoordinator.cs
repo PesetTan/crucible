@@ -7,7 +7,7 @@ using System.Diagnostics;
 
 namespace DeckTester;
 
-public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoordinator> logger,AppPaths paths) : BackgroundService
+public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoordinator> logger,AppPaths paths,CardAttributes? attributes = null,SimulationExecutionGate? executionGate = null) : BackgroundService
 {
     private readonly Channel<string> queue=Channel.CreateUnbounded<string>();
     private readonly ConcurrentDictionary<string,byte> queued=new();
@@ -20,9 +20,20 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
         if(requireIdle&&(active.Count>0||store.Runs().Any(r=>r.Status is "queued" or "running" or "cancelling")))
             throw new InvalidOperationException("A session is active. Wait for it to finish or pause it from session details before setting up another run.");
         var blockers=engine.Preflight(request);if(blockers.Count!=0)throw new InvalidOperationException(string.Join("\n",blockers));
+        if(request.WorkshopDeckId is {} workshopDeck&&(request.DeckIds.Count!=2||!request.DeckIds.Contains(workshopDeck)))
+            throw new ArgumentException("Workshop deck must belong to a two-deck session.");
+        if(request.WorkshopBaseline is {} baseline){
+            var original=store.Run(baseline.RunId);
+            if(baseline.DeckId==baseline.OpponentId||!original.Config.DeckIds.Contains(baseline.DeckId)||!original.Config.DeckIds.Contains(baseline.OpponentId)||request.DeckIds.Count!=2||!request.DeckIds.Contains(baseline.OpponentId))
+                throw new ArgumentException("Workshop baseline must identify the original matchup and the retained opponent.");
+        }
         var capability=engine.Capabilities();var decks=request.DeckIds.Order(StringComparer.Ordinal).ToList();
+        var attributeSnapshot=attributes?.Snapshot(decks.Select(store.Deck));
         var config=new RunConfig(decks,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capability.EngineHash,capability.AdapterHash,
-            StaggerStarts:request.StaggerStarts,EstimatedGameSeconds:request.EstimatedGameSeconds,StartLeadSeconds:request.StartLeadSeconds,StartupSpacingSeconds:request.StartupSpacingSeconds);
+            Pilot:request.PilotMode,StaggerStarts:request.StaggerStarts,EstimatedGameSeconds:request.EstimatedGameSeconds,StartLeadSeconds:request.StartLeadSeconds,
+            StartupSpacingSeconds:request.StartupSpacingSeconds,PerformanceMode:request.PerformanceMode,
+            PilotProfiles:decks.ToDictionary(deck=>deck,deck=>ReanimatorPilots.Profile(store.Deck(deck) with{Cards=store.Deck(deck).Cards.Select(c=>c with{Attributes=attributeSnapshot?.Cards.GetValueOrDefault(c.Name)??c.Attributes}).ToList()},request.PilotMode)))
+            {CardAttributes=attributeSnapshot?.Cards,AttributesHash=attributeSnapshot?.Hash,OptimizerPolicy=engine.OptimizerPolicy(request)};
         var id=Guid.NewGuid().ToString("N");var slots=new List<GameSlot>();var seeds=new HashSet<long>();
         for(var a=0;a<decks.Count;a++)for(var b=a+1;b<decks.Count;b++)for(var starter=0;starter<2;starter++)for(var index=0;index<request.GamesPerPair/2;index++){
             var digest=SHA256.HashData(Encoding.UTF8.GetBytes(Json.Encode(new{scheme="sha256-v1",rootSeed=request.RootSeed,a=decks[a],b=decks[b],starter,index})));
@@ -31,8 +42,8 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
         }
         var cache=store.CachedGames(config);
         slots=slots.Select(slot=>Reuse(slot,cache)).ToList();
-        var run=new SimulationRun(id,DateTimeOffset.UtcNow,slots.All(slot=>slot.Status=="completed")?"completed":"queued",config,slots.Count);
-        var actualId=await store.CreateRun(run,slots,key,DeckImporter.Hash(Json.Encode(config)));
+        var run=new SimulationRun(id,DateTimeOffset.UtcNow,slots.All(slot=>slot.Status=="completed")?"completed":"queued",config,slots.Count){WorkshopBaseline=request.WorkshopBaseline,WorkshopDeckId=request.WorkshopDeckId};
+        var actualId=await store.CreateRun(run,slots,key,DeckImporter.Hash(request.WorkshopDeckId is null&&request.WorkshopBaseline is null?Json.Encode(config):Json.Encode(new{config,request.WorkshopBaseline,request.WorkshopDeckId})));
         if(actualId==id&&run.Status=="completed"){
             var now=DateTimeOffset.UtcNow;
             await store.SaveSessionTiming(new(Guid.NewGuid().ToString("N"),id,now,now,now,0,0,0,"completed"));
@@ -74,7 +85,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     {
         await mutations.WaitAsync();try {
             var run=store.Run(id);if(active.ContainsKey(id)||run.Status is "running" or "queued" or "cancelling")throw new InvalidOperationException("Run is already active.");
-            var cap=engine.Capabilities();if(!cap.Available||cap.EngineHash!=run.Config.EngineHash||cap.AdapterHash!=run.Config.AdapterHash)throw new InvalidOperationException("Engine/adapter identity changed; create a new run.");
+            if(!engine.HasBundle(run.Config))throw new InvalidOperationException("The run's pinned Forge bundle is unavailable.");
             foreach(var slot in store.Slots(id))if(slot.Result is null&&(slot.Status is "pending" or "cancelled"||retryFailures&&slot.Status=="failed")) {
                 if(!AttemptPolicy.CanResume(slot))continue;await store.SaveSlot(slot with{Status="pending"});
             }
@@ -98,6 +109,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             await store.SaveRun(run with{Status="cancelled",Error="Service restarted; resume explicitly with original seeds."});
         }
         await foreach(var id in queue.Reader.ReadAllAsync(stoppingToken)) {
+            using var executionLease=executionGate is null?null:await executionGate.Acquire(stoppingToken);
             using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             await mutations.WaitAsync(stoppingToken);
             try{
@@ -126,8 +138,8 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
                     using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));
                     while(await timer.WaitForNextTickAsync(timingStop.Token))await RecordTiming();
                 }
-                var run=store.Run(id);var cap=engine.Capabilities();
-                if(!cap.Available||cap.EngineHash!=run.Config.EngineHash||cap.AdapterHash!=run.Config.AdapterHash)throw new InvalidOperationException("Engine or adapter changed after preflight.");
+                var run=store.Run(id);
+                if(!engine.HasBundle(run.Config))throw new InvalidOperationException("The run's pinned Forge bundle is unavailable.");
                 async Task PlaySlot(GameSlot slot,CancellationToken ct){
                     var attemptOrder=Stopwatch.GetTimestamp();var attemptClock=Stopwatch.StartNew();
                     var attempts=slot.Attempts.ToList();var number=attempts.Count+1;
@@ -190,6 +202,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
                 await store.SaveRun(store.Run(id) with{Status="cancelled"});
             }catch(Exception error){logger.LogError(error,"Run {Run} failed",id);await store.SaveRun(store.Run(id) with{Status="failed",Error=error.Message});}
             finally{
+                await engine.ReleaseWorkers(id);
                 timingStop.Cancel();
                 try{await checkpoints;}catch(OperationCanceledException)when(timingStop.IsCancellationRequested){}
                 elapsed.Stop();await RecordTiming(timingOutcome);

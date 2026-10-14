@@ -1,0 +1,4 @@
+.land-mana{position:relative;display:inline-flex;align-items:center;cursor:help;font-size:inherit}
+.land-mana-tooltip{display:none;position:absolute;z-index:20;top:calc(100% + 6px);left:0;width:260px;max-width:70vw;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);box-shadow:0 4px 12px var(--theme-shadow-soft);font-size:12px;font-weight:400;line-height:1.5;white-space:pre-line;text-align:left;pointer-events:none}
+.land-mana:hover .land-mana-tooltip,.land-mana:focus .land-mana-tooltip{display:block}
+.land-mana:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}

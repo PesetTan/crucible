@@ -6,6 +6,12 @@ Status: Proposed. Parent: [MVP specification index](README.md).
 
 ## User flows
 
+The workspace sidebar includes Forge Pilots at `/pilots`. It shows searchable pilot profiles and exact library deck versions using the shared assignment registry. A policy selector previews the assignments under each available run policy; it does not change session settings. Users can expand profiles and open assigned decks in Deck Library. Show service, loading, and empty states, and provide refresh. Saved sessions retain their recorded pilot identities.
+
+Forge Pilots also shows programmatic attribute evaluations from immutable engine fixtures. Separate configured Forge preferences, observed aggression and acceptable-decision checks. Show exact-profile numerators/denominators, inheritance, scope, expected/observed cases and build identity. Untested attributes remain unmeasured; evaluation errors are separate from failed checks; incompatible build or suite reports are historical. Each metric links to frozen evaluation code, with navigation back preserving the profile. Never infer overall pilot skill or Arena performance. See [pilot attributes](../pilot-attributes.md).
+
+Pilot match win rates use saved `PilotProfiles` and completed outcomes from the focused history API. Show each exact profile's latest measured session, its W/L/D record and completed player appearances. Draws remain in the denominator; games with identical pilots contribute a record for each side. Keep sessions separate to avoid pooling reused results, builds, attributes or experiments. Expand evidence for source-session links and recorded build, attributes, policy, optimizer tuning, Performance Mode and seed identity. Older versions are opt-in; current profiles with no recorded games stay unmeasured. Do not infer missing legacy assignments from current deck classifications. These exploratory rates reflect the decks and opponents tested, not isolated pilot ability or Arena forecasts.
+
 1. **Choose decks:** show public/personal origin, exact variant, count, capture date, eligibility, and a readable list. Public 4-Color Reanimator and personal Reanimator are separate cards. Explain each blocked deck with the affected card, mechanic, or pilot fixture.
 2. **Configure a run:** choose all pairings or one matchup; default to 200 games per pairing and balanced play/draw. Show total games, opening-policy limitation, tested pilot identity, and measured runtime estimate when available.
 3. **Run locally:** show valid completed games, total scheduled games, failures, active workers, elapsed time, and remaining estimate. Provide cancel and later resume. Do not display assumed win rates while no valid games have finished.
@@ -18,7 +24,7 @@ The session status pill sits on the same line as `SESSION / {short id}` above th
 In the matchup matrix, a small gold trophy beside a row deck name marks the highest mean opponent win rate, with equal weight for each shown opponent. Show the trophy only once every shown matchup has at least one valid completed game. Equal leaders each receive it. Recompute it when results or the selected matchup change; sorting rows does not change the leader.
 Each row deck name also has a compact pill showing that deck's equal-weighted mean opponent win rate, using the same calculation as Overall Performance. Show a coverage fraction in the pill when only some shown opponents have valid results; omit the pill when none do. Update the pill as results or the selected matchup change.
 
-Use plain labels and tooltips. Do not expose process arguments or storage schemas in the ordinary flow. Display the opening policy as “London mulligan; Arena Bo1 opening hands approximated” unless a verified Arena profile is implemented later. Rates are “simulated pilot win rate,” never a prediction of the user's Arena win rate.
+Use plain labels and tooltips. Do not expose process arguments or storage schemas in the ordinary flow. Display the opening policy as “London mulligan; Arena Bo1 opening hands approximated” unless a verified Arena profile is implemented later. Rates are “simulated pilot win rate,” never a prediction of the user's Arena win rate. Hovering or focusing a displayed simulated rate opens source context: the exact list's published win rate, approximate source match count, provider, tier, and captured observation window where recorded. Public source rates describe their recorded field, not the selected simulated matchup. Workshop descendants may show a published ancestor only as an explicitly labeled original-list reference; edited or personal lists without source statistics remain unrated. Apply the shared popup to matrix cells and averages, matchup and play/draw rates, history, Workshop comparisons, and game-length chart legends and table values. Popups must remain visible above scrollable tables and fit narrow viewports.
 
 Increase every app font size by one point from the prior typography scale, including headings, navigation, controls, tables, tooltips, and responsive variants. Keep layout and text wrapping usable at narrow widths.
 
@@ -41,6 +47,9 @@ Use `/api/v1`, JSON, stable IDs, and ISO 8601 timestamps with offsets. The follo
 | `POST /runs/preflight` | Validate an immutable requested configuration and return blockers/warnings |
 | `POST /runs` | Create and queue a validated configuration; require idempotency key |
 | `GET /runs` | Paginated run history and status |
+| `GET /run-history` | Versioned history view: aggregate matchup outcomes, progress, runtimes, build identity and referenced decks; excludes setup caches and game evidence |
+| `GET /workshop-state` | Versioned editor state: library manifests, session metadata, active guards, mana values, turn guidance and capacity; excludes setup caches and game evidence |
+| `GET /library-state` | Versioned library manifests, coverage and mana sorting; conditional ETag revalidation returns 304 for unchanged data |
 | `GET /runs/{id}` | Configuration, progress, gate status, and failure counts |
 | `POST /runs/{id}/cancel` | Idempotent cancellation request |
 | `POST /runs/{id}/resume` | Resume eligible unfinished slots without changing inputs |
@@ -88,3 +97,43 @@ When a session fails, its red error banner contains a Retry Session button that 
 - A user can inspect the full list, pilot identity, and opening-policy limitation from a result.
 - Each session log page can return to session details through its session label; the active log is identifiable in the menu at desktop and narrow widths.
 - Log filters, sort direction, pagination, replay links, raw JSON access, and empty/loading/error states work without interrupting an active simulation.
+
+## Deck Workshop
+
+Add `Deck Workshop` between Deck Library and Run History in the sidebar, at `/workshop`. Deck Library offers `Edit a copy`. Each deck in a session matchup offers `Modify & Rerun`, linking with explicit deck, opponent, and baseline session IDs. Workshop session results link back to their comparison.
+
+The workspace supports choosing a library/custom version or pasting Arena text, card search, quantity controls, removal, rules text, a main-deck total, and added/removed changes. Group editable cards into Creatures, Non-Creatures, and Lands, with quantity totals per group and alphabetical card names; classify multi-face cards by their front face. Preserve drafts and workshop selections in browser storage. Explicit entry links take precedence over a restored draft from a different entry context. Incomplete drafts are allowed; save and run errors identify the affected cards. Sideboard provenance is collapsed and read-only.
+
+Keep the baseline and exact version visible. Library entry requires an opponent and starts with existing run defaults. Results entry copies the recorded matchup settings. Editing is available during active simulations; the service enforces the existing idle requirement for launching another run. `Rerun Matchup` saves the current valid version and starts a new session. Comparison remains in the workspace, refreshes while active, and links to both sessions, Game Evidence, and recorded game replays through `Open Replay`. Users can choose a prior matching matchup as the new baseline.
+
+Add service contracts: `GET /api/v1/cards/search?q=...` (bounded catalog results); `POST /api/v1/decks/resolve` (Arena text to cards plus line issues); `POST /api/v1/decks/validate` (structural errors and simulation blockers); `POST /api/v1/decks/custom` (immutable custom version); and `GET /api/v1/runs/{id}/workshop?deckId=...&opponentId=...` (scoped summary and diagnostic/replay evidence). Extend IUiBackend for these operations. Deck creation accepts name, optional parent ID, and main-deck identity/quantity pairs; all card metadata is resolved service-side. Mutation requests retain local instance-token protection. Existing manifests/sessions deserialize with optional lineage/baseline metadata absent.
+
+### Consistent deck labels
+
+Use the shared `DeckIdentity` component throughout deck selection, library, workshop, history, results, charts, logs, and replay. Display colors (guild/shard/wedge names, mono-color, or colorless) and subtype; show the persistent variant friendly name beneath in smaller text. Preserve source names and exact IDs in stored manifests. The component wraps within its available width, with a compact mode for dense tables, legends, and actions. Deck selectors use the shared `DeckChoiceLabel` renderer and presentation helper; accessibility text uses `DeckDisplay.Text`. Missing classifications remain explicit; older named workshop copies can use their existing strategy mapping.
+
+Deck dropdowns group choices alphabetically by color name (such as Abzan, Dimir, and Red), with subtype and friendly variant text retained. Use this same grouping and text-only choice renderer for library, workshop, matchup, baseline, and log selectors; do not repeat mana icons inside selector choices or the selected value.
+
+Matchup dropdown choices and selected values render both deck labels side by side in one `Deck A vs Deck B` row, using the shared `DeckIdentity` component. Each friendly variant name stays beneath its corresponding deck, and optional session context appears beneath the matchup. On narrow screens the deck text may wrap within its side of the row; the opponent must not become a separate row.
+
+All dropdowns use the shared `AppSelect` combobox implementation, including pilot policy, history status and sort, time units, log filters, and trigger categories. `DeckSelect` supplies color grouping and the rich deck/matchup template through this same control. Plain choices retain their declared order and labels; optional all/empty choices are explicit. Preserve change callbacks, keyboard navigation, type-ahead, Escape/Tab and outside dismissal, disabled controls, popup placement, and mobile sizing.
+
+### Compact Deck Library
+
+Deck Library uses compact deck rows with full lists collapsed initially. Show the exact version identity, source, main-deck composition, script coverage, default-policy pilot, and the latest linked session with status and deck-specific valid W/L/D counts. Card list, Previous runs, and Source & details expand independently. Group cards into Creatures, Non-Creatures, and Lands; use columns where space permits and one column on narrow screens. Preserve card rules expansion, missing-script markers, sideboard provenance, public observed statistics, lineage, and Edit a copy.
+
+Read previous sessions through the existing aggregate run-history API; link only sessions whose recorded deck IDs include this immutable version. List all matching sessions newest first with their recorded pilot (or Not recorded), status, per-deck valid results, session link, and Game Evidence link. Keep historical pilots separate from the pilot selected by the default new-session policy. Refresh history every ten seconds even when the library ETag is unchanged; unavailable history is distinct from zero prior sessions.
+
+### Compact Deck Workshop
+
+Keep the editor and save action prominent. Collapse source selection after a draft loads; retain the source identity and Original list link beside the draft. Use dense quantity/name/remove rows, expandable card rules, and independently collapsible Creatures, Non-Creatures, and Lands with live totals. Show draft changes in a collapsed disclosure. On wide screens place matchup settings beside the editor; stack them on narrow screens with compact controls. Preserve source/paste workflows, browser drafts, validation, immutable saves, run settings and active-session guards.
+
+Show a compact `Pilots for next run` summary for the current draft and selected opponent beside the matchup settings. Resolve the draft from its current cards and inherited source classification using the same default policy submitted by Workshop reruns. Each comparison shows both `Pilots used` from the session's saved profile mapping; missing historical profiles read `Not recorded`.
+
+Sort Workshop lands by their displayed mana-production symbol sequence in W–U–B–R–G–C order, then by card name. Fetch-only and unknown-production lands follow mana producers. Other card groups retain mana-value and name ordering.
+
+Compare results starts collapsed except when explicitly entering a result comparison. Its summary indicates available results or the edited-versus-baseline delta. Within expanded results keep rates, W/L/D, denominators and session/evidence links visible; put longer statistics and build details in a disclosure. Advanced settings, sideboard provenance and replay/distribution sections remain expandable and keyboard accessible.
+
+## Pilot optimization API
+
+Service-only `/api/v1/pilot-optimizations` supplies CLI discovery, idempotent experiment creation, controlled source/fixture staging, start/pause/resume, status/report, bounded evidence/source excerpts, JFR diagnostics and explicit promotion. All mutations use existing instance-token/origin checks. Experiment execution shares scheduling exclusion with ordinary sessions. New run/preflight requests optionally accept `optimizerPolicyId`; saved configs freeze the published policy and isolate reuse/timing by its immutable identity. No optimizer UI is added. See [Pilot Optimizer](../pilot-optimizer.md) for the complete workflow and safeguards.

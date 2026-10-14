@@ -1,0 +1,146 @@
+@page "/pilots"
+@inject IUiBackend Backend
+@inject PilotEvaluationStore Evaluations
+<PageTitle>Forge Pilots — Crucible</PageTitle>
+<div class="eyebrow">AUTOMATED PLAY / PILOT PROFILES</div>
+<h1>Forge Pilots.</h1>
+<p class="lead">Explore the automated pilots available for your decks.</p>
+<p class="small muted">Profiles supplement Forge's decisions. Results describe exploratory pilot games. Each session keeps its recorded pilot settings.</p>
+@if(Backend.ConnectionError is {} connection){<div class="error" role="status">@connection</div>}
+<div class="pilot-toolbar">
+    <div class="dropdown-field"><label for="pilot-view-policy">Assignment mode</label><AppSelect Id="pilot-view-policy" Label="Assignment mode" Options="modes" @bind-Value="mode" /></div>
+    <div><label for="pilot-search">Find a pilot or deck</label><input id="pilot-search" type="search" placeholder="Search profiles, subtypes, or decks…" @bind="query" @bind:event="oninput" /></div>
+    <button type="button" @onclick="Load" disabled="@loading">@(loading?"Refreshing…":"Refresh")</button>
+</div>
+<p class="small muted">@ModeDescription Preview only. Set the session's pilot policy in Deck Tester.</p>
+<section class="pilot-win-rates" aria-label="Pilot match win rates">
+    <div class="pilot-heading"><h2>Pilot win rates</h2><label class="pilot-history-toggle"><input type="checkbox" @bind="includeOlder" /> Include older pilot versions</label></div>
+    <p class="small muted">Latest measured session for each exact pilot · Wins / completed player appearances, including draws. Decks and opponents differ, so these rates do not rank pilot skill. Exploratory Forge results, not Arena forecasts.</p>
+    @if(history is null){<p class="small muted">@(loading?"Loading match results…":"Match results are unavailable. Refresh when the service reconnects.")</p>}
+    else{
+        <div class="table-scroll"><table class="pilot-rates-table">
+            <thead><tr><th scope="col">Pilot</th><th scope="col">Win rate</th><th scope="col">W / L / D</th><th scope="col">Sample / evidence</th></tr></thead>
+            <tbody>@foreach(var profile in RateProfiles()){
+                var records=winRates.GetValueOrDefault(profile)??[];
+                var latest=records.FirstOrDefault();
+                <tr @key="profile"><th scope="row">@Label(profile)<small><code>@profile</code></small></th>
+                    <td><strong class="@(latest is null?"muted":"")">@(latest is null?"Unmeasured":Metrics.Rate(latest.Rate))</strong></td>
+                    <td class="pilot-record">@(latest is null?"—":$"{latest.Wins} / {latest.Losses} / {latest.Draws}")</td>
+                    <td>@if(latest is null){<span class="small muted">No completed games with this recorded profile.</span>}
+                        else{
+                            <span class="small">@latest.Games.ToString("N0") player appearances · @latest.DeckVersions deck @(latest.DeckVersions==1?"version":"versions")</span>
+                            @if(!latest.MatchesBuild(history.Capabilities)){<span class="small muted pilot-rate-note">Historical build or attributes</span>}
+                            <PilotMatchRecord Records="records" Active="history.Capabilities" />
+                        }
+                    </td>
+                </tr>
+            }</tbody>
+        </table></div>
+        @if(RateProfiles().Count==0){<p class="small muted">No matching pilots.</p>}
+        @if(unassignedGames>0){<p class="small muted">@unassignedGames.ToString("N0") completed games in older sessions have no saved pilot assignments and are excluded.</p>}
+    }
+</section>
+@if(evaluation.Error is {} evaluationError){<div class="error" role="status">@evaluationError</div>}
+@if(evaluation.Report is {} report){
+    <section class="pilot-evaluation-note">
+        <strong>Programmatic attribute evaluation</strong>
+        <p>@report.Profiles.Count profiles · @report.Profiles.Sum(p=>p.Dimensions.Sum(d=>d.Cases.Count)) positions · @report.CompletedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</p>
+        <p class="small muted">Check percentages describe these positions. Aggression measures an observed tendency. No overall skill rating is inferred.</p>
+        @if(!evaluation.Current){<p class="small pilot-evaluation-warning">This report used a different engine build or evaluation suite. Its scores are historical.</p>}
+        <details><summary>Inherited Forge settings and evaluation identity</summary>
+            <p class="small muted">Evaluated profiles use Forge @report.BaseProfile as their base. These preferences guide behavior; they are not ability ratings.</p>
+            <dl class="pilot-settings">@foreach(var setting in settingLabels){<dt>@setting.Value</dt><dd>@report.Settings.GetValueOrDefault(setting.Key,"Not recorded")</dd>}</dl>
+            <p class="small muted">Fixture seed: @report.FixtureSeed · Frozen fixture annotations<br />Engine: <code>@report.EngineHash</code><br />Bridge: <code>@report.AdapterHash</code><br />Report: <code>@report.Id</code></p>
+        </details>
+    </section>
+}else if(evaluation.Error is null){<p class="small muted">Attribute measurements have not been generated yet.</p>}
+@if(library is null){
+    <div class="empty" role="status"><p>@(loading?"Loading pilot assignments…":"Pilot assignments are unavailable. Refresh when the service reconnects.")</p></div>
+}else{
+    var groups = FilteredGroups();
+    <div class="pilot-heading"><h2>Pilot profiles</h2><span class="small muted">@groups.Count @(groups.Count==1?"profile":"profiles") · @groups.Sum(g=>g.Count()) deck versions shown</span></div>
+    @if(groups.Count==0){<div class="empty" role="status"><p>@(decks.Count==0?"No decks in the library yet.":"No matching pilots or decks.")</p></div>}
+    @foreach(var group in groups){
+        <details class="pilot-profile" @key="group.Key">
+            <summary><strong>@Label(group.Key)</strong><span class="muted">@(winRates.GetValueOrDefault(group.Key)?.FirstOrDefault() is {} rate?$"{Metrics.Rate(rate.Rate)} · {rate.Games:N0} appearances":"Win rate unmeasured") · @group.Count() deck @(group.Count()==1?"version":"versions")</span></summary>
+            <p class="small muted">Profile ID: <code>@group.Key</code></p>
+            <PilotScorecard Profile="@group.Key" Evaluation="evaluation" />
+            <ul class="pilot-decks">
+                @foreach(var deck in group.OrderBy(DeckDisplay.Text)){
+                    <li><a href="@($"/decks#{deck.Id}")" aria-label="@($"Open {DeckDisplay.Text(deck)} in Deck Library")"><DeckIdentity Deck="deck" Compact="true" /></a><span class="small muted">@DeckStrategy.Label(deck.Strategy)</span></li>
+                }
+            </ul>
+        </details>
+    }
+}
+
+@code {
+    private string mode=ReanimatorPilots.CurrentAggroMode,query="";
+    private bool loading=true;
+    private bool includeOlder;
+    private HistorySnapshot? history;
+    private Dictionary<string,List<PilotSessionRate>> winRates=[];
+    private int unassignedGames;
+    private PilotEvaluationSnapshot evaluation=new(null,false,null);
+    private LibrarySnapshot? library;
+    private List<DeckManifest> decks=[];
+    private readonly SelectOption[] modes=[
+        new(ReanimatorPilots.CurrentAggroMode,"Standard (default)"),
+        new(ReanimatorPilots.CurrentSubtypeMode,"By deck subtype"),
+        new(ReanimatorPilots.Baseline,"Forge Default")
+    ];
+    private string ModeDescription=>mode switch{
+        ReanimatorPilots.CurrentSubtypeMode=>"Uses subtype-specific pilots where available, including Reanimator.",
+        ReanimatorPilots.Baseline=>"Uses Forge's built-in pilot for every deck.",
+        _=>"Uses Aggro, Control, or Reanimator pilots where available; other decks use Forge Default."
+    };
+    protected override Task OnInitializedAsync()=>Load();
+    private readonly Dictionary<string,string> settingLabels=new(){
+        ["PLAY_AGGRO"]="Aggressive play enabled",
+        ["CHANCE_TO_ATTACK_INTO_TRADE"]="Configured trade-attack chance (%)",
+        ["CHANCE_TO_ATKTRADE_WHEN_OPP_HAS_MANA"]="Trade-attack chance with opponent mana (%)",
+        ["TRY_TO_AVOID_ATTACKING_INTO_CERTAIN_BLOCK"]="Avoid clearly unfavorable blocks",
+        ["MULLIGAN_THRESHOLD"]="Mulligan hand-size threshold",
+        ["CHANCE_TO_COUNTER_CMC_1"]="Configured one-mana counter chance (%)",
+        ["RESERVE_MANA_FOR_MAIN2_CHANCE"]="Configured mana-reservation chance (%)"
+    };
+    private async Task Load(){
+        loading=true;
+        try{
+            if(await Backend.LibraryState() is {} next){library=next;decks=next.Decks.Select(d=>d.Manifest).ToList();}
+            if(await Backend.History() is {} results){
+                history=results;winRates=PilotWinRates.FromHistory(results);
+                unassignedGames=results.Sessions.Where(s=>s.Progress.Run.Config.PilotProfiles is null).Sum(s=>s.Matchups.Sum(m=>m.Valid));
+            }
+        }finally{evaluation=Evaluations.Read();loading=false;}
+    }
+    private List<string> RateProfiles(){
+        var current=new[]{ReanimatorPilots.Default,ReanimatorPilots.Unified,ReanimatorPilots.Aggro,ReanimatorPilots.Control}.Concat(SubtypePilots.Profiles.Values);
+        var profiles=includeOlder?current.Concat(PilotNames.ById.Keys).Concat(winRates.Keys):current;
+        var search=query.Trim();
+        return profiles.Distinct().Where(p=>search.Length==0||$"{p} {Label(p)}".Contains(search,StringComparison.OrdinalIgnoreCase)
+                ||decks.Any(d=>ReanimatorPilots.Profile(d,mode)==p&&$"{d.Name} {DeckDisplay.Text(d)}".Contains(search,StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(p=>winRates.ContainsKey(p)).ThenBy(Label,StringComparer.OrdinalIgnoreCase).ToList();
+    }
+    private List<IGrouping<string,DeckManifest>> FilteredGroups(){
+        var search=query.Trim();
+        return decks.Where(d=>search.Length==0||$"{d.Name} {DeckDisplay.Text(d)} {d.Strategy} {ReanimatorPilots.Profile(d,mode)} {Label(ReanimatorPilots.Profile(d,mode))}".Contains(search,StringComparison.OrdinalIgnoreCase))
+            .GroupBy(d=>ReanimatorPilots.Profile(d,mode)).OrderBy(g=>Label(g.Key),StringComparer.OrdinalIgnoreCase).ToList();
+    }
+    private static string Label(string profile)=>PilotNames.Name(profile) is {} name?$"{name} · {Role(profile)}":Role(profile);
+    private static string Role(string profile)=>profile switch{
+        ReanimatorPilots.Unified=>"Reanimator v011",
+        ReanimatorPilots.Default=>"Forge Default",
+        ReanimatorPilots.Aggro=>"Aggro v001",
+        ReanimatorPilots.Control=>"Control v001",
+        ReanimatorPilots.PublicFourColor=>"Reanimator · Terror v009",
+        ReanimatorPilots.PublicSultai=>"Reanimator · Sultai v009",
+        ReanimatorPilots.Personal=>"Reanimator · Cryomancer v009",
+        ReanimatorPilots.Shared=>"Reanimator · Shared v009",
+        "reanimator-terror-v10"=>"Reanimator · Terror v010",
+        "reanimator-sultai-v10"=>"Reanimator · Sultai v010",
+        "reanimator-cryomancer-v10"=>"Reanimator · Cryomancer v010",
+        "reanimator-shared-v10"=>"Reanimator · Shared v010",
+        _=>string.Join(" ",profile.Split('-').Select(word=>word.Length==0?word:word[0]=='v'&&word.Length>1&&char.IsDigit(word[1])?word:char.ToUpperInvariant(word[0])+word[1..]))
+    };
+}

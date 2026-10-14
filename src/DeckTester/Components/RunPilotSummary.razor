@@ -1,0 +1,51 @@
+<section class="saved-pilots" aria-label="Saved pilots for this session">
+    <div class="saved-pilots-heading"><strong>Deck pilots</strong><span>Recorded for this session</span></div>
+    <ul class="saved-pilots-list">
+        @foreach (var id in Config.DeckIds)
+        {
+            var profile = Config.PilotProfiles?.GetValueOrDefault(id);
+            <li class="saved-pilot-row">
+                <DeckIdentity DeckId="@id" Compact="true" />
+                <dl class="saved-pilot-assignment"><dt>Pilot</dt><dd title="@profile">@PilotLabel(profile)</dd></dl>
+            </li>
+        }
+    </ul>
+    <details class="saved-pilot-details">
+        <summary>Saved pilot details</summary>
+        <p class="small muted">These are the settings recorded for this session. Changing a pilot or card attributes later does not change this record.</p>
+        <dl class="saved-pilot-settings">
+            <dt>Policy</dt><dd>@ReanimatorPilots.DisplayName(Config.Pilot)</dd>
+            @foreach (var id in Config.DeckIds)
+            {
+                <dt><DeckIdentity DeckId="@id" Compact="true" /></dt><dd><code>@(Config.PilotProfiles?.GetValueOrDefault(id) ?? "Not recorded")</code></dd>
+            }
+            <dt>Engine</dt><dd><BuildName Hash="@Config.EngineHash" /> <code>@Config.EngineHash</code></dd>
+            <dt>Pilot Bridge</dt><dd><BuildName Hash="@Config.AdapterHash" Bridge="true" /> <code>@Config.AdapterHash</code></dd>
+            <dt>Attributes hash</dt><dd><code>@(Config.AttributesHash ?? "Not recorded")</code></dd>
+            <dt>Performance Mode</dt><dd>@(Config.PerformanceMode ? "On" : "Off")</dd>
+            <dt>Seed / scheme</dt><dd>@Config.RootSeed / @Config.SeedScheme</dd>
+            <dt>Opening hands</dt><dd>@Config.OpeningPolicy</dd>
+        </dl>
+        @if (ActiveBuild is {} active)
+        {
+            <p class="small muted">@(Config.EngineHash == active.EngineHash && Config.AdapterHash == active.AdapterHash ? "Engine and adapter match the current build." : "This session used a different engine or adapter build. Its saved results are preserved.")</p>
+        }
+        @if (Config.CardAttributes is {} attributes)
+        {
+            <details class="saved-attribute-snapshot"><summary>Card attributes snapshot · @attributes.Count cards</summary><pre>@System.Text.Json.JsonSerializer.Serialize(attributes, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre></details>
+        }
+        else
+        {
+            <p class="small muted">Card attributes snapshot was not recorded for this session.</p>
+        }
+    </details>
+</section>
+
+@code {
+    private static string PilotLabel(string? profile){
+        if(profile is null)return "Not recorded";
+        return ReanimatorPilots.DisplayName(profile);
+    }
+    [Parameter, EditorRequired] public RunConfig Config { get; set; } = default!;
+    [Parameter] public Capabilities? ActiveBuild { get; set; }
+}

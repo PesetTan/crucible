@@ -16,6 +16,7 @@ public abstract class PersistentSelectionPage<T> : ComponentBase where T : class
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Keep the legacy storage prefix so existing browser selections survive the app rename.
         var key = "gauntlet:selections:v1:" + SelectionKey;
         try
         {
@@ -61,8 +62,13 @@ public abstract class PersistentSelectionPage<T> : ComponentBase where T : class
 }
 
 public sealed record HomeSelections(List<string> DeckIds, int Games, int Workers, int Timeout,
-    int TurnLimit, long Seed, bool StaggerStarts, double StartupSpacingSeconds, bool FollowLongestGame,
-    bool ExplicitDeckSelection = false);
+    int TurnLimit, long Seed, bool StaggerStarts, double StartupSpacingSeconds,
+    bool ExplicitDeckSelection = false, bool PerformanceMode = false, string PilotMode = ReanimatorPilots.CurrentAggroMode);
 public sealed record ResultSelections(string Matchup, string Outcome, string Mana, int Page, string TimeUnit = "rounds");
 public sealed record SessionLogSelections(string Deck,string Decision,string Status,string Matchup,string Outcome,string Mana,string TimeUnit,int Page);
 public sealed record ReplaySelections(bool Audit);
+
+public sealed record WorkshopDraft(string Name,string? ParentId,string? SavedId,string OpponentId,
+    List<CardEntry> Cards,List<CardEntry> Sideboard,List<CardEntry> StartingCards,string Paste,List<string> ResolveIssues,
+    string? BaselineRunId,string? BaselineDeckId,string? LatestRunId,string? LatestDeckId,
+    int Games,int Workers,int Timeout,int TurnLimit,long Seed,bool Performance,bool Stagger,double? Spacing,int EstimatedSeconds,int LeadSeconds,bool HasDraft=false);

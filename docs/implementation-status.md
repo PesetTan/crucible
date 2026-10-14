@@ -32,3 +32,11 @@ The rules, generated-object coverage, pilot strategy, hidden-information boundar
 The current replay is a viewer of captured full-state checkpoints and engine event descriptions. Complete normalized legal-decision/payment tracing, private library order, zone-change lineage, mana-pool visualization, and exact skipped-turn cycle grouping are not implemented. The app exposes these limitations and does not infer the missing fields. Arena hand-smoothing parity, independently refreshed legality, and causal loss attribution are not claimed.
 
 The default full 2,000/3,000-game matrices are available to schedule locally but have not been run or independently validated during implementation. Full sample sizes do not remove pilot or engine bias.
+
+## Deck Workshop — October 12, 2026
+
+Deck Workshop provides local catalog search and Arena-text resolution, browser-persisted drafts, immutable custom versions with parent provenance, matchup reruns, and scoped baseline comparisons. Library and session matchup links enter the workspace; workshop sessions link back to it. The service owns card validation and deck creation, while the UI communicates through IUiBackend.
+
+Acceptance evidence: build with no warnings; WorkshopChecks cover parsing/printing ambiguity, copy limits/exceptions, sideboards, version immutability, source byte integrity, oriented statistics, missing diagnostics, legacy records, and cache keys. HostSeparationChecks verify service boundaries. Visible Safari verification used a two-game edited Mono-White Auras matchup against Sultai Reanimator and opened its saved replay. This small verification sample establishes the workflow, not a deck recommendation or a measured improvement.
+
+Draft restoration was visibly rechecked after fixing initialization order: a renamed 60-card draft with 21 Plains and 3 Shardmage's Rescue survives refresh. Responsive verification used Safari at 375 pixels; controls and comparison cards fit the narrow layout. Reopening a workshop result retains that result's settings, while its original baseline remains fixed.

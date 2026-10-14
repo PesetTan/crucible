@@ -1,0 +1,41 @@
+# Exploratory Control pilot v1
+
+The combined mode is `control-adaptive-v1+reanimator-v9`. The displayed pilot name is `control-v001`; its recorded profile ID remains `control-shared-v1` for reproducibility. This profile applies when the actual deck database's broad `strategy` column equals `Control`, ignoring case. `subtype` is a separate archetype annotation, not an assignment synonym. The Reanimator subtype takes precedence and retains its existing v9 variant selection. Exact Control includes Azorius Control, Dimir Control, 4-Color Control, 5-Color Control, Jeskai Lessons and Jeskai Superfriends. Jeskai Artifacts has `control-combo` / `Artifacts` and does not receive this pilot. Aggro–Control and Control–Combo are distinct labels, so neither is matched by substring. Current Reanimator decks are Control–Combo, so no current exact-Control overlap exists.
+
+The existing API mode `reanimator-adaptive-v9` remains accepted with its original assignments. New setup defaults to the combined mode; an old v9 setup preference migrates to it. Existing sessions keep their saved profiles, attributes and immutable engine bundle. Baseline mode assigns Forge Default to every deck. Combined mode, per-deck profiles, attributes hash and adapter hash prevent incompatible cache/session reuse.
+
+## Evidence and bounded behavior
+
+Reviewed the current six Control lists, exact catalog text/attributes, the pinned Forge card scripts and controller/payment implementation. Verified SHA256 for all 400 historical 4-Color Control replay files in session `4eb132dcb9974ebca7368bda31e0b3a6`. The scan found 399 Ill-Timed Explosion reflexive triggers, including 183 with visible enemy creatures above toughness two. Those are opportunities to inspect, not 183 established mistakes.
+
+Forge's Ill-Timed Explosion script draws two, asks for an optional two-card discard cost, then resolves damage equal to the highest discarded mana value. Its default cost visitor can select low-value cards without considering the resulting sweeper damage. The Control visitor starts with Forge's accepted, legal baseline payment, and considers at most 120 pairs from its own hand (fallback beyond 16 held cards). It changes the pair only for a positive, strictly better predicted battlefield trade that outweighs the extra configured hand cost. Forge's damage predictor, destruction/shield guards and creature evaluator account for visible casualties on both sides. Keeping the last held land below the configured land goal adds a resource penalty, including when a two-card discard would lose both remaining lands. Equal scores retain the baseline or first stable offered pair. Forge still accepts/declines the optional payment, checks payment legality, resolves the reflexive trigger, damage and every subsequent action.
+
+An annotated single-card graveyard exile effect may replace Forge's target with a higher annotated enemy graveyard threat, from public face-up cards passing Forge `canTarget`. It retains Forge's trigger acceptance and target-count checks; unsupported APIs, cloned sources and targeting-player effects fall back. Reviewed graveyard priorities distinguish mass-reanimation/copier threats, graveyard abilities and flashback from inert cards. Priorities are frozen metadata, not new card-name branches.
+
+Forge retains general interaction timing, removal/counter target selection, sweep casting, draw decisions, mana payment, mulligans, combat and win-condition sequencing. The pilot records Forge's chosen actions and targets for future investigation; only the two reviewed decision paths override choices. This is a first bounded Control policy, not expert play or full fixture validation. The new helpers use own hand and public zones; the inherited Forge information boundary remains unvalidated.
+
+## Metadata
+
+The extensible `cards.attributes.control` object supports:
+
+- `discardMaxManaSweeper`: opt into the reviewed two-card, maximum-discarded-mana damage route, with matching Forge ability/API guards.
+- `landGoal`: battlefield land goal for retaining the final held land (default 5).
+- `keepPriority`: heuristic opportunity cost of discarding a resource, interaction or finisher.
+- `prioritizeGraveyardExile`: opt into the reviewed single-card graveyard-to-exile target route.
+- `graveyardExilePriority`: public graveyard threat value; unknown cards default to zero.
+
+These fields coexist with Reanimator metadata and unknown keys. Names in the seed file annotate reviewed catalog facts; implementation branches use metadata and ability structure. Changes are append-only catalog merges with history. Frozen historical snapshots and deck manifests are preserved.
+
+## Validation evidence
+
+Evidence and the frozen matched-test runner are under `data/reports/control-pilot-v1/`. Selection seed 1301 chose 16 diagnostic samples across four opponents, both starting positions and historical wins/losses. Exact slot seeds and immutable deck versions are saved in `frozen.json`. Both policies receive identical attributes and opponent policies, including Reanimator v9 in both executions; their results must be compared to one another, not the historical v8 outcome. Executions are serial complete opposed games with normal rules and a turn-limit safeguard; no outcome generation or simulation skipping. No Control mirror is in this cohort. Any future mirror with both policies changed must be reported separately.
+
+### Completed v1 results
+
+All 32 matched executions completed with one engine terminal outcome each, hash-verified checkpoints/replays, identical opposed deck/attribute manifests, exact paired seeds and unchanged opponent policies. Execution timestamps verify that no opposed tests overlapped. Control wins changed **8/16 to 9/16: one gain, zero regressions**. Each of the four opponent groups has four samples; Jeskai Artifacts remains 2 wins, Auras 2, Sultai 2, and personal Cryomancer Reanimator changes 2 to 3. This cohort is selected for diagnosis, not a random matchup-rate estimate.
+
+Three discard overrides occurred, across samples 9 and 11. Sample 9 kept its win but finished two turns later. Sample 11, slot `fff04eb2f8964380ab40834d3413b59b`, changes a turn-24 discard of Stormcarved Coast + Blood Crypt (zero damage) to Inevitable Defeat + Stormcarved Coast (four damage), with predicted net visible battlefield value increasing from 0 to 386. It changes a turn-34 milling loss to a turn-30 win. The published bundle exactly reproduces every candidate state checkpoint for this gained game. The other 14 samples retain the baseline decisions/outcomes. No graveyard target override occurred in the cohort; reviewed baseline Lantern choices already selected the annotated highest threats when present. Its metadata extension is fixture-checked, with no demonstrated additional gain claimed.
+
+Passed: actual .NET project build without restore (zero warnings/errors), PilotIdentityChecks, CardAttributesChecks, ReanimatorPilotChecks, ControlPilotChecks and ControlIntegrationChecks. Constructed integration positions use Forge's real sweeper ability and cost visitor to check legal two-card discards, a visible 4/4, friendly-casualty fallback and concealed-hand invariance; a real graveyard exile ability checks legal public target selection from unfamiliar metadata priorities. These focused checks do not replace the full fixture gate or audit of inherited Forge behavior.
+
+Published immutable bundle: `656092f7e33fb10bd16be765879d566e5c9800f0413293a8436249004f59dc43-0abbcd1a093ca7f13b0e5f1094442464dd31efe7edd041f2c9176eb793f1c2b1`. All class hashes match the tested candidate. The six exact-Control classifications are verified live. A two-game normal-mode, single-worker service smoke session `a085d7f4f79944618434e6187ba438b8` completed with frozen attributes and `control-shared-v1` versus unchanged Forge Default. All 19 prior session payloads remain hash-identical after the idle host restart; original bundles, manifests and frozen snapshots remain intact. The live setup defaults to the combined mode, and preflight excludes older incompatible cached games. General Control behavior outside the two reviewed routes remains inherited Forge and unvalidated; only 4-Color Control has measured matched outcome evidence here.

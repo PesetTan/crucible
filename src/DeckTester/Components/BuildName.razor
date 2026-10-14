@@ -1,0 +1,6 @@
+@inject BuildNames Names
+<span class="build-name" title="@($"{(Bridge?"Pilot Bridge":"Engine")} ID: {Hash}")">@(Bridge?Names.Bridge(Hash):Names.Engine(Hash))</span>
+@code {
+    [Parameter, EditorRequired] public string Hash { get; set; } = "";
+    [Parameter] public bool Bridge { get; set; }
+}

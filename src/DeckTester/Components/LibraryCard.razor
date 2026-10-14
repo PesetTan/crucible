@@ -1,0 +1,10 @@
+<details class="card-row" open="@expanded">
+    <summary @onclick="Toggle" @onclick:preventDefault><span class="quantity">@Card.Quantity</span><strong>@Card.Name</strong><CardMana Card="Card" />@if(Missing){<span class="support missing">Missing</span>}</summary>
+    @if(expanded){<div class="card-text">@Card.Type · @Card.Set<br /><CardRules Text="@Card.Text" /></div>}
+</details>
+@code {
+    [Parameter,EditorRequired] public CardEntry Card { get; set; }=default!;
+    [Parameter] public bool Missing { get; set; }
+    private bool expanded;
+    private void Toggle()=>expanded=!expanded;
+}

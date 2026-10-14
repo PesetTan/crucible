@@ -1,0 +1,4 @@
+<span class="deck-name"><DeckColors Deck="Deck" /><span>@DeckDisplay.Subtype(Deck)</span></span>
+@code {
+    [Parameter, EditorRequired] public DeckManifest Deck { get; set; } = default!;
+}

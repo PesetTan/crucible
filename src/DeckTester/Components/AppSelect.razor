@@ -1,0 +1,80 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+<div class="deck-select @(open?"is-open":"")" @ref="root">
+    <button id="@Id" type="button" class="deck-select-trigger" role="combobox" aria-label="@Label" aria-haspopup="listbox" aria-expanded="@open.ToString().ToLowerInvariant()" aria-controls="@listId" aria-activedescendant="@(open?ActiveId:null)" disabled="@Disabled" @onclick="Toggle" @onkeydown="KeyDown">
+        @if(Selected is {} selected){@if(OptionTemplate is not null&&!(IncludeEmpty&&selected.Value=="")){@OptionTemplate(selected)}else{<span>@selected.Label</span>}}else{<span class="deck-select-placeholder">@Placeholder</span>}
+        <span class="deck-select-chevron" aria-hidden="true">⌄</span>
+    </button>
+    @if(open){
+        <div id="@listId" class="deck-select-list" role="listbox" aria-label="@Label">
+            @foreach(var group in groups){
+                var headingId=$"{listId}-group-{groups.IndexOf(group)}";
+                <div role="@(group.Key is null?null:"group")" aria-labelledby="@(group.Key is null?null:headingId)">
+                    @if(group.Key is not null){<div id="@headingId" class="deck-select-group">@group.Key</div>}
+                    @foreach(var choice in group){
+                        <div id="@OptionId(choice.Value)" @key="choice.Value" class="deck-select-option @(activeValue==choice.Value?"is-active":"")" role="option" aria-selected="@((Value==choice.Value).ToString().ToLowerInvariant())" @onclick="()=>Choose(choice.Value)">@if(OptionTemplate is not null&&!(IncludeEmpty&&choice.Value=="")){@OptionTemplate(choice)}else{<span>@choice.Label</span>}@if(Value==choice.Value){<span class="deck-select-check" aria-hidden="true">✓</span>}</div>
+                    }
+                </div>
+            }
+            @if(options.Count==0){<div class="deck-select-no-options">@EmptyText</div>}
+        </div>
+    }
+</div>
+@code {
+    [Parameter] public string? Id { get; set; }
+    [Parameter, EditorRequired] public string Label { get; set; } = "Choice";
+    [Parameter] public string Placeholder { get; set; } = "Choose…";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IEnumerable<SelectOption> Options { get; set; } = [];
+    [Parameter] public RenderFragment<SelectOption>? OptionTemplate { get; set; }
+    [Parameter] public bool IncludeEmpty { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "No choices available.";
+    [Parameter] public bool Disabled { get; set; }
+    private readonly string listId="deck-list-"+Guid.NewGuid().ToString("N");
+    private List<IGrouping<string?,SelectOption>> groups=[];
+    private List<SelectOption> options=[];
+    private bool open,scrollActive;
+    private string activeValue="",typed="";
+    private DateTimeOffset typedAt;
+    private ElementReference root;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<AppSelect>? reference;
+    private SelectOption? Selected=>options.FirstOrDefault(choice=>choice.Value==Value);
+    private string OptionId(string value)=>listId+"-option-"+options.FindIndex(choice=>choice.Value==value);
+    private string? ActiveId=>options.Count==0?null:OptionId(activeValue);
+    protected override void OnParametersSet(){
+        options=Options.Where(o=>!IncludeEmpty||o.Value!="").ToList();
+        if(IncludeEmpty)options.Insert(0,new SelectOption("",Placeholder));
+        groups=options.GroupBy(o=>o.Group).ToList();
+        if(Disabled)open=false;
+        if(!options.Any(o=>o.Value==activeValue))activeValue=Selected?.Value??options.FirstOrDefault()?.Value??"";
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender){
+        if(firstRender){module=await JS.InvokeAsync<IJSObjectReference>("import","./deck-select.js");reference=DotNetObjectReference.Create(this);await module.InvokeVoidAsync("attach",root,reference);}
+        if(open&&module is not null){await module.InvokeVoidAsync("position",root);if(scrollActive){scrollActive=false;await module.InvokeVoidAsync("scrollActive",root,ActiveId);}}
+    }
+    private void Toggle(){if(Disabled)return;open=!open;if(open){activeValue=Selected?.Value??options.FirstOrDefault()?.Value??"";typed="";scrollActive=true;}}
+    private async Task Choose(string value){if(Disabled)return;open=false;typed="";await ValueChanged.InvokeAsync(value);}
+    private async Task KeyDown(KeyboardEventArgs e){
+        if(Disabled)return;
+        if(e.Key=="Escape"||e.Key=="Tab"){open=false;return;}
+        if(e.Key is "Enter" or " "){if(open)await Choose(activeValue);else Toggle();return;}
+        if(e.Key is "ArrowDown" or "ArrowUp" or "Home" or "End"){
+            if(!open){open=true;activeValue=Selected?.Value??options.FirstOrDefault()?.Value??"";}
+            var index=options.FindIndex(choice=>choice.Value==activeValue);
+            index=e.Key switch{"Home"=>0,"End"=>options.Count-1,"ArrowDown"=>Math.Min(options.Count-1,index+1),_=>Math.Max(0,index-1)};
+            activeValue=index<0||options.Count==0?"":options[index].Value;scrollActive=true;return;
+        }
+        if(e.Key.Length==1&&!e.CtrlKey&&!e.MetaKey&&!e.AltKey){
+            if(!open){open=true;activeValue=Selected?.Value??options.FirstOrDefault()?.Value??"";}
+            var now=DateTimeOffset.UtcNow;if((now-typedAt).TotalSeconds>1)typed="";typedAt=now;typed+=e.Key;
+            var choice=options.FirstOrDefault(choice=>choice.Label.StartsWith(typed,StringComparison.OrdinalIgnoreCase));
+            if(choice is null){typed=e.Key;choice=options.FirstOrDefault(choice=>choice.Label.StartsWith(typed,StringComparison.OrdinalIgnoreCase));}
+            if(choice is not null){activeValue=choice.Value;scrollActive=true;}
+        }
+    }
+    [JSInvokable] public Task Dismiss()=>InvokeAsync(()=>{if(open){open=false;StateHasChanged();}});
+    public async ValueTask DisposeAsync(){if(module is not null)try{await module.InvokeVoidAsync("detach",root);await module.DisposeAsync();}catch(JSDisconnectedException){}reference?.Dispose();}
+}

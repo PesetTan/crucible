@@ -1,0 +1,246 @@
+@page "/workshop"
+@inherits PersistentSelectionPage<WorkshopDraft>
+@implements IDisposable
+@inject IUiBackend Backend
+<PageTitle>Deck Workshop — Crucible</PageTitle>
+<div class="workshop-heading"><div class="eyebrow">EDIT / RERUN / COMPARE</div><h1>Deck Workshop.</h1><p class="muted">Edit a copy, rerun a matchup, and compare the results.</p></div>
+@if(Backend.ConnectionError is {} connection){<div class="error" role="status">@connection</div>}
+@if(error is not null){<div class="error" role="alert">@error</div>}
+@if(message is not null){<div class="notice" role="status"><span>@message</span>@if(savedId is not null){<DeckIdentity Deck="@decks.FirstOrDefault(d=>d.Id==savedId)" Compact="true" />}</div>}
+<div class="workshop-page" inert="@(!SelectionsReady)">
+@if(baselineMatch is not null){<div class="workshop-baseline-bar"><strong>Baseline: <DeckIdentity Deck="@baselineMatch.Deck" /></strong><span>vs <DeckIdentity Deck="@baselineMatch.Opponent" /></span><a href="@($"/runs/{baselineMatch.Run.Id}")"><SourceWinRate Deck="baselineMatch.Deck" Focusable="false">@Metrics.Rate(baselineMatch.WinRate)</SourceWinRate> · @baselineMatch.Summary.Valid games</a></div>}
+<details class="panel workshop-source" open="@(!hasDraft)">
+    <summary>@(hasDraft?"Choose another deck or paste a list":"Start with a deck") <span class="muted">Standard Bo1</span></summary>
+    <label for="workshop-source">Library deck</label>
+    <div class="workshop-start"><DeckSelect Id="workshop-source" Label="Library deck" Decks="decks" @bind-Value="sourceId" /><button disabled="@(busy||sourceId.Length==0)" @onclick="LoadSource">Edit a copy</button></div>
+    <details><summary>Paste an Arena deck list</summary><label for="arena-list">Arena deck text</label><textarea id="arena-list" rows="5" @bind="paste" placeholder="Deck&#10;4 Card Name (SET) 123"></textarea><button disabled="@(busy||string.IsNullOrWhiteSpace(paste)||Backend.ConnectionError is not null)" @onclick="ResolvePaste">Load Pasted List</button></details>
+</details>
+@if(hasDraft){
+<div class="workshop-edit-layout">
+<section class="panel workshop-editor">
+    <div class="section-head workshop-editor-heading"><h2>Edit Main Deck</h2><span class="pill @(MainCount==60?"":"workshop-invalid")">@MainCount / 60 cards</span><button disabled="@(busy||!CanSave||Backend.ConnectionError is not null)" @onclick="Save">@(busy?"Working…":"Save Version to Library")</button></div>
+    @if(parentId is {} parent&&decks.FirstOrDefault(d=>d.Id==parent) is {} original){<p class="small muted workshop-copy"><span>Copy of</span><DeckIdentity Deck="original" /><a href="@($"/decks#{parent}")">Original list</a></p>}
+    <div class="workshop-draft-meta"><span class="small muted">Draft saved in this browser · Each save creates an exact version</span>@if(savedId is not null){<a class="small" href="@($"/decks#{savedId}")">Open saved version ↗</a>}</div>
+    <div class="workshop-search"><label for="workshop-search">Add a card</label><form class="workshop-start" @onsubmit="Search" @onsubmit:preventDefault><input id="workshop-search" @bind="query" @bind:event="oninput" placeholder="Search by card name" /><button type="submit" disabled="@(busy||query.Trim().Length<2||Backend.ConnectionError is not null)">Search Cards</button><button type="button" disabled="@(busy||(!searched&&query.Length==0))" @onclick="ClearSearch">Clear</button></form></div>
+    @if(searched){<div class="workshop-search-results">@foreach(var found in searchResults){<div class="workshop-found"><details><summary><strong>@found.Name</strong> <CardMana Card="found" /></summary><p>@found.Type · @found.Set</p><CardRules Text="@found.Text" />@if(!found.LocallyLegal){<p class="small muted">Local Standard legality evidence missing.</p>}</details><button aria-label="@($"Add {found.Name}")" @onclick="()=>Add(found)">Add</button></div>}@if(searchResults.Count==0){<p class="muted">No matching primary cards in the local catalog.</p>}</div>}
+    <div class="workshop-card-list">
+        @foreach(var category in new[]{"Creatures","Non-Creatures","Lands"}){
+            var categoryCards=cards.Where(c=>Category(c)==category);
+            var groupedCards=(category=="Lands"
+                ?categoryCards.OrderBy(LandMana.SortKey,StringComparer.Ordinal).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase)
+                :categoryCards.OrderBy(c=>manaValues.GetValueOrDefault(c.ArenaId,int.MaxValue)).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase)).ToList();
+            <details class="deck-card-group workshop-card-category" open>
+                <summary><strong>@category</strong> <span class="muted">· @groupedCards.Sum(c=>c.Quantity)</span></summary>
+                @foreach(var card in groupedCards){
+                    <div class="workshop-edit-row" @key="card.ArenaId">
+                        <div class="workshop-quantity"><button aria-label="@($"Remove one {card.Name}")" @onclick="()=>Adjust(card,-1)">−</button><input type="number" min="0" max="60" aria-label="@($"Quantity of {card.Name}")" value="@card.Quantity" @onchange="e=>SetQuantity(card,e)" /><button aria-label="@($"Add one {card.Name}")" @onclick="()=>Adjust(card,1)">+</button></div>
+                        <details><summary><strong>@card.Name</strong> <CardMana Card="card" /></summary><p>@card.Type · @card.Set</p><CardRules Text="@card.Text" /></details>
+                        <button class="workshop-remove" aria-label="@($"Remove all {card.Name}")" @onclick="()=>Remove(card)" title="@($"Remove all {card.Name}")">×</button>
+                    </div>
+                }
+            </details>
+        }
+    </div>
+    @if(sideboard.Count>0){<details><summary>Sideboard provenance · @sideboard.Sum(c=>c.Quantity) cards · excluded from games</summary>@foreach(var card in sideboard){<p>@card.Quantity @card.Name</p>}</details>}
+    @if(resolveIssues.Count>0){<div class="error"><strong>Resolve these pasted-list issues before saving.</strong>@foreach(var issue in resolveIssues){<p>@issue</p>}<p>Correct the Arena text and load it again.</p></div>}
+    @if(validation is not null){@foreach(var issue in validation.Errors){<p class="error">@issue</p>}@foreach(var issue in validation.Blockers){<p class="notice">@issue</p>}}
+    <details class="workshop-change-details">
+        <summary>Changes from @(baselineMatch is null?"starting deck":"baseline") <span class="muted">· @Changes.Count cards</span></summary>
+        @if(Changes.Count==0){<p class="muted">No main-deck changes.</p>}else{<ul class="workshop-changes">@foreach(var change in Changes){<li><span class="@(change.Delta>0?"added":"removed")">@(change.Delta>0?"+":"")@change.Delta</span> @change.Name</li>}</ul>}
+    </details>
+</section>
+<section class="panel workshop-session">
+    <div class="section-head"><h2>Rerun the Matchup</h2></div>
+    <label for="workshop-opponent">Opponent</label><DeckSelect Id="workshop-opponent" Label="Opponent" Placeholder="Choose an opponent…" Decks="decks.Where(d=>d.Id!=savedId)" @bind-Value="opponentId" @bind-Value:after="OpponentChanged" />
+    <section class="workshop-pilots" aria-label="Pilots for next run">
+        <strong>Pilots for next run</strong>
+        <dl><dt>Your deck</dt><dd title="@DraftPilot">@ReanimatorPilots.DisplayName(DraftPilot)</dd>
+            <dt>Opponent</dt><dd title="@OpponentPilot">@(OpponentPilot is {} profile?ReanimatorPilots.DisplayName(profile):"Choose an opponent")</dd></dl>
+        <small class="muted">Assigned by the default pilot policy. Saved results keep their recorded pilots.</small>
+    </section>
+    <div class="config-grid session-options">
+        <label>Games per Matchup<InputNumber @bind-Value="games" min="2" max="1000" step="2" /></label>
+        <ParallelGames @bind-Value="workers" Resources="resources" StaggerStarts="stagger" StartupSpacingSeconds="spacing" />
+    </div>
+    <details class="workshop-advanced"><summary>Advanced options</summary>
+        <div class="config-grid advanced-options">
+            <label>Forge Performance Mode <input type="checkbox" @bind="performance" /><small>May run faster by skipping selected Forge checks. Results are recorded and reused separately from normal mode; card behavior needs validation.</small></label>
+            <label>Time Limit per Game (Minutes)<InputNumber @bind-Value="TimeoutMinutes" min="0.17" max="30" step="any" /><small>0.17–30 minutes; default 3. Fractions allowed. Stops a stalled attempt. Games can finish sooner; engine startup counts toward this limit.</small></label>
+            <label>Root Seed<InputNumber @bind-Value="seed" /><small>Starting value for game randomness. Keeping it after editing produces different derived game seeds for the new deck version.</small></label>
+            <label>Maximum Actual Player Turns<InputNumber @bind-Value="turnLimit" min="10" max="1000" /><small>@if(turnStats is {} stats){<span>Suggested value: @stats.SuggestedLimit turns, based on the longest completed game of @stats.LongestGame turns across @stats.Games completed games in @stats.Sessions sessions.</span>}else{<span>No completed games yet; default is 150 turns.</span>}</small></label>
+        </div>
+        <details><summary>Engine start spacing</summary><div class="config-grid session-options"><label class="workshop-spacing-toggle">Space initial engine starts<input type="checkbox" @bind="stagger" /></label><label>Initial Spacing (Seconds)<InputNumber @bind-Value="spacing" min="0" max="5" step="0.1" disabled="@(!stagger)" /></label></div></details>
+        <p>Ordinary London mulligans approximate Arena Bo1 opening hands. No hand smoothing is guessed. Forge Default pilots make the mulligan and bottom choices.</p>
+        <p>A timeout or turn limit is an incomplete attempt, never a rules draw.</p>
+    </details>
+    @if(HasActiveSession){<div class="notice">A session is active. Editing and saving remain available. Wait for it to finish or pause it from its session page before launching another run.</div>}
+    <p class="small muted workshop-session-note">Balanced play/draw · No sideboarding · Exploratory Forge results</p>
+    <details class="workshop-run-details"><summary>Run details &amp; limits</summary><p class="small muted">New runs use the active engine build. Keeping the root seed after editing produces different derived game seeds.</p></details>
+    <div class="run-bar"><div><strong>1 matchup</strong><span> · @games full games</span><small>@(games/2) starts per deck · No sideboarding</small></div><button class="primary" disabled="@(busy||!CanSave||validation?.Blockers.Count>0||opponentId.Length==0||HasActiveSession||Backend.ConnectionError is not null)" @onclick="Rerun">@(HasActiveSession?"Session In Progress":busy?"Preparing…":"Rerun Matchup")</button></div>
+</section>
+</div>
+}
+<details class="panel workshop-comparison-section" open="@(EntryResult is not null)">
+    <summary>Compare results <span class="muted">@(baselineMatch is not null&&editedMatch is not null?$"{Delta} · Edited vs baseline":latestRunId is not null?"Latest session available":baselineMatch is not null?"Baseline selected":"Choose a baseline session")</span></summary>
+    <div class="workshop-comparison-controls"><button disabled="@busy" @onclick="()=>RefreshComparison(true)">Refresh</button></div>
+    <label for="workshop-baseline">Baseline session / deck</label><DeckSelect Id="workshop-baseline" Label="Baseline session / deck" Placeholder="Choose a baseline…" Choices="BaselineChoices" @bind-Value="BaselineKey" @bind-Value:after="RefreshComparison" />
+    @if(baselineMatch is not null){<p class="small muted">Baseline: <DeckIdentity Deck="@baselineMatch.Deck" /> · session @baselineMatch.Run.Id[..8]</p>}
+    @if(latestRunId is not null){<p>Latest workshop session: <a href="@($"/runs/{latestRunId}")">@latestRunId[..8]</a></p>}
+    @if(comparisonError is not null){<p class="notice">@comparisonError</p>}
+    @if(baselineMatch is not null&&editedMatch is not null){<div class="notice"><strong>Win-rate change: @Delta</strong><span>Edited minus baseline, in percentage points. Aggregate exploratory results; game randomness differs between deck versions. Compare the sample sizes and intervals.</span></div>@if(!Comparable(baselineMatch.Run.Config,editedMatch.Run.Config)){<p class="error">These sessions have different engine or run settings. Their difference also reflects those changes.</p>}}
+    @if(baselineMatch is not null&&editedMatch is not null){<details><summary>Card changes used in this rerun</summary>@foreach(var change in CardChanges(baselineMatch.Deck.Cards,editedMatch.Deck.Cards)){<p>@(change.Delta>0?"+":"")@change.Delta @change.Name</p>}</details>}
+    <div class="workshop-comparison">@if(baselineMatch is not null){<WorkshopComparison Match="baselineMatch" Title="Baseline" />}@if(editedMatch is not null){<WorkshopComparison Match="editedMatch" Title="Edited version" />}</div>
+    @if(baselineMatch is null&&editedMatch is null){<p class="muted">Open a matchup with Modify &amp; Rerun, or choose a baseline after selecting an opponent. Your new session appears here when you rerun.</p>}
+</details>
+</div>
+@code {
+    [SupplyParameterFromQuery(Name="deck")] public string? EntryDeck { get; set; }
+    [SupplyParameterFromQuery(Name="opponent")] public string? EntryOpponent { get; set; }
+    [SupplyParameterFromQuery(Name="baseline")] public string? EntryBaseline { get; set; }
+    [SupplyParameterFromQuery(Name="baselineDeck")] public string? EntryBaselineDeck { get; set; }
+    [SupplyParameterFromQuery(Name="result")] public string? EntryResult { get; set; }
+    private string? context;
+    protected override string SelectionKey=>"workshop:"+Context;
+    private string Context=>$"{EntryDeck}:{EntryOpponent}:{EntryBaseline}:{EntryBaselineDeck}:{EntryResult}";
+    private string name="Custom Deck",sourceId="",opponentId="",paste="",query="";
+    private string? parentId,savedId,baselineRunId,baselineDeckId,latestRunId,latestDeckId,error,message,comparisonError;
+    private List<CardEntry> cards=[],sideboard=[],startingCards=[],searchResults=[];
+    private List<string> resolveIssues=[];
+    private DeckValidation? validation;
+    private int validationRevision;
+    private WorkshopMatchup? baselineMatch,editedMatch;
+    private bool initialized,busy,searched,hasDraft,needsValidation=true;
+    private int games=200,workers=2,timeout=180,turnLimit=150,estimatedSeconds=15,leadSeconds=5;
+    private long seed=42;
+    private bool performance,stagger=true;
+    private double? spacing=1;
+    private readonly CancellationTokenSource lifetime=new();
+    private ResourceSnapshot? resources;
+    private List<DeckManifest> decks=[];
+    private Dictionary<string,DeckManifest> deckLookup=[];
+    private List<SimulationRun> runs=[];
+    private List<ActiveSessionProgress> activeSessions=[];
+    private Dictionary<int,int> manaValues=[];
+    private SessionTurnStats? turnStats;
+    private readonly WorkshopComparisonCache comparisonCache=new();
+    private int comparisonRevision;
+    private DeckManifest Deck(string id)=>deckLookup.GetValueOrDefault(id)??throw new KeyNotFoundException("Deck not found.");
+    private async Task RefreshWorkshop(){
+        var snapshot=await Backend.WorkshopState(lifetime.Token);
+        if(snapshot is null)return;
+        decks=snapshot.Decks;deckLookup=decks.ToDictionary(d=>d.Id);runs=snapshot.Runs;
+        activeSessions=snapshot.ActiveSessions;manaValues=snapshot.ManaValues;turnStats=snapshot.TurnStats;resources=snapshot.Resources;
+    }
+    private double TimeoutMinutes{get=>timeout/60.0;set=>timeout=(int)Math.Round(value*60,MidpointRounding.AwayFromZero);}
+    private bool HasActiveSession=>activeSessions.Count>0;
+    private int MainCount=>cards.Sum(c=>c.Quantity);
+    private static string Category(CardEntry card){
+        var type=card.Type.Split("//",StringSplitOptions.None)[0];
+        return type.Contains("Land",StringComparison.Ordinal)?"Lands":type.Contains("Creature",StringComparison.Ordinal)?"Creatures":"Non-Creatures";
+    }
+    private bool CanSave=>!needsValidation&&validation?.CanSave==true&&resolveIssues.Count==0;
+    private const string RerunPilotMode=ReanimatorPilots.CurrentSubtypeMode;
+    private string DraftPilot {
+        get {
+            var parent=parentId is {} id?deckLookup.GetValueOrDefault(id):null;
+            var draft=(parent??new DeckManifest("",name,"custom","","","",null,"","",DateTimeOffset.MinValue,[],"")) with {
+                Name=name,Cards=cards,Strategy=parent?.Strategy??DeckStrategy.ForName(name),Subtype=parent?.Subtype??DeckStrategy.SubtypeForName(name)
+            };
+            return ReanimatorPilots.Profile(draft,RerunPilotMode);
+        }
+    }
+    private string? OpponentPilot=>deckLookup.TryGetValue(opponentId,out var opponent)?ReanimatorPilots.Profile(opponent,RerunPilotMode):null;
+    private CustomDeckRequest Request=>new(name,cards.Select(c=>new WorkshopCard(c.ArenaId,c.Quantity)).ToList(),parentId,sideboard.Select(c=>new WorkshopCard(c.ArenaId,c.Quantity)).ToList());
+    private static List<(string Name,int Delta)> CardChanges(IEnumerable<CardEntry> originalCards,IEnumerable<CardEntry> changedCards){
+        var original=originalCards.Where(c=>c.Zone=="MainDeck").GroupBy(c=>c.Name).ToDictionary(g=>g.Key,g=>g.Sum(c=>c.Quantity));
+        var changed=changedCards.Where(c=>c.Zone=="MainDeck").GroupBy(c=>c.Name).ToDictionary(g=>g.Key,g=>g.Sum(c=>c.Quantity));
+        return original.Keys.Union(changed.Keys).Select(n=>(Name:n,Delta:changed.GetValueOrDefault(n)-original.GetValueOrDefault(n))).Where(c=>c.Delta!=0).OrderBy(c=>c.Name).ToList();
+    }
+    private List<(string Name,int Delta)> Changes {
+        get {var original=(baselineMatch?.Deck.Cards.Where(c=>c.Zone=="MainDeck")??startingCards).GroupBy(c=>c.Name).ToDictionary(g=>g.Key,g=>g.Sum(c=>c.Quantity));var current=cards.GroupBy(c=>c.Name).ToDictionary(g=>g.Key,g=>g.Sum(c=>c.Quantity));return original.Keys.Union(current.Keys).Select(n=>(Name:n,Delta:current.GetValueOrDefault(n)-original.GetValueOrDefault(n))).Where(c=>c.Delta!=0).OrderBy(c=>c.Name).ToList();}
+    }
+    protected override async Task OnInitializedAsync(){await RefreshWorkshop();initialized=true;_ = Poll();}
+    protected override Task OnParametersSetAsync(){
+        if(context==Context)return Task.CompletedTask;context=Context;Reset();
+        if(EntryDeck is {} deckId){try{Copy(Deck(deckId));}catch(KeyNotFoundException){error="The requested deck is unavailable.";}}
+        opponentId=EntryOpponent??"";baselineRunId=EntryBaseline;baselineDeckId=EntryBaselineDeck??EntryDeck;latestRunId=EntryResult;latestDeckId=EntryResult is null?null:EntryDeck;
+        if(EntryResult is not null&&runs.FirstOrDefault(r=>r.Id==EntryResult) is {} resultRun)UseSettings(resultRun.Config);
+        else if(baselineRunId is not null&&runs.FirstOrDefault(r=>r.Id==baselineRunId) is {} run)UseSettings(run.Config);
+        return Task.CompletedTask;
+    }
+    // Initialization can render while awaiting the service. Restore only after source setup has finished.
+    protected override async Task OnAfterRenderAsync(bool firstRender){
+        if(!initialized)return;
+        await base.OnAfterRenderAsync(firstRender);
+        if(SelectionsReady&&needsValidation&&Backend.ConnectionError is null){
+            needsValidation=false;
+            if(hasDraft)await Task.WhenAll(CheckDraft(),RefreshComparison());
+            else await RefreshComparison();
+            StateHasChanged();
+        }
+    }
+    protected override WorkshopDraft CaptureSelections()=>new(name,parentId,savedId,opponentId,cards,sideboard,startingCards,paste,resolveIssues,baselineRunId,baselineDeckId,latestRunId,latestDeckId,games,workers,timeout,turnLimit,seed,performance,stagger,spacing,estimatedSeconds,leadSeconds,hasDraft);
+    protected override void RestoreSelections(WorkshopDraft draft){hasDraft=draft.HasDraft||draft.Cards.Count>0||draft.ParentId is not null;name=draft.Name;parentId=draft.ParentId;savedId=draft.SavedId;opponentId=draft.OpponentId;cards=draft.Cards;sideboard=draft.Sideboard;startingCards=draft.StartingCards;paste=draft.Paste;resolveIssues=draft.ResolveIssues;baselineRunId=draft.BaselineRunId;baselineDeckId=draft.BaselineDeckId;latestRunId=draft.LatestRunId;latestDeckId=draft.LatestDeckId;games=draft.Games;workers=draft.Workers;timeout=draft.Timeout;turnLimit=draft.TurnLimit;seed=draft.Seed;performance=draft.Performance;stagger=draft.Stagger;spacing=draft.Spacing;estimatedSeconds=draft.EstimatedSeconds;leadSeconds=draft.LeadSeconds;needsValidation=true;}
+    private void Reset(){validationRevision++;comparisonRevision++;hasDraft=false;cards=[];sideboard=[];startingCards=[];resolveIssues=[];searchResults=[];name="Custom Deck";parentId=savedId=baselineRunId=baselineDeckId=latestRunId=latestDeckId=null;opponentId="";baselineMatch=editedMatch=null;error=message=comparisonError=null;paste="";query="";searched=false;validation=null;needsValidation=true;UseSettings(new([],200,2,180,150,42,true,"","",StaggerStarts:true,StartupSpacingSeconds:1));}
+    private void Copy(DeckManifest deck){validationRevision++;hasDraft=true;sourceId=deck.Id;parentId=deck.Id;savedId=null;name=deck.SourceType=="custom"?deck.Name:deck.Name+" — Workshop";cards=deck.Cards.Where(c=>c.Zone=="MainDeck").ToList();startingCards=cards.ToList();sideboard=deck.Cards.Where(c=>c.Zone=="Sideboard").ToList();resolveIssues=[];validation=null;needsValidation=true;}
+    private void UseSettings(RunConfig c){games=c.GamesPerPair;workers=c.Workers;timeout=c.TimeoutSeconds;turnLimit=c.TurnLimit;seed=c.RootSeed;performance=c.PerformanceMode;stagger=c.StaggerStarts;spacing=c.StartupSpacingSeconds;estimatedSeconds=c.EstimatedGameSeconds;leadSeconds=c.StartLeadSeconds;}
+    private async Task LoadSource(){try{Reset();Copy(Deck(sourceId));await CheckDraft();}catch(Exception e){error=e.Message;}}
+    private async Task ResolvePaste(){await Action(async()=>{var result=await Backend.ResolveDeck(paste);hasDraft=true;parentId=savedId=null;name="Custom Deck";cards=result.Cards.Where(c=>c.Zone=="MainDeck").ToList();sideboard=result.Cards.Where(c=>c.Zone=="Sideboard").ToList();startingCards=cards.ToList();resolveIssues=result.Issues;needsValidation=true;await CheckDraft();});}
+    private async Task Search(){if(busy||query.Trim().Length<2||Backend.ConnectionError is not null)return;await Action(async()=>{searchResults=await Backend.SearchCards(query);searched=true;});}
+    private void ClearSearch(){query="";searchResults=[];searched=false;}
+    private async Task Add(CardEntry card){var found=cards.FindIndex(c=>c.ArenaId==card.ArenaId||c.Name.Equals(card.Name,StringComparison.OrdinalIgnoreCase));if(found<0)cards.Add(card with{Quantity=1});else cards[found]=cards[found] with{Quantity=cards[found].Quantity+1};await Changed();}
+    private async Task Adjust(CardEntry card,int delta)=>await Quantity(card,card.Quantity+delta);
+    private async Task SetQuantity(CardEntry card,ChangeEventArgs e){if(int.TryParse(e.Value?.ToString(),out var n)&&n is >=0 and <=60)await Quantity(card,n);else error="Enter a quantity from 0 to 60.";}
+    private async Task Remove(CardEntry card)=>await Quantity(card,0);
+    private async Task Quantity(CardEntry card,int n){var index=cards.FindIndex(c=>c.ArenaId==card.ArenaId);if(index<0)return;if(n<=0)cards.RemoveAt(index);else cards[index]=card with{Quantity=n};await Changed();}
+    private async Task Changed(){savedId=null;message=null;needsValidation=true;await CheckDraft();}
+    private async Task CheckDraft(){
+        needsValidation=false;
+        var revision=++validationRevision;var request=Request;validation=null;
+        try{var checkedDeck=await Backend.ValidateDeck(request);if(revision!=validationRevision)return;
+            validation=checkedDeck;if(cards.All(c=>validation.Cards.Any(v=>v.ArenaId==c.ArenaId)))cards=validation.Cards;
+            if(sideboard.All(c=>validation.Sideboard.Any(v=>v.ArenaId==c.ArenaId)))sideboard=validation.Sideboard;needsValidation=false;
+        }catch(Exception e){if(revision!=validationRevision)return;validation=null;error=e.Message;needsValidation=false;}
+    }
+    private async Task Save(){await Action(async()=>{var deck=await Backend.SaveCustomDeck(Request);savedId=deck.Id;await RefreshWorkshop();message="Saved to Deck Library.";});}
+    private async Task Rerun(){await Action(async()=>{
+        await RefreshWorkshop();if(HasActiveSession)throw new InvalidOperationException("A session is active. Wait for it to finish or pause it before rerunning.");
+        var deck=await Backend.SaveCustomDeck(Request);savedId=deck.Id;
+        var baseline=baselineRunId is not null&&baselineDeckId is not null?new WorkshopBaseline(baselineRunId,baselineDeckId,opponentId):null;
+        var request=new RunRequest([deck.Id,opponentId],games,workers,timeout,turnLimit,seed,true,stagger,estimatedSeconds,leadSeconds,spacing,performance,RerunPilotMode){WorkshopBaseline=baseline,WorkshopDeckId=deck.Id};
+        latestRunId=await Backend.Create(request,Guid.NewGuid().ToString("N"),true);latestDeckId=deck.Id;
+        await RefreshWorkshop();await RefreshComparison();message="Workshop matchup started. Results refresh here as games complete.";
+    });}
+    private async Task Action(Func<Task> action){busy=true;error=null;message=null;try{await action();}catch(Exception e){error=e.Message;}finally{busy=false;}}
+    private string BaselineKey {
+        get=>baselineRunId is null?"":$"{baselineRunId}:{baselineDeckId}";
+        set {var parts=value.Split(':');baselineRunId=parts.Length==2?parts[0]:null;baselineDeckId=parts.Length==2?parts[1]:null;}
+    }
+    private IEnumerable<DeckChoice> BaselineChoices=>runs.Where(r=>r.Config.DeckIds.Contains(opponentId)).SelectMany(r=>r.Config.DeckIds.Where(id=>id!=opponentId).Select(id=>new DeckChoice($"{r.Id}:{id}",Deck(id),Context:$"{r.CreatedAt.ToLocalTime():MMM d, h:mm tt} · Session {r.Id[..8]}",SessionDate:r.CreatedAt)));
+
+    private async Task OpponentChanged(){baselineRunId=baselineDeckId=null;baselineMatch=editedMatch=null;latestRunId=latestDeckId=null;await RefreshComparison();}
+    private Task RefreshComparison()=>RefreshComparison(false);
+    private async Task RefreshComparison(bool force){
+        var revision=++comparisonRevision;
+        var opponent=opponentId;
+        async Task<(WorkshopMatchup? Match,string? Error)> Load(string? runId,string? deckId,string label){
+            if(runId is null||deckId is null||opponent.Length==0)return (null,null);
+            try{
+                var run=runs.FirstOrDefault(r=>r.Id==runId)??throw new KeyNotFoundException();
+                var match=await comparisonCache.Load(run,deckId,opponent,ct=>Backend.WorkshopMatchup(runId,deckId,opponent,ct),lifetime.Token,force);
+                return (match,null);
+            }catch(OperationCanceledException)when(lifetime.IsCancellationRequested){throw;}
+            catch(Exception){return (null,$"{label} matchup is unavailable. Check the simulation service or choose another session.");}
+        }
+        var baseline=Load(baselineRunId,baselineDeckId,"Baseline");
+        var edited=Load(latestRunId,latestDeckId,"Edited");
+        await Task.WhenAll(baseline,edited);
+        if(revision!=comparisonRevision||opponent!=opponentId)return;
+        baselineMatch=baseline.Result.Match;editedMatch=edited.Result.Match;
+        comparisonError=baseline.Result.Error??edited.Result.Error;
+    }
+    private string Delta=>baselineMatch?.WinRate is {} original&&editedMatch?.WinRate is {} edited?$"{(edited-original)*100:+0.0;-0.0;0.0} pp":"—";
+    private static bool Comparable(RunConfig a,RunConfig b)=>a.EngineHash==b.EngineHash&&a.AdapterHash==b.AdapterHash&&a.Pilot==b.Pilot&&a.OpeningPolicy==b.OpeningPolicy&&a.SeedScheme==b.SeedScheme&&a.RootSeed==b.RootSeed&&a.GamesPerPair==b.GamesPerPair&&a.TimeoutSeconds==b.TimeoutSeconds&&a.TurnLimit==b.TurnLimit&&a.PerformanceMode==b.PerformanceMode;
+    private async Task Poll(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(lifetime.Token))await InvokeAsync(async()=>{await RefreshWorkshop();if(SelectionsReady)await RefreshComparison();StateHasChanged();});}catch(OperationCanceledException){}}
+    public void Dispose(){lifetime.Cancel();lifetime.Dispose();}
+}

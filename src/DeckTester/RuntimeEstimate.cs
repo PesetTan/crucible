@@ -1,14 +1,14 @@
 namespace DeckTester;
 
 public sealed record TimingSample(string DeckA, string DeckB, int Workers, int TimeoutSeconds, int TurnLimit, double Seconds,
-    bool StaggerStarts = false, double? StartupSpacingSeconds = null);
+    bool StaggerStarts = false, double? StartupSpacingSeconds = null, bool PerformanceMode = false);
 public sealed record SessionTimingSample(RunConfig Config,double ActiveSeconds,double ScheduledSeconds,int AttemptCount);
 public sealed record RuntimeRange(double LowerSeconds, double UpperSeconds, int Observations, bool Extrapolated,int SessionObservations = 0);
 
 public static class RuntimeEstimate
 {
     public static RuntimeRange? Calculate(List<string> deckIds, int games, int workers, int timeout, int turnLimit,
-        bool stagger, int estimatedGameSeconds, int leadSeconds, IReadOnlyList<TimingSample> history, double? startupSpacingSeconds = 1, IReadOnlySet<CachedGameKey>? cachedGames = null,IReadOnlyList<SessionTimingSample>? sessions = null)
+        bool stagger, int estimatedGameSeconds, int leadSeconds, IReadOnlyList<TimingSample> history, double? startupSpacingSeconds = 1, IReadOnlySet<CachedGameKey>? cachedGames = null,IReadOnlyList<SessionTimingSample>? sessions = null,bool performanceMode = false)
     {
         if(deckIds.Count<2||games is <2 or >1000||games%2!=0||workers is <1 or >4||timeout is <10 or >1800||turnLimit is <10 or >1000
             ||stagger&&(workers<2||(startupSpacingSeconds is {} spacing
@@ -16,7 +16,7 @@ public static class RuntimeEstimate
                 :estimatedGameSeconds is <1 or >1800||leadSeconds<0||leadSeconds>=estimatedGameSeconds)))return null;
         var ids=deckIds.Order(StringComparer.Ordinal).ToList();
         var durations=new List<double>();var observations=new HashSet<TimingSample>(ReferenceEqualityComparer.Instance);var extrapolated=false;
-        var valid=history.Where(s=>double.IsFinite(s.Seconds)&&s.Seconds>0).ToList();
+        var valid=history.Where(s=>s.PerformanceMode==performanceMode&&double.IsFinite(s.Seconds)&&s.Seconds>0).ToList();
         for(var a=0;a<ids.Count;a++)for(var b=a+1;b<ids.Count;b++){
             var missing=games-(cachedGames?.Count(key=>key.DeckA==ids[a]&&key.DeckB==ids[b]&&key.Index<games/2)??0);
             if(missing<=0)continue;
@@ -42,7 +42,7 @@ public static class RuntimeEstimate
         var lower=Schedule(durations,workers,interval,legacy,extrapolated ? .6 : .75);
         var upper=Schedule(durations,workers,interval,legacy,extrapolated?1.8:1.4);
         var comparableSessions=(sessions??[]).Where(s=>s.AttemptCount>=5&&double.IsFinite(s.ActiveSeconds)&&s.ActiveSeconds>0
-            &&double.IsFinite(s.ScheduledSeconds)&&s.ScheduledSeconds>0&&StoreCombination(s.Config.DeckIds,ids)
+            &&double.IsFinite(s.ScheduledSeconds)&&s.ScheduledSeconds>0&&s.Config.PerformanceMode==performanceMode&&StoreCombination(s.Config.DeckIds,ids)
             &&s.Config.Workers==workers&&s.Config.TimeoutSeconds==timeout&&s.Config.TurnLimit==turnLimit
             &&s.Config.StaggerStarts==stagger&&(!stagger||(s.Config.StartupSpacingSeconds==startupSpacingSeconds
                 &&(startupSpacingSeconds is not null||s.Config.EstimatedGameSeconds==estimatedGameSeconds&&s.Config.StartLeadSeconds==leadSeconds)))).Take(20).ToList();

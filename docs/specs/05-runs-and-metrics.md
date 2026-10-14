@@ -77,3 +77,13 @@ Optional contributing-condition tags are descriptive: missed land drops, availab
 The loopback simulation service can export compact CSV/JSON summaries with manifests' hashes, configuration identities, rates/denominators, interval definition, failure counts, and qualified status. Replays are separate explicit backend downloads. The frontend has no export or download controls, and the UI host does not proxy export endpoints. Ordinary exports exclude raw personal account logs and private trace data.
 
 Record session processing periods separately from queued and paused time. A Runtime Log page presents each period's start, finish or last recorded update, active and scheduled duration, new attempt count, and status with filtering, sorting, and pagination. An unfinished period is labeled by its last recorded update. The page keeps raw timing JSON available and links back to the session details through its session label.
+
+## Workshop reruns and comparisons
+
+A workshop rerun is a new two-deck session: replace the edited deck in the selected matchup and retain the opponent, game count, root seed, timeout, turn limit, workers, performance mode, and launch settings. New sessions use the active engine build. Record optional baseline session/deck/opponent metadata separately from scientific configuration; validate that the baseline matchup exists. Existing session and cache compatibility remain tied to exact deck versions and build identities.
+
+Keep the selected baseline fixed through successive edits until the user chooses another compatible prior matchup. Comparisons scope both sessions to the specified opponent and deck version, including a baseline from a larger round robin. Show W/L/D, valid/scheduled games, play/draw rates and sample counts, Wilson intervals, completed game-length distributions, recorded mulligan counts, and deck-specific mana incident counts with analyzed-player denominators. Missing diagnostics stay unknown. Show the win-rate difference in percentage points as a descriptive aggregate difference.
+
+The existing `sha256-v1` schedule includes deck IDs. Keeping a root seed across edits therefore does not produce matched game randomness. Explain this in the comparison; do not attach a causal claim or a statistical significance claim to the difference. Show engine/settings differences and incomplete sessions. Deleted baseline sessions render as unavailable without blocking access to the edited session.
+
+Workshop-created sessions also record the tested workshop deck ID when no baseline has been selected, allowing the session to reopen its workspace comparison.

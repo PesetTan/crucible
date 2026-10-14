@@ -1,5 +1,6 @@
-<span class="mana-logo mana-@Name" role="img" aria-label="@(Name == "tap" ? "Tap" : $"{Name} mana")" title="@(Name == "tap" ? "Tap" : $"{Name} mana")"></span>
+<span class="mana-logo mana-@Name" role="img" aria-label="@(Name == "tap" ? "Tap" : $"{Name} mana")" title="@(Name == "tap" ? "Tap" : $"{Name} mana")">@Glyph</span>
 @code {
     [Parameter] public char Symbol { get; set; } = 'C';
     private string Name => char.ToUpperInvariant(Symbol) switch { 'W' => "white", 'U' => "blue", 'B' => "black", 'R' => "red", 'G' => "green", 'T' => "tap", _ => "colorless" };
+    private string Glyph => char.ToUpperInvariant(Symbol) switch { 'W' => "\uE600", 'U' => "\uE601", 'B' => "\uE602", 'R' => "\uE603", 'G' => "\uE604", 'T' => "\uE606", _ => "\uE605" };
 }

@@ -1,0 +1,12 @@
+@if(LandMana.Read(Card) is {} mana){
+    <span class="land-mana" tabindex="0" aria-label="@mana.Description">
+        @if(mana.Symbols.Length>0){<ManaCost Cost="@mana.Symbols" Label="@mana.Description.Split('\n')[0]" />}
+        else{<span class="muted">Fetch</span>}
+        <span class="land-mana-tooltip" role="tooltip">@mana.Description</span>
+    </span>
+}else{
+    <ManaCost Cost="@Card.Cost" />
+}
+@code {
+    [Parameter,EditorRequired] public CardEntry Card { get; set; }=default!;
+}

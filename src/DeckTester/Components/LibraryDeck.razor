@@ -1,0 +1,90 @@
+<section class="panel library-deck" id="@Deck.Id" @key="Deck.Id">
+    <div class="library-deck-overview">
+        <div class="library-deck-name">
+            <h2><DeckIdentity Deck="Deck" /></h2>
+            <div class="library-deck-meta"><span>@UiText.Label(Deck.SourceType)</span><span>@Deck.MainCount cards · @Deck.CreatureCount creatures · @Deck.LandCount lands</span><span class="pill">@UiText.Label(Coverage.Status)</span></div>
+        </div>
+        <div class="library-deck-pilot"><span class="library-field-label">Subtype pilot</span><strong title="@SubtypeProfile">@ReanimatorPilots.DisplayName(SubtypeProfile)</strong></div>
+        <div class="library-deck-latest"><span class="library-field-label">Latest run</span>
+            @if(History.FirstOrDefault() is {} latest){
+                var run=latest.Progress.Run;
+                <a href="@($"/runs/{run.Id}")">@run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt") <span aria-hidden="true">↗</span></a>
+                <span class="muted">@UiText.Label(run.Status) · @ResultText(latest)</span>
+            }else{<span class="muted">@(HistoryAvailable?"No runs for this version":"Run history unavailable")</span>}
+        </div>
+        <a class="button library-edit" href="@($"/workshop?deck={Deck.Id}")">Edit a copy</a>
+    </div>
+    <div class="library-deck-sections">
+        <details class="library-disclosure" open="@cardsOpen">
+            <summary @onclick="()=>cardsOpen=!cardsOpen" @onclick:preventDefault>Card list <span>@Deck.MainCount main
+                    @if(Deck.SideCount>0){<text> · @Deck.SideCount sideboard</text>}
+                </span></summary>
+            @if(cardsOpen){
+                <div class="card-list library-card-columns">
+                    @foreach(var category in new[]{"Creatures","Non-Creatures","Lands"}){
+                        var cards=SortCards(Deck.Cards.Where(c=>c.Zone=="MainDeck"&&Category(c)==category)).ToList();
+                        <div class="deck-card-group"><h3>@category <span class="muted">· @cards.Sum(c=>c.Quantity)</span></h3>
+                            @foreach(var card in cards){<LibraryCard @key="card.ArenaId" Card="card" Missing="@Missing.Contains(card.Name)" />}
+                        </div>
+                    }
+                </div>
+                @if(Deck.SideCount>0){<details class="library-sideboard"><summary>Sideboard provenance · Excluded from game decks</summary>@foreach(var card in SortCards(Deck.Cards.Where(c=>c.Zone=="Sideboard"))){<LibraryCard Card="card" Missing="@Missing.Contains(card.Name)" />}</details>}
+                <p class="small muted">Script presence does not validate interaction correctness, tokens, faces, or pilot behavior.</p>
+            }
+        </details>
+        <details class="library-disclosure" open="@historyOpen">
+            <summary @onclick="()=>historyOpen=!historyOpen" @onclick:preventDefault>Previous runs <span>@(HistoryAvailable?History.Count.ToString():"Unavailable")</span></summary>
+            @if(historyOpen){
+                <p class="small muted">This exact deck version · Exploratory Forge results · Each session keeps its recorded pilot and settings.</p>
+                @if(History.Count==0){<p class="muted">@(HistoryAvailable?"No sessions have used this exact version yet.":"Run history will appear when the service reconnects.")</p>}
+                else{
+                    <div class="library-run-list">
+                    @foreach(var session in History){
+                        var run=session.Progress.Run;
+                        var savedProfile=run.Config.PilotProfiles?.GetValueOrDefault(Deck.Id);
+                        <div class="library-run-row">
+                            <div><a href="@($"/runs/{run.Id}")">@run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt") · @RunBuildIdentity.Short(run.Id) ↗</a><span>@UiText.Label(run.Status) · @(run.Config.DeckIds.Count-1) @(run.Config.DeckIds.Count==2?"opponent":"opponents") · @run.Config.GamesPerPair games per matchup</span></div>
+                            <div><strong>@ResultText(session)</strong><span>Saved pilot: @(savedProfile is null?"Not recorded":ReanimatorPilots.DisplayName(savedProfile))</span></div>
+                            <a href="@($"/runs/{run.Id}/logs/games")">Game evidence ↗</a>
+                        </div>
+                    }
+                    </div>
+                }
+            }
+        </details>
+        <details class="library-disclosure">
+            <summary>Source &amp; details
+                @if(Deck.ArchetypeTier is {} tier){<span>Tier @tier</span>}
+            </summary>
+            <div class="library-source-details">
+                <div class="deck-tier"><ArchetypeTier Deck="Deck" /></div>
+                <p>@Deck.FreshnessNote</p>
+                @if(Deck.PublishedWinRatePercent is {} rate){<p>Published exact-list win rate: @rate.ToString("0.0",System.Globalization.CultureInfo.InvariantCulture)% · Approximately @Deck.PublishedMatchesApprox?.ToString("N0") matches · @Deck.Snapshot. Public observed results are separate from simulated pilot results.</p>}
+                <p>Captured: @Deck.Snapshot · Fingerprint: @RunBuildIdentity.Short(Deck.ListHash) · @UiText.Label(Deck.Variant)</p>
+                <p>Subtype pilot: <code>@SubtypeProfile</code> · Select Subtype pilots v001 in run setup to use it. The default policy uses <code>@DefaultProfile</code>. Previous runs retain their saved pilots.</p>
+                @if(Deck.ParentDeckId is {} parent){<p>Derived from <a href="@($"/decks#{parent}")">source version ↗</a></p>}
+                @if(Deck.SourceUrl is {} url){<a href="@url" target="_blank" rel="noreferrer">Original public list ↗</a>}
+            </div>
+        </details>
+    </div>
+</section>
+@code {
+    [Parameter,EditorRequired] public DeckManifest Deck { get; set; }=default!;
+    [Parameter,EditorRequired] public DeckCoverage Coverage { get; set; }=default!;
+    [Parameter,EditorRequired] public Dictionary<int,int> ManaValues { get; set; }=[];
+    [Parameter] public List<HistoryRun> History { get; set; }=[];
+    [Parameter] public bool HistoryAvailable { get; set; }
+    private bool cardsOpen,historyOpen;
+    private string DefaultProfile=>ReanimatorPilots.Profile(Deck,ReanimatorPilots.AggroMode);
+    private string SubtypeProfile=>ReanimatorPilots.Profile(Deck,ReanimatorPilots.CurrentSubtypeMode);
+    private HashSet<string> Missing=>Coverage.Cards.Where(c=>c.Status=="missing").Select(c=>c.Name).ToHashSet(StringComparer.Ordinal);
+    private IOrderedEnumerable<CardEntry> SortCards(IEnumerable<CardEntry> cards)=>cards.OrderBy(c=>ManaValues.GetValueOrDefault(c.ArenaId,int.MaxValue)).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase);
+    private static string Category(CardEntry card){var type=card.Type.Split("//",StringSplitOptions.None)[0];return type.Contains("Land",StringComparison.Ordinal)?"Lands":type.Contains("Creature",StringComparison.Ordinal)?"Creatures":"Non-Creatures";}
+    private string ResultText(HistoryRun session){
+        var pairs=session.Matchups.Where(m=>m.DeckA==Deck.Id||m.DeckB==Deck.Id).ToList();
+        var valid=pairs.Sum(m=>m.Valid);
+        if(valid==0)return "No valid games yet";
+        var wins=pairs.Sum(m=>m.DeckA==Deck.Id?m.WinsA:m.WinsB);
+        return $"W:{(100d*wins/valid).ToString("0",System.Globalization.CultureInfo.InvariantCulture)}%";
+    }
+}

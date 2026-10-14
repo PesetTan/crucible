@@ -1,0 +1,47 @@
+@inject SourceRateCatalog Sources
+@inject IUiBackend Backend
+<span class="source-rate @(Stretch ? "source-rate-stretch" : "")" data-source-rate tabindex="@(Focusable ? "0" : null)" aria-describedby="@popupId">
+    <span class="source-rate-value">@ChildContent</span>
+    <span class="source-rate-popup" id="@popupId" popover="manual" role="tooltip">
+        <span class="source-rate-heading">@(IsReference ? "Original list · Source win rate" : "Source win rate")</span>
+        @if (source?.PublishedWinRatePercent is {} rate)
+        {
+            <span class="source-rate-number">@rate.ToString("0.0", CultureInfo.InvariantCulture)% <span>published</span></span>
+            <span class="source-rate-row">@Matches(source) matches · @Provider(source)</span>
+            <span class="source-rate-row">@source.Name@if (!string.IsNullOrWhiteSpace(source.ArchetypeTier)){<text> · Tier @source.ArchetypeTier</text>}</span>
+            <span class="source-rate-row">@SnapshotNote(source)</span>
+            <span class="source-rate-note">@(IsReference ? "Reference for the original list; this edited version has no published rate." : "Observed source results for this exact list; not a head-to-head rate against the selected opponent.")</span>
+        }
+        else
+        {
+            <span class="source-rate-row">No published win rate for this exact deck version.</span>
+            @if (Manifest?.SourceType == "custom"){<span class="source-rate-note">Workshop edits do not inherit public results from their original list.</span>}
+        }
+        <span class="source-rate-note">The displayed win rate comes from local simulated games.</span>
+    </span>
+</span>
+@code {
+    [Parameter] public DeckManifest? Deck { get; set; }
+    [Parameter] public string? DeckId { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Focusable { get; set; } = true;
+    [Parameter] public bool Stretch { get; set; }
+    private readonly string popupId = "source-rate-" + Guid.NewGuid().ToString("N");
+    private DeckManifest? source;
+    private DeckManifest? Manifest => Deck ?? Backend.Decks().FirstOrDefault(d => d.Id == DeckId);
+    private bool IsReference => source is not null && source.Id != Manifest?.Id;
+    protected override async Task OnParametersSetAsync() => source = await Sources.Resolve(Manifest);
+    private static string Matches(DeckManifest deck) => !string.IsNullOrWhiteSpace(deck.PublishedMatchesDisplayed)
+        ? $"≈{deck.PublishedMatchesDisplayed.TrimStart('≈')}" : deck.PublishedMatchesApprox is {} count ? $"≈{count.ToString("N0", CultureInfo.InvariantCulture)}" : "Unrecorded";
+    private static string Provider(DeckManifest deck) => Uri.TryCreate(deck.SourceUrl, UriKind.Absolute, out var url)
+        ? url.Host.Replace("www.", "", StringComparison.OrdinalIgnoreCase) : "Published source";
+    private static string SnapshotNote(DeckManifest deck)
+    {
+        // The manifest's captured note carries the observation window and rank bracket.
+        var note = deck.FreshnessNote.Split("Legality", StringSplitOptions.None)[0].Trim().TrimEnd('.');
+        if (string.IsNullOrWhiteSpace(note)) return $"Snapshot: {deck.Snapshot}";
+        note = note.Replace("Frozen public snapshot, ", "Captured ", StringComparison.Ordinal);
+        return deck.Snapshot.StartsWith("standard-bo1-", StringComparison.Ordinal) && !note.Contains("Standard Bo1", StringComparison.OrdinalIgnoreCase)
+            ? $"Standard Bo1 · {note}" : note;
+    }
+}

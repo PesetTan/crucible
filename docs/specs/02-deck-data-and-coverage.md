@@ -63,3 +63,13 @@ Deck eligibility requires valid composition, accepted legality evidence, complet
 - A prepared face cannot be imported as an independently legal standalone spell without separate evidence.
 - Changing the source snapshot creates a new version and leaves completed runs unchanged.
 - Import and simulation leave both source SQLite files byte-for-byte unchanged.
+
+## Deck Workshop custom versions
+
+Deck Workshop accepts a copy of any library manifest or an Arena text list. Card resolution and search use the service's read-only local catalog and rules profiles. Resolve exact printing identifiers when supplied; ambiguous or unknown identities are explicit issues and must never be silently omitted. Secondary faces are resolved only through their primary identity.
+
+Browser drafts may be incomplete. Saving requires a named, resolvable 60-card main deck with positive integer quantities and applicable copy limits. The service hydrates card text and legality evidence from its catalog rather than trusting browser card metadata. Missing local legality evidence or engine support blocks simulation but does not prevent saving a structurally valid custom version.
+
+Saved custom versions have source type `custom`, a parent version ID when copied, original source provenance through that parent, a creation timestamp, and immutable composition/manifest hashes. They do not inherit public observed rates or archetype tiers. Repeated saves of identical inputs resolve to the same version; edits create another version. Sideboards are retained as provenance and excluded from editing and Bo1 games. Original manifests and Arena SQLite sources remain unchanged.
+
+For custom versions, captured sideboard rows are provenance only, so copy-limit validation applies to the playable main deck. Custom creation retains resolved pasted sideboard provenance as well as inherited sideboards.

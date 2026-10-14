@@ -1,0 +1,97 @@
+@inject PilotEvaluationStore Evaluations
+@if(Evaluation.Report?.Profiles.FirstOrDefault(p=>p.Profile==Profile) is {} scorecard){
+    <section class="pilot-scorecard" aria-label="@($"Attribute measurements for {Profile}")">
+        <div class="pilot-scorecard-title"><strong>Attribute measurements</strong><span class="pill">@(Evaluation.Current?"Current build":"Historical build / suite")</span></div>
+        <div class="pilot-view-switch" aria-label="Measurement and code views">
+            <button type="button" aria-pressed="@(showCode?"false":"true")" @onclick="()=>showCode=false">Metrics</button>
+            <button type="button" aria-pressed="@(showCode?"true":"false")" disabled="@(selected is null)" @onclick="()=>showCode=true">Code</button>
+        </div>
+        @if(showCode&&selected is not null){
+            <div class="pilot-code-heading"><strong>@selected.Label · @Profile</strong><button type="button" @onclick="()=>showCode=false">Back to metrics</button></div>
+            <p class="small muted">Read-only source saved with this evaluation. Returning keeps the same profile and measurements.</p>
+            <div class="pilot-code-actions"><button type="button" @onclick="()=>LoadCode(false)">Position definitions</button><button type="button" @onclick="()=>LoadCode(true)">Scoring calculation</button>@if(Evaluation.Report.SourceHashes.ContainsKey("engine/ForgeBridge.java")){<button type="button" @onclick="LoadImplementation">Pilot implementation</button>}@foreach(var fixtureSource in HelperFiles()){<button type="button" @onclick="()=>LoadHelper(fixtureSource.File)">@fixtureSource.Label</button>}<label><input type="checkbox" @bind="fullFile" /> Full file</label></div>
+            @if(sourceError is not null){<p class="pilot-check-error" role="status">@sourceError</p>}
+            @if(source is not null){
+                <p class="small muted"><code>@source.File</code> · SHA256 <code>@source.Hash[..12]</code></p>
+                <pre class="pilot-source" tabindex="0" aria-label="@($"Evaluated source {source.File}")"><code>@foreach(var line in SourceLines()){
+<span class="@(line.Highlight?"pilot-source-highlight":"")"><span class="pilot-line-number">@line.Number</span>@line.Text</span>
+}</code></pre>
+            }
+        }else{
+        <p class="small muted">Results cover the listed positions. Inherited checks and overrides are identified separately.</p>
+        <div class="table-scroll"><table>
+            <thead><tr><th scope="col">Attribute</th><th scope="col">Measurement</th><th scope="col">Behavior source</th><th scope="col">What was checked</th></tr></thead>
+            <tbody>@foreach(var dimension in scorecard.Dimensions){
+                <tr><th scope="row">@dimension.Label</th><td>
+                    @if(dimension.Measured){<strong>@dimension.Passed / @dimension.Total @(dimension.Key=="aggression"?"attacks":"passed")</strong><small>@dimension.Percent?.ToString("0.#")% · @dimension.Kind</small>}
+                    else{<strong class="muted">Unmeasured</strong>}
+                    @if(dimension.Errors>0){<small class="pilot-check-error">@dimension.Errors evaluation @(dimension.Errors==1?"error":"errors")</small>}
+                </td><td>@(dimension.Origins.Count==0?"No checks recorded":string.Join(" · ",dimension.Origins))</td><td>@dimension.Scope @if(dimension.Cases.Count>0){<button type="button" class="pilot-view-code" aria-label="@($"View code for {dimension.Label}")" @onclick="()=>ShowCode(dimension)">View code</button>}</td></tr>
+            }</tbody>
+        </table></div>
+        <details class="pilot-case-details"><summary>Individual checks and observations</summary>
+            <ul>@foreach(var dimension in scorecard.Dimensions){@foreach(var check in dimension.Cases){
+                <li><strong>@dimension.Label · @check.Id</strong><span class="@(check.Status is "failed" or "error"?"pilot-check-error":"muted")">@check.Status · @check.Kind</span><small>Expected: @check.Expected · Observed: @check.Actual</small></li>
+            }}</ul>
+        </details>
+        }
+    </section>
+}else{
+    <p class="small muted">No attribute evaluation recorded for this exact profile.</p>
+}
+@code {
+    [Parameter,EditorRequired] public string Profile { get; set; } = "";
+    [Parameter,EditorRequired] public PilotEvaluationSnapshot Evaluation { get; set; } = new(null,false,null);
+    private bool showCode,fullFile;
+    private PilotDimension? selected;
+    private PilotSourceDocument? source;
+    private string? sourceError;
+    private string anchor="";
+    private string? reportId;
+    protected override void OnParametersSet(){if(reportId!=Evaluation.Report?.Id){reportId=Evaluation.Report?.Id;showCode=false;selected=null;source=null;}}
+    private void ShowCode(PilotDimension dimension){selected=dimension;showCode=true;LoadCode(false);}
+    private void LoadCode(bool scoring){
+        var focus=scoring?"def summarize(":selected?.Key switch{
+            "combat" or "aggression"=>"static String attack(",
+            "combo"=>"static String combo(",
+            "adaptation"=>"static String adapt(",
+            _=>Profile.StartsWith("reanimator-",StringComparison.Ordinal)?"if(ForgeBridge.isReanimator(profile))":
+                SubtypePilots.Profiles.Values.Contains(Profile)?"if(ForgeBridge.SUBTYPE_PARENTS.containsKey(profile))":
+                Profile==ReanimatorPilots.Control?"if(ForgeBridge.usesControl(profile))":"if(ForgeBridge.usesAggro(profile))"
+        };
+        LoadSource(scoring?"scripts/evaluate-pilots.py":"tests/PilotAttributeChecks.java",focus);
+    }
+    private IEnumerable<(string File,string Label)> HelperFiles(){
+        if(selected is null)yield break;
+        var ids=selected.Cases.Select(c=>c.Id).ToList();
+        if(ids.Any(id=>id.StartsWith("copy-payment",StringComparison.Ordinal)))yield return("tests/ReanimatorCopyManaChecks.java","Copy-payment fixture");
+        if(ids.Any(id=>id.Contains("sweeper",StringComparison.Ordinal)||id=="public-exile"))yield return("tests/ControlIntegrationChecks.java","Control fixture");
+        if(ids.Any(id=>id.Contains("burn",StringComparison.Ordinal)))yield return("tests/AggroIntegrationChecks.java","Burn fixture");
+        if(ids.Any(id=>id.StartsWith("permanent-",StringComparison.Ordinal)))yield return("tests/SubtypePilotChecks.java","Subtype fixture");
+    }
+    private void LoadHelper(string file)=>LoadSource(file,file.Contains("CopyMana",StringComparison.Ordinal)?"static String choose(":file.Contains("Subtype",StringComparison.Ordinal)?"static String development(":file.Contains("Control",StringComparison.Ordinal)?"static Set<String> sweep(String profile":"static String burn(String profile");
+    private void LoadImplementation(){
+        var focus=selected?.Key switch{
+            "combat" or "aggression"=>"public ForcedLobby(",
+            "combo"=>"private Card policyCard(",
+            "adaptation"=>"static OpponentEstimate classifyPublicCards(",
+            "resources" when Profile.StartsWith("reanimator-",StringComparison.Ordinal)=>"static int copyManaGateScore(",
+            _ when SubtypePilots.Profiles.Values.Contains(Profile)=>"static SpellAbility subtypeDevelopmentOnPass(",
+            _ when Profile==ReanimatorPilots.Control=>"private int keepScore(",
+            _=>"static SpellAbility aggroBurnOnPass("
+        };
+        LoadSource("engine/ForgeBridge.java",focus);
+    }
+    private void LoadSource(string file,string focus){
+        source=null;sourceError=null;fullFile=false;anchor=focus;
+        try{if(Evaluation.Report is {} report)source=Evaluations.ReadSource(report,file);}
+        catch(Exception error)when(error is IOException or ArgumentException or InvalidDataException){sourceError=error.Message;}
+    }
+    private IEnumerable<SourceLine> SourceLines(){
+        if(source is null)yield break;
+        var lines=source.Text.Split('\n');var focus=Array.FindIndex(lines,line=>line.Contains(anchor,StringComparison.Ordinal));
+        var start=fullFile||focus<0?0:Math.Max(0,focus-3);var end=fullFile||focus<0?lines.Length:Math.Min(lines.Length,focus+65);
+        for(var i=start;i<end;i++)yield return new(i+1,lines[i],i==focus);
+    }
+    private sealed record SourceLine(int Number,string Text,bool Highlight);
+}

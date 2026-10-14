@@ -7,13 +7,13 @@
 @inject NavigationManager Navigation
 @inject Microsoft.JSInterop.IJSRuntime JS
 @if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
-<PageTitle>Session Results — Gauntlet</PageTitle>
+<PageTitle>Session Results — Crucible</PageTitle>
 <div inert="@(!SelectionsReady)">
 @if(summary is null){<h1>@(error is null?"Loading Session…":"Session Unavailable")</h1>@if(error is not null){<div class="error">@error</div>}}
 else{
     var run=summary.Run;
     var timingRecords=Store.SessionTimings(run.Id);
-    <div class="session-eyebrow-line"><div class="eyebrow">SESSION / @run.Id[..8]</div><span class="pill">@UiText.Label(run.Status)</span></div><div class="section-head session-head"><div class="session-title"><h1>Across the Table.</h1><p class="muted">@run.Config.DeckIds.Count decks · @run.Total scheduled games · Root Seed @run.Config.RootSeed</p></div><div class="session-heading-actions" @onkeydown="MenuKeyDown">
+    <div class="session-eyebrow-line"><div class="eyebrow">SESSION / @run.Id[..8]</div><span class="pill">@UiText.Label(run.Status)</span></div><div class="section-head session-head"><div class="session-title"><h1>Across the Table.</h1><p class="muted">@run.Config.DeckIds.Count decks · @run.Total scheduled games · Root Seed @run.Config.RootSeed · Forge Performance Mode @(run.Config.PerformanceMode?"On":"Off")</p></div><div class="session-heading-actions" @onkeydown="MenuKeyDown">
         <div class="session-action-menu">
             <button type="button" class="session-menu-trigger" @ref="actionsButton" aria-label="Session actions" title="Session actions" aria-expanded="@(actionsOpen?"true":"false")" aria-controls="session-actions" @onclick="()=>actionsOpen=!actionsOpen"><span aria-hidden="true">⋯</span></button>
             @if(actionsOpen){
@@ -38,10 +38,12 @@ else{
             }
         </div>
     </div></div>
+    @if(run.WorkshopDeckId is {} changed){var opponent=run.Config.DeckIds.First(id=>id!=changed);var baselineQuery=run.WorkshopBaseline is {} workshop?$"&baseline={workshop.RunId}&baselineDeck={workshop.DeckId}":"";<p><a class="button" href="@($"/workshop?deck={changed}&opponent={opponent}&result={run.Id}{baselineQuery}")">Open Workshop Comparison</a></p>}
+    <RunPilotSummary Config="run.Config" ActiveBuild="capabilities" />
     <div class="results-filter" role="region" aria-label="Results filter">
         <label for="results-matchup">Matchup</label>
-        <select id="results-matchup" @bind="SelectedMatchupKey"><option value="">All Matchups</option>@foreach(var choice in MatchupChoices()){<option value="@choice.Key">@choice.Label</option>}</select>
-        <label for="results-time-unit">View by</label><select id="results-time-unit" @bind="timeUnit"><option value="rounds">Rounds</option><option value="turns">Turns</option></select>
+        <DeckSelect Id="results-matchup" Label="Matchup" Placeholder="All matchups" Choices="MatchupChoices()" @bind-Value="SelectedMatchupKey" />
+        <label for="results-time-unit">View by</label><AppSelect Id="results-time-unit" Label="View by" Options="@(new SelectOption[]{new SelectOption("rounds","Rounds"),new SelectOption("turns","Turns")})" @bind-Value="timeUnit" />
         <span class="small muted" aria-live="polite">@view!.Run.Total games · Applies to every results section</span>
     </div>
     @if(run.Config.StaggerStarts){<p class="small muted">@(run.Config.StartupSpacingSeconds is {} spacing?$"Initial engine starts: {spacing:0.##} seconds apart; finished games are replaced immediately. Up to {run.Config.Workers} games at once.":$"Original stagger policy: {run.Config.EstimatedGameSeconds-run.Config.StartLeadSeconds} seconds between every launch; up to {run.Config.Workers} games at once.")</p>}
@@ -75,28 +77,21 @@ else{
         </div>
     }
     <section class="panel"><div class="section-head"><div><div class="eyebrow">OPENING HANDS</div><h2>Mulligans Before Keep</h2></div></div>
-        <div class="table-scroll"><table><thead><tr><SortHeader State="mulliganSort" Column="deck" OnSort="mulliganSort.Toggle">Deck</SortHeader><SortHeader State="mulliganSort" Column="players" OnSort="mulliganSort.Toggle">Recorded Players</SortHeader><SortHeader State="mulliganSort" Column="mean" OnSort="mulliganSort.Toggle">Mean</SortHeader><SortHeader State="mulliganSort" Column="median" OnSort="mulliganSort.Toggle">Median / Max</SortHeader><SortHeader State="mulliganSort" Column="zero" OnSort="mulliganSort.Toggle">0 Mulligans</SortHeader><SortHeader State="mulliganSort" Column="one" OnSort="mulliganSort.Toggle">1</SortHeader><SortHeader State="mulliganSort" Column="two" OnSort="mulliganSort.Toggle">2</SortHeader><SortHeader State="mulliganSort" Column="three" OnSort="mulliganSort.Toggle">3+</SortHeader><SortHeader State="mulliganSort" Column="kept" OnSort="mulliganSort.Toggle">Kept Size</SortHeader><SortHeader State="mulliganSort" Column="play" OnSort="mulliganSort.Toggle">Mean on Play / Draw</SortHeader></tr></thead><tbody>@foreach(var m in mulliganSort.Apply(view!.Mulligans,MulliganValue)){<tr><td>@Name(m.DeckId)</td><td>@m.RecordedPlayers</td><td>@Number(m.Mean)</td><td>@Number(m.Median) / @(m.Maximum?.ToString()??"—")</td><td>@m.Zero</td><td>@m.One</td><td>@m.Two</td><td>@m.ThreePlus</td><td>@Number(m.MeanKeptSize)</td><td>@Number(m.MeanOnPlay) / @Number(m.MeanOnDraw)</td></tr>}</tbody></table></div><p class="small muted">Sort Median / Max by median then maximum, and Mean on Play / Draw by play then draw. Count is the number of mulligans before a final keep. Playable means accepted by the Forge pilot policy; forced keeps are identified in the game log. Completed games only; missing records remain unknown.</p>
+        <div class="table-scroll"><table><thead><tr><SortHeader State="mulliganSort" Column="deck" OnSort="mulliganSort.Toggle">Deck</SortHeader><SortHeader State="mulliganSort" Column="players" OnSort="mulliganSort.Toggle">Recorded Players</SortHeader><SortHeader State="mulliganSort" Column="mean" OnSort="mulliganSort.Toggle">Mean</SortHeader><SortHeader State="mulliganSort" Column="median" OnSort="mulliganSort.Toggle">Median / Max</SortHeader><SortHeader State="mulliganSort" Column="zero" OnSort="mulliganSort.Toggle">0 Mulligans</SortHeader><SortHeader State="mulliganSort" Column="one" OnSort="mulliganSort.Toggle">1</SortHeader><SortHeader State="mulliganSort" Column="two" OnSort="mulliganSort.Toggle">2</SortHeader><SortHeader State="mulliganSort" Column="three" OnSort="mulliganSort.Toggle">3+</SortHeader><SortHeader State="mulliganSort" Column="kept" OnSort="mulliganSort.Toggle">Kept Size</SortHeader><SortHeader State="mulliganSort" Column="play" OnSort="mulliganSort.Toggle">Mean on Play / Draw</SortHeader></tr></thead><tbody>@foreach(var m in mulliganSort.Apply(view!.Mulligans,MulliganValue)){<tr><td><DeckIdentity DeckId="@(m.DeckId)" Compact="true" Stacked="true" /></td><td>@m.RecordedPlayers</td><td>@Number(m.Mean)</td><td>@Number(m.Median) / @(m.Maximum?.ToString()??"—")</td><td>@m.Zero</td><td>@m.One</td><td>@m.Two</td><td>@m.ThreePlus</td><td>@Number(m.MeanKeptSize)</td><td>@Number(m.MeanOnPlay) / @Number(m.MeanOnDraw)</td></tr>}</tbody></table></div><p class="small muted">Sort Median / Max by median then maximum, and Mean on Play / Draw by play then draw. Count is the number of mulligans before a final keep. Playable means accepted by the Forge pilot policy; forced keeps are identified in the game log. Completed games only; missing records remain unknown.</p>
     </section>
-    <section class="panel"><div class="section-head"><div><div class="eyebrow">01 / THE MATCHUPS</div><h2>Who Wins Against Whom?</h2></div><span class="muted">Row Deck's Win Rate</span></div>
-        @{ var leadingDeckIds=LeadingDeckIds(); }
-        <div class="table-scroll"><table class="matrix"><thead><tr><SortHeader State="matrixSort" Column="deck" OnSort="matrixSort.Toggle">Deck</SortHeader>@foreach(var deck in viewDecks){<SortHeader State="matrixSort" Column="@deck.Id" OnSort="matrixSort.Toggle">@Name(deck.Id)</SortHeader>}</tr></thead><tbody>
-        @foreach(var row in matrixSort.Apply(viewDecks,MatrixValue)){var rates=OpponentRates(row);<tr @key="row.Id"><th scope="row"><span class="matrix-row-heading"><span>@Name(row.Id)</span>@if(rates.Count>0){<span class="matrix-average-pill" aria-label="@($"Average win rate {Metrics.Rate(rates.Average())} across {rates.Count} of {viewDecks.Count-1} opponents")">@Metrics.Rate(rates.Average()) <span>avg</span>@if(rates.Count<viewDecks.Count-1){<span class="matrix-average-coverage">@rates.Count/@(viewDecks.Count-1)</span>}</span>}@if(leadingDeckIds.Contains(row.Id)){<span class="matrix-leader-trophy" role="img" aria-label="Top deck by equal-weighted opponent win rate"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3h12v6a6 6 0 0 1-12 0V3ZM6 5H3v3a4 4 0 0 0 4 4m11-7h3v3a4 4 0 0 1-4 4m-5 3v4m-4 2h8" /></svg></span>}</span></th>@foreach(var col in viewDecks){
-            var matchup=view!.Matchups.FirstOrDefault(m=>m.DeckA==row.Id&&m.DeckB==col.Id||m.DeckA==col.Id&&m.DeckB==row.Id);
-            <td>@if(row.Id==col.Id){<span class="muted">—</span>}else if(matchup is not null){var rate=matchup.DeckA==row.Id?matchup.WinRateA:matchup.WinRateB;<button class="matrix-cell" aria-pressed="@(IsSelected(matchup,row.Id)?"true":"false")" aria-label="@($"View {Name(row.Id)} vs {Name(col.Id)} matchup details")" @onclick="()=>SelectFromMatrix(matchup,row.Id)"><strong>@Metrics.Rate(rate)</strong><small>@matchup.Valid games</small></button>}</td>
-        }</tr>}
-        </tbody></table></div><p class="small muted">The pill beside each deck is its equal-weighted mean win rate against opponents with results. A fraction in the pill marks partial opponent coverage. The gold trophy marks the highest mean once every shown matchup has a result; tied leaders share it. Click a column heading to sort rows by deck name or win rate against that opponent. Click a win-rate cell to filter every results section to that matchup. Rules draws mean reverse cells may sum to less than 100%. Pending, failed, and paused slots are excluded from rates and shown separately.</p>
-        <details><summary>Overall Performance — Equal Weight per Selected Opponent</summary><div class="table-scroll"><table><thead><tr><SortHeader State="performanceSort" Column="deck" OnSort="performanceSort.Toggle">Deck</SortHeader><SortHeader State="performanceSort" Column="rate" OnSort="performanceSort.Toggle">Mean Opponent Win Rate</SortHeader><SortHeader State="performanceSort" Column="opponents" OnSort="performanceSort.Toggle">Opponents with Data</SortHeader></tr></thead><tbody>@foreach(var deck in performanceSort.Apply(viewDecks,PerformanceValue)){var rates=view!.Matchups.Where(m=>m.DeckA==deck.Id||m.DeckB==deck.Id).Select(m=>m.DeckA==deck.Id?m.WinRateA:m.WinRateB).Where(r=>r.HasValue).Select(r=>r!.Value).ToList();<tr><td>@Name(deck.Id)</td><td>@(rates.Count==0?"—":Metrics.Rate(rates.Average()))</td><td>@rates.Count / @(viewDecks.Count-1)</td></tr>}</tbody></table></div><p class="small muted">An aggregate with missing opponents is partial. No population Arena inference or binomial interval is attached to this average.</p></details>
-    </section>
+    <MatchupExplorer Decks="viewDecks" Summary="view!" SelectedKey="SelectedMatchupKey" OnSelect="SelectExplorerMatchup" />
     <section class="panel matchup-detail" aria-label="Matchup details">
         <div class="eyebrow">02 / MATCHUP DETAIL</div>
     @foreach(var pair in OrderedMatchups()){
         <article class="matchup-entry" aria-label="@($"{Name(pair.DeckA)} vs {Name(pair.DeckB)} matchup details")">
             <div class="matchup-toolbar">
-                <h2>@Name(pair.DeckA) <span class="muted">vs</span> @Name(pair.DeckB)</h2>
+                <h2><DeckIdentity DeckId="@(pair.DeckA)" SingleRow="true" /> <span class="muted">vs</span> <DeckIdentity DeckId="@(pair.DeckB)" SingleRow="true" /></h2>
+                <div class="workshop-entry-links"><a class="button" href="@($"/workshop?deck={pair.DeckA}&opponent={pair.DeckB}&baseline={Id}")">Modify &amp; Rerun <DeckIdentity DeckId="@pair.DeckA" Compact="true" /></a><a class="button" href="@($"/workshop?deck={pair.DeckB}&opponent={pair.DeckA}&baseline={Id}")">Modify &amp; Rerun <DeckIdentity DeckId="@pair.DeckB" Compact="true" /></a></div>
             </div>
-            <div class="matchup-cards"><div><h3>@Name(pair.DeckA)</h3><strong>@Metrics.Rate(pair.WinRateA)</strong><p>@pair.WinsA wins · @pair.WinsB losses · @pair.Draws draws</p><p class="muted">95% Wilson Interval: @Interval(pair.IntervalA)</p><p>On Play: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsAOnPlay/pair.PlayA) (@pair.PlayA games)<br />On Draw: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsAOnDraw/pair.PlayB) (@pair.PlayB games)</p></div><div><h3>@Name(pair.DeckB)</h3><strong>@Metrics.Rate(pair.WinRateB)</strong><p>@pair.WinsB wins · @pair.WinsA losses · @pair.Draws draws</p><p class="muted">95% Wilson Interval: @Interval(pair.IntervalB)</p><p>On Play: @Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsBOnPlay/pair.PlayB) (@pair.PlayB games)<br />On Draw: @Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsBOnDraw/pair.PlayA) (@pair.PlayA games)</p></div></div>
+            <div class="matchup-cards"><div><h3><DeckIdentity DeckId="@(pair.DeckA)" /></h3><SourceWinRate DeckId="@pair.DeckA"><strong>@Metrics.Rate(pair.WinRateA)</strong></SourceWinRate><p>@pair.WinsA wins · @pair.WinsB losses · @pair.Draws draws</p><p class="muted">95% Wilson Interval: @Interval(pair.IntervalA)</p><p>On Play: <SourceWinRate DeckId="@pair.DeckA">@Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsAOnPlay/pair.PlayA)</SourceWinRate> (@pair.PlayA games)<br />On Draw: <SourceWinRate DeckId="@pair.DeckA">@Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsAOnDraw/pair.PlayB)</SourceWinRate> (@pair.PlayB games)</p></div><div><h3><DeckIdentity DeckId="@(pair.DeckB)" /></h3><SourceWinRate DeckId="@pair.DeckB"><strong>@Metrics.Rate(pair.WinRateB)</strong></SourceWinRate><p>@pair.WinsB wins · @pair.WinsA losses · @pair.Draws draws</p><p class="muted">95% Wilson Interval: @Interval(pair.IntervalB)</p><p>On Play: <SourceWinRate DeckId="@pair.DeckB">@Metrics.Rate(pair.PlayB==0?null:(double)pair.WinsBOnPlay/pair.PlayB)</SourceWinRate> (@pair.PlayB games)<br />On Draw: <SourceWinRate DeckId="@pair.DeckB">@Metrics.Rate(pair.PlayA==0?null:(double)pair.WinsBOnDraw/pair.PlayA)</SourceWinRate> (@pair.PlayA games)</p></div></div>
             <p class="small muted">@pair.Valid valid / @pair.Scheduled scheduled · @pair.Failed failed · @pair.Cancelled paused · @pair.AttemptFailures historical failed attempts. Wilson intervals describe sampling variation under this fixed setup; draws count as nonwins.</p>
-            <div class="chart-grid"><Distribution Rounds="@(timeUnit=="rounds")" Title="@($"{Name(pair.DeckA)} — Wins")" Values="OutcomeTurns(pair,pair.DeckA)" /><Distribution Rounds="@(timeUnit=="rounds")" Title="@($"{Name(pair.DeckA)} — Losses")" Values="OutcomeTurns(pair,pair.DeckB)" /><Distribution Rounds="@(timeUnit=="rounds")" Title="Rules Draws" Values="MatchupSlots(pair).Where(s=>s.Result?.Draw==true).Select(s=>s.Result!.ActualTurns).ToList()" /></div>
+            <div class="chart-grid"><Distribution Deck="@Store.Deck(pair.DeckA)" Rounds="@(timeUnit=="rounds")" Title="Wins" Values="OutcomeTurns(pair,pair.DeckA)" /><Distribution Deck="@Store.Deck(pair.DeckA)" Rounds="@(timeUnit=="rounds")" Title="Losses" Values="OutcomeTurns(pair,pair.DeckB)" /><Distribution Rounds="@(timeUnit=="rounds")" Title="Rules Draws" Values="MatchupSlots(pair).Where(s=>s.Result?.Draw==true).Select(s=>s.Result!.ActualTurns).ToList()" /></div>
+            <TriggerCharts Games="@TriggerGames(pair)" CompletedGames="@pair.Valid" Rounds="@(timeUnit=="rounds")" Loading="@triggerLoading" />
         </article>
     }
     </section>
@@ -116,19 +111,19 @@ else{
         <p class="small muted">Win Rate by Game Length groups games by their ending @timeUnit, rather than checkpoint averages. Its scale is 0–100%; expand it to see rates and game counts. One round groups two actual player turns.</p>
     </section>
     <p class="actions"><a class="button" href="@($"/runs/{Id}/logs/games")">Open Game Evidence →</a></p>
-    <details><summary>Reproducibility and Limitations</summary><p>Pilot: @run.Config.Pilot<br />Engine Hash: @run.Config.EngineHash<br />Adapter Hash: @run.Config.AdapterHash<br />Seed Scheme: @run.Config.SeedScheme<br />Opening Policy: @run.Config.OpeningPolicy</p><p>Seeds are recorded; trace determinism and hidden-information fidelity have not yet passed independent validation. Loss evidence records the terminal event and does not claim causal attribution.</p></details>
+    <details><summary>Simulation limitations</summary><p>Seeds are recorded; trace determinism and hidden-information fidelity have not yet passed independent validation. Loss evidence records the terminal event and does not claim causal attribution.</p></details>
 
 }
 </div>
 @code{
-    private const string PauseHelp="Saves completed results and stops unfinished games. Resume later with the same seeds; unfinished games restart from the beginning. Pauses do not use failure retries. Resuming requires the same engine and adapter.";
+    private const string PauseHelp="Saves completed results and stops unfinished games. Resume later with the same seeds; unfinished games restart from the beginning. Pauses do not use failure retries. Resuming uses this session's saved Forge bundle if it remains available.";
     private bool actionsOpen;
     private ElementReference actionsButton;
     private void CloseActions()=>actionsOpen=false;
     private async Task MenuKeyDown(KeyboardEventArgs e){if(e.Key=="Escape"){CloseActions();await actionsButton.FocusAsync();}}
     private async Task SessionAction(Func<Task> action){CloseActions();await Act(action);}
 
-    private readonly TableSort timingSort=new(),mulliganSort=new(),matrixSort=new(),performanceSort=new();
+    private readonly TableSort timingSort=new(),mulliganSort=new();
     private static IComparable? TimingValue(SessionTiming t,string column)=>column switch{
         "started"=>t.StartedAt,"finished"=>t.FinishedAt??t.UpdatedAt,"time"=>t.ActiveSeconds,"attempts"=>t.AttemptCount,"status"=>t.Status,_=>null};
     private IComparable? MulliganValue(DeckMulliganSummary m,string column)=>column switch{
@@ -136,22 +131,6 @@ else{
         "median"=>m.Median is {} median?(median,m.Maximum??0):null,
         "zero"=>m.Zero,"one"=>m.One,"two"=>m.Two,"three"=>m.ThreePlus,"kept"=>m.MeanKeptSize,
         "play"=>m.MeanOnPlay is {} play?(play,m.MeanOnDraw??0):null,_=>null};
-    private IComparable? MatrixValue(DeckManifest deck,string column){
-        if(column=="deck")return Name(deck.Id);
-        var pair=view!.Matchups.FirstOrDefault(m=>m.DeckA==deck.Id&&m.DeckB==column||m.DeckB==deck.Id&&m.DeckA==column);
-        return pair is null?null:pair.DeckA==deck.Id?pair.WinRateA:pair.WinRateB;
-    }
-    private List<double> OpponentRates(DeckManifest deck)=>view!.Matchups.Where(m=>m.DeckA==deck.Id||m.DeckB==deck.Id)
-        .Select(m=>m.DeckA==deck.Id?m.WinRateA:m.WinRateB).Where(r=>r.HasValue).Select(r=>r!.Value).ToList();
-    private HashSet<string> LeadingDeckIds(){
-        if(viewDecks.Count<2)return [];
-        var ranked=viewDecks.Select(deck=>(deck.Id,Rates:OpponentRates(deck))).ToList();
-        if(ranked.Any(entry=>entry.Rates.Count!=viewDecks.Count-1))return [];
-        var best=ranked.Max(entry=>entry.Rates.Average());
-        return ranked.Where(entry=>Math.Abs(entry.Rates.Average()-best)<1e-12).Select(entry=>entry.Id).ToHashSet();
-    }
-    private IComparable? PerformanceValue(DeckManifest deck,string column){var rates=OpponentRates(deck);return column switch{
-        "deck"=>Name(deck.Id),"rate"=>rates.Count==0?null:rates.Average(),"opponents"=>rates.Count,_=>null};}
     protected override string SelectionKey => $"results:{Id}";
     protected override ResultSelections CaptureSelections() => new(SelectedMatchupKey,"","",0,timeUnit);
     protected override void RestoreSelections(ResultSelections saved)
@@ -159,7 +138,8 @@ else{
         SelectedMatchupKey=saved.Matchup??"";
         timeUnit=saved.TimeUnit=="turns"?"turns":"rounds";
     }
-    [Parameter]public string Id{get;set;}="";private RunSummary? summary;private RunSummary? view;private List<DeckManifest> viewDecks=[];private List<GameSlot> slots=[];private List<DeckManifest> deckVersions=[];private MatchupSummary? selected;private string? error;private string timeUnit="rounds";
+    [Parameter]public string Id{get;set;}="";private RunSummary? summary;private RunSummary? view;private List<DeckManifest> viewDecks=[];private List<GameSlot> slots=[];private List<DeckManifest> deckVersions=[];private MatchupSummary? selected;private string? error;private string timeUnit="rounds";private Capabilities? capabilities;
+    private Dictionary<string,TriggerGameSummary> triggerSummaries=[];private HashSet<string> triggerLoadedIds=[];private bool triggerLoading;
     private readonly CancellationTokenSource lifetime=new();
     private bool deleting;private string? deleteError;private bool retrying;
     private bool CanRetryFailedRun()=>slots.Any(slot=>slot.Result is null&&slot.Status is ("pending" or "cancelled" or "failed")&&AttemptPolicy.CanResume(slot));
@@ -178,30 +158,39 @@ else{
         finally{deleting=false;}
     }
     private string? initializedId;
-    protected override async Task OnParametersSetAsync(){if(initializedId==Id)return;initializedId=Id;actionsOpen=false;selected=null;focusDeck=null;await RefreshBackend();_ = Poll();}
-    private async Task RefreshBackend(){await Store.Refresh(Id,lifetime.Token);if(Store.ConnectionError is not null&&!Store.Runs().Any(r=>r.Id==Id))return;try{Refresh();}catch(KeyNotFoundException e){error=e.Message;}}
+    protected override async Task OnParametersSetAsync(){if(initializedId==Id)return;initializedId=Id;actionsOpen=false;selected=null;focusDeck=null;summary=null;view=null;error=null;triggerSummaries.Clear();triggerLoadedIds.Clear();await RefreshBackend();_ = Poll();}
+    private async Task<bool> RefreshBackend(){
+        var previousError=Store.ConnectionError;
+        await Store.Refresh(Id,lifetime.Token);
+        var connectionChanged=previousError!=Store.ConnectionError;
+        if(Store.ConnectionError is not null&&!Store.Runs().Any(r=>r.Id==Id))return connectionChanged;
+        // A 304 keeps the same slot list: retain metrics and charts without rebuilding.
+        if(summary is not null&&ReferenceEquals(slots,Store.Slots(Id)))return connectionChanged;
+        try{capabilities=Store.Capabilities();Refresh();if(!triggerLoading){var pending=slots.Where(s=>s.Status=="completed"&&s.Result is not null&&!triggerLoadedIds.Contains(s.Id)).Select(s=>s.Id).ToList();if(pending.Count>0){triggerLoading=true;_ = LoadTriggers(pending);}}}catch(KeyNotFoundException e){error=e.Message;}
+        return true;
+    }
+    private async Task LoadTriggers(List<string> pending){try{var loaded=await Store.TriggerSummaries(Id,pending);await InvokeAsync(()=>{foreach(var item in loaded)triggerSummaries[item.GameId]=item;triggerLoadedIds.UnionWith(pending);});}catch(Exception e)when(e is IOException or InvalidDataException or System.Text.Json.JsonException){await InvokeAsync(()=>error=$"Trigger charts unavailable: {e.Message}");}finally{await InvokeAsync(()=>{triggerLoading=false;StateHasChanged();});}}
     private void Refresh(){var run=Store.Run(Id);slots=Store.Slots(Id);summary=Metrics.Summarize(run,slots);deckVersions=run.Config.DeckIds.Select(Store.Deck).ToList();selected=summary.Matchups.FirstOrDefault(m=>m.DeckA==selected?.DeckA&&m.DeckB==selected?.DeckB);RefreshView();}
     private bool polling;
-    private async Task Poll(){if(polling)return;polling=true;try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(3));while(await timer.WaitForNextTickAsync(lifetime.Token)){await InvokeAsync(async()=>{if(!deleting){await RefreshBackend();StateHasChanged();}});}}catch(OperationCanceledException){}finally{polling=false;}}
-    private string Name(string id){var d=deckVersions.FirstOrDefault(d=>d.Id==id)??Store.Deck(id);return d.Name+(d.SourceType=="personal"?" (saved)":"");}
+    private async Task Poll(){if(polling)return;polling=true;try{while(true){
+        await Task.Delay(TimeSpan.FromSeconds(summary?.Run.Status is "running" or "queued" or "cancelling"?3:10),lifetime.Token);
+        await InvokeAsync(async()=>{if(!deleting&&await RefreshBackend())StateHasChanged();});
+    }}catch(OperationCanceledException){}finally{polling=false;}}
+    private string Name(string id){var d=deckVersions.FirstOrDefault(d=>d.Id==id)??Store.Deck(id);return DeckDisplay.Text(d);}
     private static string PairKey(MatchupSummary pair)=>$"{pair.DeckA}:{pair.DeckB}";
-    private IEnumerable<(string Key,string Label)> MatchupChoices()=>summary!.Matchups
-        .SelectMany(pair=>new[]{
-            (Key:PairKey(pair),Label:$"{Name(pair.DeckA)} vs {Name(pair.DeckB)}"),
-            (Key:$"{pair.DeckB}:{pair.DeckA}",Label:$"{Name(pair.DeckB)} vs {Name(pair.DeckA)}")})
-        .OrderBy(choice=>choice.Label,StringComparer.OrdinalIgnoreCase)
-        .ThenBy(choice=>choice.Key,StringComparer.Ordinal);
+    private IEnumerable<DeckChoice> MatchupChoices()=>summary!.Matchups.SelectMany(pair=>new[]{
+        new DeckChoice(PairKey(pair),deckVersions.FirstOrDefault(d=>d.Id==pair.DeckA),deckVersions.FirstOrDefault(d=>d.Id==pair.DeckB)),
+        new DeckChoice($"{pair.DeckB}:{pair.DeckA}",deckVersions.FirstOrDefault(d=>d.Id==pair.DeckB),deckVersions.FirstOrDefault(d=>d.Id==pair.DeckA))});
     private IEnumerable<MatchupSummary> OrderedMatchups()=>view!.Matchups
         .Select(Orient)
         .OrderBy(pair=>Name(pair.DeckA),StringComparer.OrdinalIgnoreCase)
         .ThenBy(pair=>Name(pair.DeckB),StringComparer.OrdinalIgnoreCase);
     private string? focusDeck;
-    private bool IsSelected(MatchupSummary pair,string row)=>selected is not null&&PairKey(selected)==PairKey(pair)&&focusDeck==row;
     private string SelectedMatchupKey {
         get=>selected is null?"":focusDeck==selected.DeckB?$"{selected.DeckB}:{selected.DeckA}":PairKey(selected);
         set {var pair=summary?.Matchups.FirstOrDefault(m=>PairKey(m)==value||$"{m.DeckB}:{m.DeckA}"==value);Select(pair,pair is null?null:value.Split(':')[0]);}
     }
-    private void SelectFromMatrix(MatchupSummary pair,string row)=>Select(pair,row);
+    private void SelectExplorerMatchup((MatchupSummary Pair,string DeckId) choice)=>Select(choice.Pair,choice.DeckId);
     private void Select(MatchupSummary? pair,string? first){selected=pair;focusDeck=first;RefreshView();}
     private MatchupSummary Orient(MatchupSummary pair)=>selected is not null&&focusDeck==pair.DeckB?pair with{
         DeckA=pair.DeckB,DeckB=pair.DeckA,WinsA=pair.WinsB,WinsB=pair.WinsA,
@@ -217,15 +206,16 @@ else{
         view=selected is null?summary:Metrics.Summarize(scopedRun,filtered);
     }
     private List<GameSlot> MatchupSlots(MatchupSummary pair)=>slots.Where(s=>s.DeckA==pair.DeckA&&s.DeckB==pair.DeckB||s.DeckA==pair.DeckB&&s.DeckB==pair.DeckA).ToList();
+    private List<TriggerGameSummary> TriggerGames(MatchupSummary pair)=>MatchupSlots(pair).Select(s=>triggerSummaries.GetValueOrDefault(s.Id)).OfType<TriggerGameSummary>().ToList();
     private List<GameSlot> PairSlots()=>slots.Where(s=>selected is null||s.DeckA==selected.DeckA&&s.DeckB==selected.DeckB).ToList();
     private List<int> OutcomeTurns(MatchupSummary pair,string winner)=>MatchupSlots(pair).Where(s=>s.Result?.Winner==winner).Select(s=>s.Result!.ActualTurns).ToList();
     private List<ChartSeries> Chart(Func<TurnSample,int?> value)=>viewDecks.Select(deck=>{
         var i=deckVersions.FindIndex(d=>d.Id==deck.Id);
         var samples=PairSlots().Where(s=>s.Status=="completed"&&s.Result is not null&&(s.DeckA==deck.Id||s.DeckB==deck.Id)).SelectMany(s=>s.Result!.Samples.Where(p=>p.Player==(s.DeckA==deck.Id?"A":"B")));
-        return new ChartSeries(Name(deck.Id),Branding.Palette[i%Branding.Palette.Length].Color,samples.Select(s=>new{Sample=s,Value=value(s)}).Where(p=>p.Value.HasValue).GroupBy(p=>timeUnit=="rounds"?(p.Sample.ActualTurn+1)/2:p.Sample.ActualTurn).OrderBy(g=>g.Key).Select(g=>new ChartPoint(g.Key,g.Average(p=>p.Value!.Value),g.Count())).ToList());}).ToList();
+        return new ChartSeries(Name(deck.Id),Branding.Palette[i%Branding.Palette.Length].Color,samples.Select(s=>new{Sample=s,Value=value(s)}).Where(p=>p.Value.HasValue).GroupBy(p=>timeUnit=="rounds"?(p.Sample.ActualTurn+1)/2:p.Sample.ActualTurn).OrderBy(g=>g.Key).Select(g=>new ChartPoint(g.Key,g.Average(p=>p.Value!.Value),g.Count())).ToList()){Deck=deck};}).ToList();
     private List<ChartSeries> GameLengthChart()=>viewDecks.Select(deck=>{
         var i=deckVersions.FindIndex(d=>d.Id==deck.Id);
-        return new ChartSeries(Name(deck.Id),Branding.Palette[i%Branding.Palette.Length].Color,Metrics.WinRatesByLength(PairSlots(),deck.Id,timeUnit=="rounds"));}).ToList();
+        return new ChartSeries(Name(deck.Id),Branding.Palette[i%Branding.Palette.Length].Color,Metrics.WinRatesByLength(PairSlots(),deck.Id,timeUnit=="rounds")){Deck=deck};}).ToList();
     private static string Interval(double[]? value)=>value is null?"—":$"{value[0]:P1}–{value[1]:P1}";
     private static string Number(double? value)=>value?.ToString("0.##")??"—";
     private string Eta(){if(summary is null)return "";var done=slots.Where(s=>s.Result is not null&&s.CachedFromRunId is null).ToList();if(done.Count==0)return "Runtime estimate pending measured games.";var seconds=done.Average(s=>s.Attempts.Last(a=>a.Status=="completed").FinishedAt!.Value.Subtract(s.Attempts.Last(a=>a.Status=="completed").StartedAt).TotalSeconds);var remaining=(summary.Pending+summary.Running)*seconds/summary.Run.Config.Workers;if(summary.Run.Config.StaggerStarts&&summary.Run.Config.StartupSpacingSeconds is null){var cadence=Math.Max(seconds/summary.Run.Config.Workers,summary.Run.Config.EstimatedGameSeconds-summary.Run.Config.StartLeadSeconds);remaining=summary.Pending*cadence+(summary.Running>0?seconds:0);}return summary.Run.Status=="running"?$"Measured estimate: {RuntimeEstimate.Duration(remaining)} remaining":"Local session stored.";}

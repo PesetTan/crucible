@@ -1,21 +1,135 @@
 @page "/runs"
 @inject IUiBackend Store
 @implements IDisposable
+
+<PageTitle>Run History — Crucible</PageTitle>
+<div class="eyebrow">YOUR LOCAL PLAYTESTS</div>
+<div class="section-head history-heading"><div><h1>Run History.</h1><p class="muted">Track your sessions. Compare what happened.</p></div><a class="button primary" href="/">New Session</a></div>
+<p class="history-interpretation">Exploratory Forge results · Win rates describe these local games, not Arena forecasts.</p>
 @if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
-<PageTitle>Run History — Gauntlet</PageTitle>
-<div class="eyebrow">YOUR LOCAL PLAYTESTS</div><div class="section-head"><h1>Run History.</h1><a class="button primary" href="/">New Session</a></div>
 @if(ReplayCleanupIncomplete){<div class="notice"><strong>Session Deleted</strong><span>Some replay files could not be removed from disk.</span></div>}
-@if(Store.Runs().Count==0){<section class="empty"><h2>The Table Is Ready.</h2><p>Choose your decks to start your first local session.</p><a href="/">Set Up a Run</a></section>}
-@foreach(var run in Store.Runs()){var summary=Store.SessionProgress(run.Id);<a class="history-row" href="@($"/runs/{run.Id}")"><div><span class="tag">EXPLORATORY</span><h3>@Combination(run)</h3><p>@run.Config.DeckIds.Count Decks · @run.Total Scheduled Games</p><p>@run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt") · Seed @run.Config.RootSeed</p>@if(run.UpdatedAt is {} updated){<p>Updated @updated.ToLocalTime().ToString("MMM d, yyyy · h:mm tt")</p>}</div><div><span class="pill">@UiText.Label(run.Status)</span><p>@summary.Completed valid · @summary.Failed failed</p><p>@RuntimeEstimate.SessionDuration(Store.SessionTimings(run.Id))</p>@if(summary.Reused>0){<p>@summary.Reused stored results reused</p>}</div></a>}
+@if(loading){<section class="empty" role="status"><p>Loading session history…</p></section>}
+else if(runs.Count==0){<section class="empty"><h2>@(Store.ConnectionError is null?"The Table Is Ready.":"History Is Unavailable.")</h2><p>@(Store.ConnectionError is null?"Choose your decks to start your first local session.":"Your sessions will appear when the service reconnects.")</p><a class="button" href="/">Set Up a Run</a></section>}
+else{
+    <div class="history-overview" aria-label="Session overview">
+        <div><strong>@runs.Count</strong><span>Sessions</span></div>
+        <div><strong>@runs.Count(IsActive)</strong><span>In progress</span></div>
+        <div><strong>@runs.Count(r=>r.Status=="completed")</strong><span>Completed</span></div>
+        <div><strong>@runs.Count(r=>r.Status=="failed"||history[r.Id].Progress.Failed>0)</strong><span>Need attention</span></div>
+    </div>
+    <div class="history-filters">
+        <label class="history-search"><span>Find a session</span><input type="search" placeholder="Colors, subtype, variant, or session ID" @bind="search" @bind:event="oninput" @bind:after="FilterChanged" /></label>
+        <div class="dropdown-field"><label for="history-status">Status</label><AppSelect Id="history-status" Label="Status" Options="@(new SelectOption[]{new SelectOption("all","All sessions"),new SelectOption("active","In progress"),new SelectOption("completed","Completed"),new SelectOption("paused","Paused"),new SelectOption("attention","Needs attention")})" @bind-Value="filter" @bind-Value:after="FilterChanged" /></div>
+        <div class="dropdown-field"><label for="history-sort">Sort</label><AppSelect Id="history-sort" Label="Sort" Options="@(new SelectOption[]{new SelectOption("newest","Newest first"),new SelectOption("oldest","Oldest first"),new SelectOption("results","Most valid games")})" @bind-Value="sort" @bind-Value:after="FilterChanged" /></div>
+    </div>
+    <div class="history-list-heading"><span>@FilteredRuns().Count of @runs.Count sessions</span><span>Auto-refreshes every 10 seconds</span></div>
+    @if(FilteredRuns().Count==0){<section class="empty"><h2>No matching sessions.</h2><p>Try another color, subtype, variant, or status.</p><button @onclick="ClearFilters">Clear Filters</button></section>}
+    <div class="history-list">
+    @foreach(var recordedRun in VisibleRuns()){
+        var result=history[recordedRun.Id];
+        var run=result.Progress.Run;
+        var progress=result.Progress;
+        var performance=DeckPerformance(result);
+        var shownDeckIds=performance.Select(deck=>deck.Id).Concat(run.Config.DeckIds.Where(id=>performance.All(deck=>deck.Id!=id))).ToList();
+        <article class="history-session" @key="run.Id">
+            <div class="history-session-head">
+                <div class="history-identity"><div class="history-date"><time datetime="@run.CreatedAt.ToString("O")">@run.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt")</time><span>·</span><span>@(run.WorkshopDeckId is null?"Playtest":"Workshop")</span></div><h2><a href="@($"/runs/{run.Id}")">@(run.Config.DeckIds.Count==2?"Head-to-head":"Round robin") <span class="muted">· @run.Config.DeckIds.Count decks</span></a></h2><p>@(run.Config.DeckIds.Count*(run.Config.DeckIds.Count-1)/2) @(run.Config.DeckIds.Count==2?"matchup":"matchups") · @run.Config.GamesPerPair games per matchup</p></div>
+                <span class="history-status @StatusTone(run,progress)"><span aria-hidden="true"></span>@StatusLabel(run,progress)</span>
+            </div>
+            <div class="history-session-body">
+                <div class="history-progress-area">
+                    <div class="history-results-count"><strong>@progress.Completed.ToString("N0")<small> / @run.Total.ToString("N0")</small></strong><span>valid games</span></div>
+                    <div class="history-progress-meter">
+                    <div class="history-progress-track" role="img" aria-label="@($"{progress.Completed} valid, {progress.Failed} failed, {progress.Running} running, {progress.Pending} pending, {progress.Cancelled} paused out of {run.Total} scheduled games")">
+                        <span class="valid" style="width:@Width(progress.Completed,run.Total)"></span><span class="failed" style="width:@Width(progress.Failed,run.Total)"></span><span class="running" style="width:@Width(progress.Running,run.Total)"></span><span class="paused" style="width:@Width(progress.Cancelled,run.Total)"></span>
+                    </div>
+                    <div class="history-game-states">
+                        @if(progress.Running>0){<span>@progress.Running running</span>}
+                        @if(progress.Pending>0){<span>@progress.Pending pending</span>}
+                        @if(progress.Failed>0){<span class="history-failure">@progress.Failed failed</span>}
+                        @if(progress.Cancelled>0){<span>@progress.Cancelled paused</span>}
+                        @if(progress.Completed==run.Total&&run.Total>0){<span>All scheduled games have results</span>}
+                    </div>
+                    </div>
+                    <div class="history-timing"><p class="history-runtime">@RuntimeEstimate.SessionDuration(result.Timings)</p>
+                    @if(progress.Reused>0){<p class="history-reused">Includes @progress.Reused reused results</p>}</div>
+                </div>
+                <div class="history-performance">
+                    <div class="history-performance-heading"><span>@(run.Config.DeckIds.Count==2?"MATCHUP WIN RATES":"MEAN OPPONENT WIN RATES")</span>@if(progress.Completed>0){<span>@(progress.Completed<run.Total?"Partial results":"Final results")</span>}</div>
+                    <table class="history-results-table">
+                        <thead><tr><th scope="col">Deck</th><th scope="col">Win rate</th><th scope="col" class="history-record"><abbr title="Wins / Losses / Draws">W / L / D</abbr></th>@if(run.Config.DeckIds.Count>2){<th scope="col" class="history-opponents">Opponents</th>}</tr></thead>
+                        <tbody>
+                        @foreach(var id in shownDeckIds){
+                            var deck=performance.FirstOrDefault(d=>d.Id==id);
+                            <tr @key="id">
+                                <th scope="row"><DeckIdentity Deck="@deckLookup.GetValueOrDefault(id)" Compact="true" SingleRow="true" />
+                                    <small class="history-mobile-record">@(deck is null?"No valid games yet":$"{deck.Wins}W · {deck.Losses}L · {deck.Draws}D")@if(deck is not null&&run.Config.DeckIds.Count>2){<span> · @deck.Opponents/@(run.Config.DeckIds.Count-1) opponents</span>}</small>
+                                </th>
+                                <td><div class="history-rate">@if(deck is not null){<div class="history-win-track" aria-hidden="true"><span style="width:@((deck.Rate*100).ToString("0.#",CultureInfo.InvariantCulture))%"></span></div><SourceWinRate Deck="@deckLookup.GetValueOrDefault(id)"><strong>@Metrics.Rate(deck.Rate)</strong></SourceWinRate>}else{<span class="muted">—</span>}</div></td>
+                                <td class="history-record">@(deck is null?"No valid games":$"{deck.Wins} / {deck.Losses} / {deck.Draws}")</td>
+                                @if(run.Config.DeckIds.Count>2){<td class="history-opponents">@(deck?.Opponents??0) / @(run.Config.DeckIds.Count-1)</td>}
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                    @if(run.Config.DeckIds.Count>2&&performance.Count>0){<p class="history-more">Each opponent has equal weight. Missing matchups are excluded.</p>}
+                </div>
+            </div>
+            @if(run.Error is not null){<p class="history-session-error">@run.Error</p>}
+            <div class="history-session-footer">
+                <details class="history-settings"><summary>Session details <span>· @BuildLabel(run)</span></summary><dl><div><dt>Session</dt><dd>@run.Id</dd></div><div><dt>Engine</dt><dd><BuildName Hash="@run.Config.EngineHash" /></dd></div><div><dt>Pilot Bridge</dt><dd><BuildName Hash="@run.Config.AdapterHash" Bridge="true" /></dd></div><div><dt>Pilot</dt><dd>@ReanimatorPilots.DisplayName(run.Config.Pilot)</dd></div><div><dt>Deck pilots</dt><dd>@foreach(var id in run.Config.DeckIds){<p><DeckIdentity Deck="@deckLookup.GetValueOrDefault(id)" Compact="true" />: @ReanimatorPilots.DisplayName(run.Config.PilotProfiles?.GetValueOrDefault(id)??run.Config.Pilot)</p>}</dd></div><div><dt>Setup</dt><dd>Seed @run.Config.RootSeed · @run.Config.Workers parallel games · Performance Mode @(run.Config.PerformanceMode?"On":"Off")</dd></div><div><dt>Deck versions</dt><dd>@foreach(var id in run.Config.DeckIds){<p><DeckIdentity Deck="@deckLookup.GetValueOrDefault(id)" Compact="true" /> · @Source(id) · @RunBuildIdentity.Short(id)</p>}</dd></div>@if(run.UpdatedAt is {} updated){<div><dt>Updated</dt><dd>@updated.ToLocalTime().ToString("MMM d, yyyy · h:mm tt")</dd></div>}@if(capabilities is not null&&!RunBuildIdentity.MatchesActive(run.Config,capabilities)){<div><dt>Build difference</dt><dd>@RunBuildIdentity.Difference(run.Config,capabilities)</dd></div>}</dl></details>
+                <a class="history-open" href="@($"/runs/{run.Id}")">@(run.Status=="failed"||progress.Failed>0?"Review Session":IsActive(run)?"View Progress":"View Results") <span aria-hidden="true">→</span></a>
+            </div>
+        </article>
+    }
+    </div>
+    @if(FilteredRuns().Count>PageSize){<div class="history-pagination"><button disabled="@(page==0)" @onclick="PreviousPage">Previous</button><span>Page @(page+1) of @PageCount</span><button disabled="@(page+1>=PageCount)" @onclick="NextPage">Next</button></div>}
+}
 
 @code {
-    private async Task PollConnection(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(connectionLifetime.Token))await InvokeAsync(async()=>{await Store.Refresh(null,connectionLifetime.Token);deckLookup=Store.Decks().ToDictionary(deck=>deck.Id);StateHasChanged();});}catch(OperationCanceledException){}}
-    private readonly CancellationTokenSource connectionLifetime=new();
-    public void Dispose(){connectionLifetime.Cancel();connectionLifetime.Dispose();}
-
-    [SupplyParameterFromQuery]public bool ReplayCleanupIncomplete{get;set;}
-    private Dictionary<string, DeckManifest> deckLookup=[];
-    protected override async Task OnInitializedAsync(){await Store.Refresh();_ = PollConnection();deckLookup=Store.Decks().ToDictionary(deck=>deck.Id);}
-    private string Combination(SimulationRun run) => string.Join(" + ", run.Config.DeckIds.Select(id =>
-        deckLookup.TryGetValue(id, out var deck) ? $"{deck.Name} ({(deck.SourceType == "personal" ? "saved" : "public")})" : "Unavailable deck version"));
+    [SupplyParameterFromQuery] public bool ReplayCleanupIncomplete { get; set; }
+    private const int PageSize=8;
+    private int page;
+    private bool loading=true;
+    private string search="",filter="all",sort="newest";
+    private List<SimulationRun> runs=[];
+    private Dictionary<string,DeckManifest> deckLookup=[];
+    private Dictionary<string,HistoryRun> history=[];
+    private Capabilities? capabilities;
+    private readonly CancellationTokenSource lifetime=new();
+    private int PageCount=>Math.Max(1,(FilteredRuns().Count+PageSize-1)/PageSize);
+    protected override async Task OnInitializedAsync(){await Refresh();loading=false;_ = Poll();}
+    private async Task Refresh(){
+        var snapshot=await Store.History(lifetime.Token);
+        if(snapshot is null)return;
+        history=snapshot.Sessions.ToDictionary(s=>s.Progress.Run.Id);
+        runs=snapshot.Sessions.Select(s=>s.Progress.Run).ToList();
+        deckLookup=snapshot.Decks.ToDictionary(d=>d.Id);
+        capabilities=snapshot.Capabilities;
+        page=Math.Min(page,PageCount-1);
+    }
+    private async Task Poll(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(lifetime.Token))await InvokeAsync(async()=>{await Refresh();StateHasChanged();});}catch(OperationCanceledException){}}
+    private void FilterChanged()=>page=0;
+    private void ClearFilters(){search="";filter="all";FilterChanged();}
+    private void PreviousPage()=>page--;
+    private void NextPage()=>page++;
+    private List<SimulationRun> FilteredRuns(){
+        var filtered=runs.Where(r=>(string.IsNullOrWhiteSpace(search)||r.Config.DeckIds.Any(id=>Name(id).Contains(search.Trim(),StringComparison.OrdinalIgnoreCase)||(deckLookup.TryGetValue(id,out var deck)&&deck.Name.Contains(search.Trim(),StringComparison.OrdinalIgnoreCase)))||r.Id.Contains(search.Trim(),StringComparison.OrdinalIgnoreCase))&&(filter switch{"active"=>IsActive(r),"completed"=>r.Status=="completed","paused"=>r.Status=="cancelled","attention"=>r.Status=="failed"||history[r.Id].Progress.Failed>0,_=>true}));
+        return (sort switch{"oldest"=>filtered.OrderBy(r=>r.CreatedAt),"results"=>filtered.OrderByDescending(r=>history[r.Id].Progress.Completed).ThenByDescending(r=>r.CreatedAt),_=>filtered.OrderByDescending(r=>r.CreatedAt)}).ToList();
+    }
+    private List<SimulationRun> VisibleRuns()=>FilteredRuns().Skip(page*PageSize).Take(PageSize).ToList();
+    private string Name(string id)=>deckLookup.TryGetValue(id,out var deck)?DeckDisplay.Text(deck):"Unavailable deck version";
+    private string Source(string id)=>deckLookup.TryGetValue(id,out var deck)?deck.SourceType=="personal"?"saved":deck.SourceType:"unavailable";
+    private string BuildLabel(SimulationRun run)=>capabilities is null?"Recorded build":RunBuildIdentity.MatchesActive(run.Config,capabilities)?"Active build":run.Config.EngineHash==capabilities.EngineHash&&run.Config.AdapterHash==capabilities.AdapterHash?"Other pilot / settings":"Earlier build";
+    private static bool IsActive(SimulationRun run)=>run.Status is "running" or "queued" or "cancelling";
+    private static string StatusLabel(SimulationRun run,ActiveSessionProgress p)=>run.Status=="failed"?"Needs attention":run.Status=="completed"&&p.Completed<run.Total?"Incomplete results":UiText.Label(run.Status);
+    private static string StatusTone(SimulationRun run,ActiveSessionProgress p)=>run.Status=="failed"||run.Status=="completed"&&p.Completed<run.Total?"attention":IsActive(run)?"active":run.Status=="completed"?"complete":"idle";
+    private static string Width(int count,int total)=>(100.0*count/Math.Max(1,total)).ToString("0.#",CultureInfo.InvariantCulture)+"%";
+    private sealed record Performance(string Id,double Rate,int Wins,int Losses,int Draws,int Opponents);
+    private static List<Performance> DeckPerformance(HistoryRun summary)=>summary.Progress.Run.Config.DeckIds.Select(id=>{
+        var pairs=summary.Matchups.Where(m=>(m.DeckA==id||m.DeckB==id)&&m.Valid>0).ToList();
+        var rates=pairs.Select(m=>m.DeckA==id?m.WinRateA:m.WinRateB).Where(r=>r.HasValue).Select(r=>r!.Value).ToList();
+        return rates.Count==0?null:new Performance(id,rates.Average(),pairs.Sum(m=>m.DeckA==id?m.WinsA:m.WinsB),pairs.Sum(m=>m.DeckA==id?m.WinsB:m.WinsA),pairs.Sum(m=>m.Draws),rates.Count);
+    }).OfType<Performance>().OrderByDescending(d=>d.Rate).ToList();
+    public void Dispose(){lifetime.Cancel();lifetime.Dispose();}
 }

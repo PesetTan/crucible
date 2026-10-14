@@ -8,8 +8,16 @@ using Microsoft.AspNetCore.DataProtection;
 if(args.Contains("--setup",StringComparer.Ordinal))
 {
     var directory=Environment.GetEnvironmentVariable("MTG_PROJECT_ROOT")??Directory.GetCurrentDirectory();
-    while(!Directory.Exists(Path.Combine(directory,"docs","specs"))){directory=Path.GetDirectoryName(directory)??throw new ArgumentException("Run setup from the Gauntlet project directory.");}
+    while(!Directory.Exists(Path.Combine(directory,"docs","specs"))){directory=Path.GetDirectoryName(directory)??throw new ArgumentException("Run setup from the Crucible project directory.");}
     await EngineSetup.Install(directory);return;
+}
+if(args.Contains("--activate-engine",StringComparer.Ordinal))
+{
+    var directory=Environment.GetEnvironmentVariable("MTG_PROJECT_ROOT")??Directory.GetCurrentDirectory();
+    while(!Directory.Exists(Path.Combine(directory,"docs","specs"))){directory=Path.GetDirectoryName(directory)??throw new ArgumentException("Run activation from the Crucible project directory.");}
+    var bundle=await new EngineBundleManager(directory).Publish();
+    Console.WriteLine($"Activated Forge bundle {bundle.Id}");
+    return;
 }
 
 var mode=Environment.GetEnvironmentVariable("MTG_HOST_MODE")??"combined";
@@ -20,6 +28,9 @@ var builder=WebApplication.CreateBuilder(args);
 builder.Services.AddResponseCompression(options=>{options.EnableForHttps=true;options.MimeTypes=Microsoft.AspNetCore.ResponseCompression.ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]);});
 builder.Configuration.AddJsonFile("branding.json", optional:false, reloadOnChange:true);
 builder.Services.AddSingleton<BrandSettings>();
+builder.Services.AddSingleton<PilotEvaluationStore>();
+builder.Services.AddScoped<SourceRateCatalog>();
+builder.Services.AddSingleton(services=>new BuildNames(Path.Combine(builder.Environment.ContentRootPath,"ui-state","build-names.json"),services.GetRequiredService<ILogger<BuildNames>>()));
 var lanAddress=mode=="service"?null:Environment.GetEnvironmentVariable("MTG_LAN_ADDRESS");
 if(lanAddress is not null && (!IPAddress.TryParse(lanAddress,out var lanIp)||lanIp.AddressFamily!=System.Net.Sockets.AddressFamily.InterNetwork||
     !(lanIp.GetAddressBytes()[0]==10 || (lanIp.GetAddressBytes()[0]==172 && lanIp.GetAddressBytes()[1] is >=16 and <=31) || (lanIp.GetAddressBytes()[0]==192 && lanIp.GetAddressBytes()[1]==168))))
@@ -37,7 +48,8 @@ if(mode=="ui"){
         throw new ArgumentException("MTG_BACKEND_URL must be an HTTP loopback origin.");
     builder.Services.AddHttpClient("simulation",client=>{client.BaseAddress=backendUri;client.Timeout=TimeSpan.FromSeconds(90);})
         .ConfigurePrimaryHttpMessageHandler(()=>new HttpClientHandler{AutomaticDecompression=DecompressionMethods.All});
-    builder.Services.AddScoped<IUiBackend>(services=>new RemoteUiBackend(services.GetRequiredService<IHttpClientFactory>().CreateClient("simulation")));
+    builder.Services.AddSingleton(new AppPaths(builder.Environment));
+    builder.Services.AddScoped<IUiBackend>(services=>new RemoteUiBackend(services.GetRequiredService<IHttpClientFactory>().CreateClient("simulation"),services.GetRequiredService<AppPaths>()));
     var uiKeys=Path.Combine(builder.Environment.ContentRootPath,"ui-state","protection-keys");
     builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(uiKeys));
 }else{
@@ -45,8 +57,10 @@ if(mode=="ui"){
     try{serviceOwnership=new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
     catch(IOException error){throw new InvalidOperationException("Another simulation host already owns this data directory. Stop that host before starting a replacement.",error);}
     builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(paths.Data,"protection-keys")));
-    builder.Services.AddSingleton(paths);builder.Services.AddSingleton<Store>();builder.Services.AddSingleton<DeckImporter>();builder.Services.AddSingleton<ForgeEngine>();
-    builder.Services.AddSingleton<ResourceCapacity>();builder.Services.AddSingleton<RunCoordinator>();builder.Services.AddHostedService(p=>p.GetRequiredService<RunCoordinator>());
+    builder.Services.AddSingleton(paths);builder.Services.AddSingleton(new CardAttributes(paths));builder.Services.AddSingleton<Store>();builder.Services.AddSingleton<DeckImporter>();builder.Services.AddSingleton<ForgeEngine>();
+    builder.Services.AddSingleton<SimulationExecutionGate>();
+    builder.Services.AddSingleton<DeckWorkshop>();builder.Services.AddSingleton<ResourceCapacity>();builder.Services.AddSingleton<RunCoordinator>();builder.Services.AddHostedService(p=>p.GetRequiredService<RunCoordinator>());
+    builder.Services.AddSingleton<PilotOptimizer>();builder.Services.AddHostedService(p=>p.GetRequiredService<PilotOptimizer>());
     builder.Services.AddSingleton<LocalUiBackend>();builder.Services.AddSingleton<IUiBackend>(p=>p.GetRequiredService<LocalUiBackend>());
 }
 builder.Services.ConfigureHttpJsonOptions(options=>{options.SerializerOptions.PropertyNamingPolicy=Json.Options.PropertyNamingPolicy;});
@@ -71,6 +85,7 @@ app.Use(async(context,next)=>{
     }
 });
 app.UseStaticFiles();app.UseAntiforgery();app.MapStaticAssets();
+app.MapGet("/api/v1/pilot-scorecards",(PilotEvaluationStore evaluations)=>evaluations.Read());
 if(mode=="ui"){
     app.MapGet("/api/{**path}",async(HttpContext context,IHttpClientFactory factory)=>{
         var path=context.Request.Path.Value!;
@@ -87,15 +102,47 @@ if(mode=="ui"){
     app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
     await app.RunAsync();return;
 }
-app.MapGet("/api/v1/ui-state",async(string? runId,LocalUiBackend backend,HttpContext context)=>await backend.Snapshot(runId,context.RequestAborted));
+async Task<IResult> ReadUiState(string? runId,LocalUiBackend backend,HttpContext context){
+    var state=await backend.Snapshot(runId,context.RequestAborted);
+    if(runId is not null){
+        var tag=state.ETag();context.Response.Headers.ETag=tag;context.Response.Headers.CacheControl="private, no-cache";
+        if(context.Request.Headers.IfNoneMatch.ToString().Split(',').Any(value=>value.Trim()==tag||value.Trim()=="W/"+tag||value.Trim()=="*"))
+            return Results.StatusCode(StatusCodes.Status304NotModified);
+    }
+    return Results.Json(state,Json.Options);
+}
+app.MapGet("/api/v1/ui-state",ReadUiState);
+app.MapGet("/api/v1/runs/{runId}/state",ReadUiState);
+app.MapGet("/api/v1/run-history",(LocalUiBackend backend,HttpContext context)=>backend.History(context.RequestAborted));
+app.MapGet("/api/v1/workshop-state",(LocalUiBackend backend,HttpContext context)=>backend.WorkshopState(context.RequestAborted));
+app.MapGet("/api/v1/library-state",async(LocalUiBackend backend,HttpContext context)=>{
+    var state=await backend.LibraryState(context.RequestAborted);
+    var tag=state!.ETag();
+    context.Response.Headers.ETag=tag;
+    context.Response.Headers.CacheControl="private, no-cache";
+    if(context.Request.Headers.IfNoneMatch.ToString().Split(',').Any(value=>value.Trim()==tag||value.Trim()=="W/"+tag||value.Trim()=="*"))
+        return Results.StatusCode(StatusCodes.Status304NotModified);
+    return Results.Json(state,Json.Options);
+});
 app.MapGet("/api/v1/session",()=>new{instanceToken});
+PilotOptimizer.MapEndpoints(app);
 app.MapGet("/api/v1/capabilities",(ForgeEngine engine)=>engine.Capabilities());
 app.MapGet("/api/v1/decks",(Store store,ForgeEngine engine)=>store.Decks().Select(d=>new{manifest=d,coverage=engine.Coverage(d)}));
 app.MapGet("/api/v1/decks/{id}",(string id,Store store,ForgeEngine engine)=>new{manifest=store.Deck(id),coverage=engine.Coverage(store.Deck(id))});
+app.MapGet("/api/v1/cards/search",(string q,DeckWorkshop workshop)=>workshop.Search(q));
+app.MapGet("/api/v1/cards/{id:int}/attributes",(int id,CardAttributes attributes)=>attributes.Read(id));
+app.MapPost("/api/v1/cards/{id:int}/attributes",(int id,AttributesAppend request,CardAttributes attributes)=>attributes.Append(id,request));
+app.MapPost("/api/v1/decks/resolve",(ArenaListRequest request,DeckWorkshop workshop)=>workshop.Resolve(request.Text));
+app.MapPost("/api/v1/decks/validate",(CustomDeckRequest request,DeckWorkshop workshop)=>workshop.Validate(request));
+app.MapPost("/api/v1/decks/custom",async(CustomDeckRequest request,DeckWorkshop workshop)=>await workshop.Save(request));
+app.MapGet("/api/v1/runs/{id}/workshop",(string id,string deckId,string opponentId,DeckWorkshop workshop)=>workshop.Matchup(id,deckId,opponentId));
 app.MapPost("/api/v1/imports",async(DeckImporter importer)=>await importer.Import());
-app.MapPost("/api/v1/runs/preflight",(RunRequest request,ForgeEngine engine,Store store)=>{
+app.MapPost("/api/v1/runs/preflight",(RunRequest request,ForgeEngine engine,Store store,CardAttributes attributes)=>{
     var capabilities=engine.Capabilities();
-    var config=new RunConfig(request.DeckIds,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capabilities.EngineHash,capabilities.AdapterHash);
+    var attributeSnapshot=attributes.Snapshot(request.DeckIds.Select(store.Deck));
+    var config=new RunConfig(request.DeckIds,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capabilities.EngineHash,capabilities.AdapterHash,
+        Pilot:request.PilotMode,PerformanceMode:request.PerformanceMode,
+        PilotProfiles:request.DeckIds.ToDictionary(id=>id,id=>ReanimatorPilots.Profile(store.Deck(id) with{Cards=store.Deck(id).Cards.Select(c=>c with{Attributes=attributeSnapshot.Cards.GetValueOrDefault(c.Name)}).ToList()},request.PilotMode))){AttributesHash=attributeSnapshot.Hash,OptimizerPolicy=engine.OptimizerPolicy(request)};
     var cached=store.CachedGameKeys(config).Count(key=>request.DeckIds.Contains(key.DeckA)&&request.DeckIds.Contains(key.DeckB)&&key.Index<request.GamesPerPair/2);
     var existing=store.ExistingSession(config);
     return new{blockers=engine.Preflight(request),limitations=capabilities.Limitations,cachedGames=cached,existingSessionId=existing?.Id,existingGamesPerPair=existing?.Config.GamesPerPair};
@@ -107,6 +154,7 @@ app.MapPost("/api/v1/runs",async(RunRequest request,HttpContext context,RunCoord
 app.MapGet("/api/v1/runs",(Store store,int offset=0,int limit=50)=>{if(offset<0||limit is <1 or >100)throw new ArgumentException("Invalid page range.");return store.Runs().Skip(offset).Take(limit);});
 app.MapGet("/api/v1/runs/{id}",(string id,Store store)=>store.Run(id));
 app.MapGet("/api/v1/runs/{id}/timings",(string id,Store store)=>{_ = store.Run(id);return store.SessionTimings(id);});
+app.MapGet("/api/v1/runs/{id}/notes",(string id,Store store)=>store.RunMatchupNotes(id));
 app.MapDelete("/api/v1/runs/{id}",async(string id,RunCoordinator coordinator)=>Results.Ok(new{replayCleanupComplete=await coordinator.Delete(id)}));
 app.MapPost("/api/v1/runs/{id}/cancel",async(string id,RunCoordinator coordinator)=>{await coordinator.Cancel(id);return Results.Accepted();});
 app.MapPost("/api/v1/runs/{id}/resume",async(string id,RunCoordinator coordinator)=>{await coordinator.Resume(id);return Results.Accepted();});
@@ -129,6 +177,11 @@ app.MapGet("/api/v1/runs/{id}/games",(string id,Store store,int offset=0,int lim
 app.MapGet("/api/v1/runs/{run}/games/{id}/replay",async(string run,string id,Store store,ForgeEngine engine,int offset=0,int limit=100,bool audit=false)=>{
     var records=await engine.Replay(store.Slot(run,id),offset,limit);
     return audit?records:records.Select(r=>r with{Detail=r.Event is null?r.Detail:null,StateHash=null,State=r.State is null?null:r.State with{Players=r.State.Players.Select(p=>p with{Hand=[]}).ToList()}}).ToList();
+});
+app.MapGet("/api/v1/runs/{run}/games/{id}/replay-turns",async(string run,string id,Store store,ForgeEngine engine)=>
+    await engine.ReplayTurns(store.Slot(run,id)));
+app.MapGet("/api/v1/runs/{id}/trigger-summaries",async(string id,Store store,ForgeEngine engine)=>{
+    return await engine.TriggerSummaries(store.Slots(id).Where(s=>s.Status=="completed"&&s.Result is not null));
 });
 app.MapGet("/api/v1/runs/{id}/export",(string id,Store store,string format="json")=>{
     var summary=Metrics.Summarize(store.Run(id),store.Slots(id));

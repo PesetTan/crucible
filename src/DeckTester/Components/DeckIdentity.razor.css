@@ -1,0 +1,12 @@
+.deck-identity{display:inline-flex;align-items:center;gap:.4em;min-width:0;max-width:100%;vertical-align:middle;text-align:left;line-height:1.3;white-space:normal;overflow-wrap:normal;word-break:normal;font-size:min(1em,1.05rem);font-weight:500;letter-spacing:normal}
+.deck-identity-text{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;max-width:100%}
+.deck-identity ::deep>.deck-colors{flex:none}
+.deck-identity ::deep .mana-symbols{gap:.12em}
+.deck-identity ::deep .mana-logo{width:1.15em;height:1.15em;font-size:inherit}
+.deck-identity-primary{min-width:0;max-width:100%;text-wrap:pretty}
+.deck-identity-variant{display:block;font-size:clamp(.68rem,.72em,.78rem);font-weight:400;color:var(--muted);line-height:1.25;letter-spacing:normal}
+.deck-identity-compact{font-size:min(1em,.82rem);max-width:min(100%,16rem)}
+
+.deck-identity-stacked{flex-direction:column;align-items:flex-start;gap:.3em}
+.deck-identity-single-row{max-width:100%}
+.deck-identity-single-row .deck-identity-text{flex-direction:row;align-items:baseline;flex-wrap:wrap;gap:.2em .45em}

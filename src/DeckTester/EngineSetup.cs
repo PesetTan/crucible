@@ -33,10 +33,9 @@ public static class EngineSetup
         }
         var profile=Path.Combine(vendor,"forge.profile.properties");
         await File.WriteAllTextAsync(profile,$"userDir={Property(Path.Combine(data,"forge-user"))}\ncacheDir={Property(Path.Combine(data,"forge-cache"))}\n");
-        Directory.CreateDirectory(Path.Combine(root,"engine","build"));
-        await Command(Path.Combine(javaHome,"bin","javac"),["-cp",jar,"-d",Path.Combine(root,"engine","build"),Path.Combine(root,"engine","ForgeBridge.java")],root);
+        var bundle=await new EngineBundleManager(root).Publish();
         await File.WriteAllTextAsync(Path.Combine(data,"engine-installation.json"),Json.Encode(new{installedAt=DateTimeOffset.UtcNow,forgeVersion="2.0.15",jarHash=ForgeEngine.FileHash(jar),javaHome}));
-        Console.WriteLine("Local engine setup complete. No simulations have been run.");
+        Console.WriteLine($"Local engine setup complete. Active bundle: {bundle.Id}. No simulations have been run.");
     }
     private static string Property(string path)=>path.Replace("\\","\\\\",StringComparison.Ordinal).Replace(":","\\:",StringComparison.Ordinal);
     private static async Task Download(HttpClient http,string url,string destination,string? expected)

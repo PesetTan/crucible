@@ -1,0 +1,60 @@
+# MTG lore nouns for generated deck and build names.
+# Add one lowercase name per line. Blank lines and # comments are ignored.
+# Keep names to a single word so build aliases stay compact.
+# Changes take effect when the app restarts; existing saved names are preserved.
+# Sources:
+# https://magic.wizards.com/en/news/making-magic/planeswalking-down-memory-lane-2018-07-23
+# https://magic.wizards.com/en/news/feature/planeswalkers-guide-to-march-of-the-machine
+# https://magic.wizards.com/en/story/zendikar-plane
+
+# Characters
+ajani
+chandra
+dack
+daretti
+elspeth
+freyalise
+garruk
+gideon
+jace
+jaya
+jhoira
+karn
+kaya
+kytheon
+liliana
+nahiri
+narset
+nissa
+saheeli
+sarkhan
+sheoldred
+sorin
+tamiyo
+teferi
+tezzeret
+tibalt
+ugin
+urza
+venser
+vorinclex
+vraska
+xenagos
+
+# Planes
+alara
+amonkhet
+arcavios
+dominaria
+eldraine
+ikoria
+innistrad
+ixalan
+kaldheim
+kaladesh
+kamigawa
+lorwyn
+ravnica
+tarkir
+theros
+zendikar

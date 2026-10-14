@@ -1,0 +1,23 @@
+<fieldset class="parallel-options" aria-describedby="@(id+"-help")">
+    <legend>Parallel Games</legend>
+    <div class="parallel-choices">
+        @foreach(var choice in Choices){
+            <label><input type="radio" name="@id" value="@choice" checked="@(Value==choice)" @onchange="()=>ValueChanged.InvokeAsync(choice)" /><span>@choice</span></label>
+        }
+    </div>
+    <div class="capacity-check" aria-live="polite" style="@($"--capacity-column:{Array.IndexOf(Choices,Value)+1};--capacity-columns:{Choices.Length}")">
+        <span class="capacity-badge @Badge.Status" tabindex="0" aria-describedby="@(id+"-explanation")">@Badge.Label<span class="capacity-tooltip" id="@(id+"-explanation")" role="tooltip">@Badge.Explanation</span></span>
+    </div>
+    <small id="@(id+"-help")">@SpacingDescription Finished games are replaced immediately. Allow ~1.2 GB per game (4 games: ~4.8 GB), plus app and engine overhead.</small>
+</fieldset>
+@code {
+    [Parameter] public int Value { get; set; }=2;
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+    [Parameter] public ResourceSnapshot? Resources { get; set; }
+    [Parameter] public bool StaggerStarts { get; set; }=true;
+    [Parameter] public double? StartupSpacingSeconds { get; set; }=1;
+    private readonly string id="parallel-games-"+Guid.NewGuid().ToString("N");
+    private int[] Choices=>Value==1?[1,2,3,4]:[2,3,4];
+    private CapacityBadge Badge=>ResourceCapacity.Assess(Resources,Value);
+    private string SpacingDescription=>!StaggerStarts?"Initial engine starts are not spaced.":$"Engine starts are spaced {StartupSpacingSeconds??1:0.#} {(StartupSpacingSeconds is null or 1?"second":"seconds")} apart initially.";
+}

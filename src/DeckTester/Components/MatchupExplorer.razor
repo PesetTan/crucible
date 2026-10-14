@@ -1,0 +1,84 @@
+<section class="panel matchup-explorer" aria-label="Matchup explorer">
+    <div class="section-head">
+        <div><div class="eyebrow">01 / THE MATCHUPS</div><h2>Who Wins Against Whom?</h2></div>
+        <div class="matchup-view-switch" role="group" aria-label="Matchup layout">
+            <button type="button" aria-pressed="@(!byDeck ? "true" : "false")" @onclick="()=>byDeck=false">Field</button>
+            <button type="button" aria-pressed="@(byDeck ? "true" : "false")" @onclick="()=>byDeck=true">By deck</button>
+        </div>
+    </div>
+    <div class="explorer-caption"><span>@Decks.Count decks · @Summary.Matchups.Count(m=>m.Valid>0) / @Summary.Matchups.Count matchups with results</span><span>Row deck's win rate</span></div>
+    @if(!byDeck){
+        <div class="table-scroll field-scroll" tabindex="0" aria-label="Field win rates. Scroll horizontally on smaller screens.">
+            <table class="field-matrix" style="@($"--deck-count:{Decks.Count}")">
+                <caption class="visually-hidden">Row deck win rates against each numbered opponent. Numbers match the deck labels on the left. Select a rate to filter results.</caption>
+                <colgroup><col class="field-deck-column" />@foreach(var deck in Decks){<col />}<col class="field-mean-column" /></colgroup>
+                <thead><tr><SortHeader State="sort" Column="deck" OnSort="sort.Toggle">Deck / Opponent →</SortHeader>
+                    @foreach(var deck in Decks){<SortHeader State="sort" Column="@deck.Id" OnSort="sort.Toggle"><span class="field-axis" title="@DeckDisplay.Text(deck)" aria-label="@($"Opponent {Number(deck)}: {DeckDisplay.Text(deck)}")"><span class="field-number">@Number(deck)</span><small>@DeckDisplay.Subtype(deck)</small></span></SortHeader>}
+                    <SortHeader State="sort" Column="mean" OnSort="sort.Toggle">Avg.</SortHeader>
+                </tr></thead>
+                <tbody>@foreach(var row in sort.Apply(Decks,SortValue)){
+                    var rates=Rates(row);var leader=leaders.Contains(row.Id);
+                    <tr @key="row.Id" class="@(hoverRow==row.Id ? "field-highlight-row" : "")">
+                        <th scope="row"><span class="field-row-label"><span class="field-number">@Number(row)</span><DeckIdentity Deck="row" Compact="true" /></span></th>
+                        @foreach(var col in Decks){var pair=Pair(row.Id,col.Id);var rate=Rate(pair,row.Id);
+                            <td class="@(hoverColumn==col.Id ? "field-highlight-column" : "")">
+                                @if(row.Id==col.Id){<span class="field-diagonal" aria-label="Same deck">·</span>}
+                                else if(pair is not null){
+                                    <button type="button" class="field-cell @Tone(rate)" aria-pressed="@(Selected(pair,row.Id) ? "true" : "false")" aria-label="@Describe(pair,row,col)" title="@Describe(pair,row,col)" @onmouseenter="()=>Preview(pair,row,col)" @onmouseleave="ClearPreview" @onfocus="()=>Preview(pair,row,col)" @onblur="ClearPreview" @onclick="()=>OnSelect.InvokeAsync((pair,row.Id))">@Metrics.Rate(rate)</button>
+                                }else{<span class="field-diagonal" aria-label="No scheduled matchup">—</span>}
+                            </td>
+                        }
+                        <td class="field-mean"><SourceWinRate Deck="row"><strong>@(rates.Count==0 ? "—" : Metrics.Rate(rates.Average()))</strong>@if(leader){<span class="field-leader" title="Highest mean with complete opponent coverage" aria-label="Leading deck">★</span>}<small>@rates.Count/@(Decks.Count-1) played</small></SourceWinRate></td>
+                    </tr>
+                }</tbody>
+            </table>
+        </div>
+        <div class="field-readout" aria-live="polite">@if(preview.Length>0){<span>@preview</span>}else{<span>Hover or focus a rate for deck names and game count. Select it to explore the matchup.</span>}</div>
+    }else{
+        var deck=ActiveDeck;
+        @if(deck is not null){
+            <div class="focus-deck-picker"><label for="explorer-deck">Explore</label><DeckSelect Id="explorer-deck" Label="Explore deck" Choices="@(Decks.Select(d=>new DeckChoice(d.Id,d)))" @bind-Value="activeDeckId" /></div>
+            <div class="focus-opponents" aria-label="@($"{DeckDisplay.Text(deck)} against each opponent")">
+                @foreach(var opponent in Decks.Where(d=>d.Id!=deck.Id).OrderByDescending(d=>Rate(Pair(deck.Id,d.Id),deck.Id)??-1)){
+                    var pair=Pair(deck.Id,opponent.Id);var rate=Rate(pair,deck.Id);
+                    <button type="button" class="focus-opponent" disabled="@(pair is null)" aria-pressed="@(pair is not null&&Selected(pair,deck.Id) ? "true" : "false")" aria-label="@(pair is null ? "No scheduled matchup" : Describe(pair,deck,opponent))" @onclick="()=>OnSelect.InvokeAsync((pair!,deck.Id))">
+                        <DeckIdentity Deck="opponent" Compact="true" />
+                        <span class="focus-rate @Tone(rate)"><strong>@Metrics.Rate(rate)</strong><span class="focus-bar" aria-hidden="true"><i style="@($"width:{((rate??0)*100).ToString("0.#",CultureInfo.InvariantCulture)}%")"></i></span></span>
+                        <small>@(pair?.Valid??0) games</small><span class="focus-arrow" aria-hidden="true">↗</span>
+                    </button>
+                }
+            </div>
+            <p class="small muted focus-note">@DeckDisplay.Subtype(deck)'s win rate against each opponent · Select a row to filter results.</p>
+        }
+    }
+    <div class="field-legend" aria-label="Win rate legend"><span><i class="rate-low"></i>Below 45%</span><span><i class="rate-even"></i>45–55%</span><span><i class="rate-high"></i>Above 55%</span><span>— No valid games</span></div>
+    <details class="field-method"><summary>How to read these results</summary><p>Numbers identify the same decks on both axes, even after sorting. Click a column heading to sort by that opponent. Avg. gives each opponent with results equal weight; the fraction shows coverage. A star marks the highest mean only when every matchup has results. Draws count as nonwins, so reverse cells may total less than 100%. Pending, failed, and paused games are excluded. These are exploratory local simulations.</p></details>
+</section>
+@code {
+    [Parameter,EditorRequired] public List<DeckManifest> Decks{get;set;}=[];
+    [Parameter,EditorRequired] public RunSummary Summary{get;set;}=default!;
+    [Parameter] public string SelectedKey{get;set;}="";
+    [Parameter] public EventCallback<(MatchupSummary Pair,string DeckId)> OnSelect{get;set;}
+    private readonly TableSort sort=new();
+    private bool byDeck;
+    private string activeDeckId="",preview="",hoverRow="",hoverColumn="";
+    private HashSet<string> leaders=[];
+    private DeckManifest? ActiveDeck=>Decks.FirstOrDefault(d=>d.Id==activeDeckId)??Decks.FirstOrDefault();
+    protected override void OnParametersSet(){
+        if(!Decks.Any(d=>d.Id==activeDeckId))activeDeckId=Decks.FirstOrDefault()?.Id??"";
+        var ranked=Decks.Select(d=>(d.Id,Rates:Rates(d))).ToList();
+        leaders=ranked.Count>1&&ranked.All(d=>d.Rates.Count==Decks.Count-1)
+            ? ranked.Where(d=>Math.Abs(d.Rates.Average()-ranked.Max(r=>r.Rates.Average()))<1e-12).Select(d=>d.Id).ToHashSet():[];
+        ClearPreview();
+    }
+    private int Number(DeckManifest deck)=>Decks.FindIndex(d=>d.Id==deck.Id)+1;
+    private MatchupSummary? Pair(string a,string b)=>Summary.Matchups.FirstOrDefault(m=>m.DeckA==a&&m.DeckB==b||m.DeckA==b&&m.DeckB==a);
+    private static double? Rate(MatchupSummary? pair,string deck)=>pair is null ? null : pair.DeckA==deck ? pair.WinRateA : pair.WinRateB;
+    private List<double> Rates(DeckManifest deck)=>Summary.Matchups.Where(m=>m.DeckA==deck.Id||m.DeckB==deck.Id).Select(m=>Rate(m,deck.Id)).OfType<double>().ToList();
+    private IComparable? SortValue(DeckManifest deck,string column)=>column switch{"deck"=>DeckDisplay.Text(deck),"mean"=>Rates(deck).Count>0 ? Rates(deck).Average() : null,_=>Rate(Pair(deck.Id,column),deck.Id)};
+    private static string Tone(double? rate)=>rate is null ? "rate-empty" : rate<.45 ? "rate-low" : rate>.55 ? "rate-high" : "rate-even";
+    private bool Selected(MatchupSummary pair,string row)=>SelectedKey==$"{row}:{(pair.DeckA==row ? pair.DeckB : pair.DeckA)}";
+    private static string Describe(MatchupSummary pair,DeckManifest row,DeckManifest col)=>$"{DeckDisplay.Text(row)} vs {DeckDisplay.Text(col)} · {Metrics.Rate(Rate(pair,row.Id))} · {pair.Valid} valid games / {pair.Scheduled} scheduled";
+    private void Preview(MatchupSummary pair,DeckManifest row,DeckManifest col){preview=Describe(pair,row,col);hoverRow=row.Id;hoverColumn=col.Id;}
+    private void ClearPreview(){preview="";hoverRow="";hoverColumn="";}
+}

@@ -1,0 +1,43 @@
+<article class="panel workshop-result">
+    <div class="section-head"><h3>@Title</h3><span class="pill">@UiText.Label(Match.Run.Status)</span></div>
+    <div class="deck-matchup workshop-result-matchup" role="group" aria-label="@($"{DeckDisplay.Text(Match.Deck)} vs {DeckDisplay.Text(Match.Opponent)}")"><DeckIdentity Deck="@Match.Deck" Compact="true" SingleRow="true" /><span class="muted">vs</span><DeckIdentity Deck="@Match.Opponent" Compact="true" SingleRow="true" /></div>
+    <section class="workshop-pilots" aria-label="Pilots used in this matchup">
+        <strong>Pilots used</strong>
+        <dl><dt>Deck</dt><dd title="@SavedPilot(Match.Deck.Id)">@PilotName(Match.Deck.Id)</dd>
+            <dt>Opponent</dt><dd title="@SavedPilot(Match.Opponent.Id)">@PilotName(Match.Opponent.Id)</dd></dl>
+    </section>
+    <div class="workshop-rate"><SourceWinRate Deck="Match.Deck">@Metrics.Rate(Match.WinRate)</SourceWinRate></div>
+    <p>@Match.Wins wins · @Match.Losses losses · @Match.Draws draws</p>
+    <p class="small">@Match.Summary.Valid / @Match.Summary.Scheduled valid games · @(Match.Summary.Valid==Match.Summary.Scheduled?"Complete matchup":"Incomplete matchup")</p>
+    <p class="small muted">@Match.Summary.Failed failed · @Match.Summary.Cancelled paused · @(Match.Summary.Pending+Match.Summary.Running) unfinished · @Match.Summary.AttemptFailures attempt failures</p>
+    <details class="workshop-result-details"><summary>Statistics &amp; run details</summary>
+    <dl class="workshop-metrics">
+        <dt>95% Wilson interval</dt><dd>@Interval(Match.Interval)</dd>
+        <dt>On play</dt><dd><SourceWinRate Deck="Match.Deck">@Metrics.Rate(Match.OnPlay==0?null:(double)Match.WinsOnPlay/Match.OnPlay)</SourceWinRate> · @Match.OnPlay games</dd>
+        <dt>On draw</dt><dd><SourceWinRate Deck="Match.Deck">@Metrics.Rate(Match.OnDraw==0?null:(double)Match.WinsOnDraw/Match.OnDraw)</SourceWinRate> · @Match.OnDraw games</dd>
+        <dt>Median length</dt><dd>@Rounds(Match.MedianRounds) rounds</dd>
+        <dt>Wins / losses</dt><dd>@Rounds(Match.MedianWinRounds) / @Rounds(Match.MedianLossRounds) rounds</dd>
+        <dt>Mean mulligans</dt><dd>@Number(Match.Mulligans?.Mean) · @(Match.Mulligans?.RecordedPlayers??0) recorded players</dd>
+        <dt>Total mulligans</dt><dd>@(Match.Mulligans?.RecordedPlayers>0?Match.Mulligans.TotalMulligans.ToString():"—")</dd>
+        <dt>Mean kept hand</dt><dd>@Number(Match.Mulligans?.MeanKeptSize) cards</dd>
+        <dt>Mana starved</dt><dd>@(Match.ManaAnalyzed==0?"—":$"{Match.Starved} / {Match.ManaAnalyzed} analyzed players")</dd>
+        <dt>Mana flooded</dt><dd>@(Match.ManaAnalyzed==0?"—":$"{Match.Flooded} / {Match.ManaAnalyzed} analyzed players")</dd>
+    </dl>
+    <p class="small muted">Engine <BuildName Hash="@Match.Run.Config.EngineHash" /> · Pilot Bridge <BuildName Hash="@Match.Run.Config.AdapterHash" Bridge="true" /> · Seed @Match.Run.Config.RootSeed</p>
+    </details>
+    <p class="workshop-result-links"><a href="@($"/runs/{Match.Run.Id}")">Open Session</a> · <a href="@($"/runs/{Match.Run.Id}/logs/games")">All Game Evidence</a></p>
+    <details><summary>Game lengths by outcome</summary><Distribution Rounds="true" Title="Wins" Values="Match.WinTurns" /><Distribution Rounds="true" Title="Losses" Values="Match.LossTurns" /><Distribution Rounds="true" Title="Draws" Values="Match.DrawTurns" /></details>
+    <details><summary>Recorded game replays · @Match.Replays.Count shown</summary>
+        @foreach(var replay in Match.Replays){<p class="workshop-replay"><span>@replay.Outcome · @((replay.ActualTurns+1)/2) rounds</span><a href="@($"/runs/{Match.Run.Id}/games/{replay.GameId}")">Open Replay</a></p>}
+        @if(Match.Replays.Count==0){<p class="muted">No completed games yet.</p>}
+    </details>
+</article>
+@code {
+    [Parameter,EditorRequired] public WorkshopMatchup Match { get; set; }=default!;
+    [Parameter] public string Title { get; set; }="Results";
+    private string? SavedPilot(string id)=>Match.Run.Config.PilotProfiles?.GetValueOrDefault(id);
+    private string PilotName(string id)=>SavedPilot(id) is {} profile?ReanimatorPilots.DisplayName(profile):"Not recorded";
+    private static string Rounds(double? n)=>n is null?"—":Math.Ceiling(n.Value).ToString(CultureInfo.InvariantCulture);
+    private static string Number(double? n)=>n?.ToString("0.0",CultureInfo.InvariantCulture)??"—";
+    private static string Interval(double[]? interval)=>interval is null?"—":$"{interval[0]:P1} – {interval[1]:P1}";
+}

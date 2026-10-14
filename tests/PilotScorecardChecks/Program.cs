@@ -1,0 +1,56 @@
+using DeckTester;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.FileProviders;
+using System.Security.Cryptography;
+using System.Text.Json.Nodes;
+
+static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
+static string Hash(string path)=>Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
+var repository=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../"));
+var latest=JsonNode.Parse(File.ReadAllText(Path.Combine(repository,"data/pilot-evaluations/latest.json")))!;
+var id=latest["directory"]!.GetValue<string>();
+var original=Path.Combine(repository,"data/pilot-evaluations",id);
+var temporary=Path.Combine(Path.GetTempPath(),"pilot-scorecards-"+Guid.NewGuid().ToString("N"));
+try{
+    Directory.CreateDirectory(Path.Combine(temporary,"docs/specs"));
+    var paths=new AppPaths(new FixtureEnvironment{ContentRootPath=Path.Combine(temporary,"src/DeckTester")});
+    Check(new PilotEvaluationStore(paths).Read().Report is null,"Missing evaluation stays unknown.");
+    var destination=Path.Combine(paths.Data,"pilot-evaluations",id);Directory.CreateDirectory(destination);
+    foreach(var file in Directory.EnumerateFiles(original,"*",SearchOption.AllDirectories)){
+        var target=Path.Combine(destination,Path.GetRelativePath(original,file));Directory.CreateDirectory(Path.GetDirectoryName(target)!);File.Copy(file,target);
+    }
+    var report=Json.Decode<PilotEvaluationReport>(File.ReadAllText(Path.Combine(destination,"scorecard.json")));
+    foreach(var sourceName in report.SourceHashes.Keys){var target=Path.Combine(temporary,sourceName);Directory.CreateDirectory(Path.GetDirectoryName(target)!);File.Copy(Path.Combine(repository,sourceName),target);}
+    var pointer=Path.Combine(paths.Data,"pilot-evaluations/latest.json");File.WriteAllText(pointer,latest.ToJsonString());
+    Directory.CreateDirectory(Path.Combine(paths.Data,"engine-bundles"));var active=Path.Combine(paths.Data,"engine-bundles/active.json");
+    File.WriteAllText(active,Json.Encode(new{Id=report.BundleId}));
+    var store=new PilotEvaluationStore(paths);var measured=store.Read();
+    Check(measured.Report?.Profiles.Count==report.Profiles.Count&&measured.Current&&measured.Error is null,"Report and exact active build validate.");
+    var sourceFile="tests/PilotAttributeChecks.java";var source=store.ReadSource(report,sourceFile);
+    Check(source.Text.Contains("declareAttackers")&&source.Hash==report.SourceHashes[sourceFile],"Code view reads the exact evaluated source.");
+    File.AppendAllText(Path.Combine(temporary,sourceFile),"\n// changed current source\n");
+    Check(!store.Read().Current&&store.Read().Report is not null,"Modified suite stays visible as historical.");
+    Check(store.ReadSource(report,sourceFile).Text==source.Text,"Current edits do not change evaluated code.");
+    File.WriteAllText(active,Json.Encode(new{Id="different-build"}));Check(!store.Read().Current,"Changed build cannot reuse ratings as current.");
+    try{store.ReadSource(report,"../../outside");throw new Exception("Traversal was accepted.");}catch(ArgumentException){}
+    File.AppendAllText(Path.Combine(destination,"sources",sourceFile),"corruption");
+    try{store.ReadSource(report,sourceFile);throw new Exception("Source corruption was accepted.");}catch(InvalidDataException){}
+    var node=JsonNode.Parse(File.ReadAllText(Path.Combine(destination,"scorecard.json")))!;
+    node["profiles"]![0]!["dimensions"]![0]!["total"]=999;
+    var reportPath=Path.Combine(destination,"scorecard.json");File.WriteAllText(reportPath,node.ToJsonString());
+    latest["sha256"]=Hash(reportPath);File.WriteAllText(pointer,latest.ToJsonString());
+    Check(store.Read().Report is null&&store.Read().Error!.Contains("denominator"),"Inconsistent score denominators are rejected.");
+    latest["sha256"]="wrong";File.WriteAllText(pointer,latest.ToJsonString());
+    Check(store.Read().Report is null&&store.Read().Error!.Contains("checksum"),"Bad report checksum cannot publish a score.");
+    latest["directory"]="../outside";File.WriteAllText(pointer,latest.ToJsonString());
+    Check(store.Read().Report is null&&store.Read().Error is not null,"Invalid report path is rejected.");
+    Console.WriteLine("Pilot scorecard checks passed: missing data, build/suite isolation, immutable code, checksums, denominators, and path guards.");
+}finally{Directory.Delete(temporary,true);}
+
+sealed class FixtureEnvironment:IHostEnvironment
+{
+    public string EnvironmentName{get;set;}="Test";
+    public string ApplicationName{get;set;}="Checks";
+    public string ContentRootPath{get;set;}="";
+    public IFileProvider ContentRootFileProvider{get;set;}=new NullFileProvider();
+}

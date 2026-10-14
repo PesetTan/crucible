@@ -1,0 +1,6 @@
+.pilot-match-evidence{font-size:12px;margin-top:5px}
+.pilot-match-evidence summary{color:var(--muted);cursor:pointer}
+.pilot-match-evidence p{font-size:11px;line-height:1.6;margin:6px 0;max-width:540px}
+.pilot-match-evidence code{overflow-wrap:anywhere}
+.pilot-match-session{border-top:1px solid var(--line);padding:8px 0}
+.pilot-match-session>a{font-weight:600}
