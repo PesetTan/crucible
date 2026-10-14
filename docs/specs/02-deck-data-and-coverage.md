@@ -10,7 +10,7 @@ Open `standard_cards.sqlite` with SQLite URI `mode=ro`. Inspect the actual schem
 
 `reanimator.sqlite` is public archive data, not personal data. Backup databases are excluded as defaults. Importing a deck does not establish card ownership or permission to alter a saved Arena deck.
 
-Use the five exact lists in the [plan](../plans/2026-10-11-mtg-simulator-plan.md). Verify their fingerprints against the frozen October 11 snapshot; do not silently select newer or different highest-volume lists if the source database changes. A mismatch requires an explicit new deck version with its own provenance. Public Reanimator is specifically the selected 4-color list. A merged Sultai/4-color label cannot be used as a deck identity.
+Use the five exact lists in the [plan](../plans/2026-10-11-crucible-plan.md). Verify their fingerprints against the frozen October 11 snapshot; do not silently select newer or different highest-volume lists if the source database changes. A mismatch requires an explicit new deck version with its own provenance. Public Reanimator is specifically the selected 4-color list. A merged Sultai/4-color label cannot be used as a deck identity.
 
 The personal deck ID is `75c0271e-f980-47b3-bb01-a6b305f2430b`. Preserve its captured snapshot and flag the changed source-log evidence. Before using it as the current personal candidate, check current account evidence through the appropriate refresh workflow after implementation is authorized; never mutate the source database merely as a side effect of import.
 

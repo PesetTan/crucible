@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 
 static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
 var sandbox=Path.Combine(Path.GetTempPath(),"crucible-workshop-"+Guid.NewGuid().ToString("N"));
-var root=Path.Combine(sandbox,"projects","mtg-simulator");Directory.CreateDirectory(Path.Combine(root,"docs","specs"));
+var root=Path.Combine(sandbox,"projects","crucible");Directory.CreateDirectory(Path.Combine(root,"docs","specs"));
 var previous=Environment.GetEnvironmentVariable("MTG_PROJECT_ROOT");
 Environment.SetEnvironmentVariable("MTG_PROJECT_ROOT",root);
 try{

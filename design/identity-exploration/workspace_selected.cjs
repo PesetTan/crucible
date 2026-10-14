@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path');
 const sharp=require('/Users/pesettan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/sharp');
-const out=path.resolve(__dirname,'../../src/MtgSimulator/wwwroot/assets/brand/concepts/workspace-selected');
+const out=path.resolve(__dirname,'../../src/DeckTester/wwwroot/assets/brand/concepts/workspace-selected');
 fs.mkdirSync(out,{recursive:true});
 const ink='#29373a',paper='#faf8f2';
 const icons=[

@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path');
 const sharp=require('/Users/pesettan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/sharp');
-const out=path.resolve(__dirname,'../../src/MtgSimulator/wwwroot/assets/brand/concepts/workspace-options');
+const out=path.resolve(__dirname,'../../src/DeckTester/wwwroot/assets/brand/concepts/workspace-options');
 const ink='#29373a',paper='#faf8f2';
 const p=(d,a='')=>`<path d="${d}" ${a}/>`;
 const circle=(x,y,r)=>`<circle cx="${x}" cy="${y}" r="${r}"/>`;

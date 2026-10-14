@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-out=Path(__file__).resolve().parents[2]/'src/MtgSimulator/wwwroot/assets/brand/concepts/competition-sets'
+out=Path(__file__).resolve().parents[2]/'src/DeckTester/wwwroot/assets/brand/concepts/competition-sets'
 out.mkdir(parents=True,exist_ok=True)
 ink='#26343a'
 def p(d,fill=ink,**kw):

@@ -1,7 +1,7 @@
 const fs=require('fs');
 const path=require('path');
 const sharp=require('/Users/pesettan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/sharp');
-const out=path.resolve(__dirname,'../../src/MtgSimulator/wwwroot/assets/brand/concepts/competition-sets');
+const out=path.resolve(__dirname,'../../src/DeckTester/wwwroot/assets/brand/concepts/competition-sets');
 const sets=JSON.parse(fs.readFileSync(path.join(out,'manifest.json')));
 const names=['logo','white','blue','black','red','green','colorless'];
 (async()=>{

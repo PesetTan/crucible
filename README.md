@@ -2,7 +2,7 @@
 
 Crucible is a local **Standard Bo1 deck-testing workspace**. It schedules head-to-head games between exact decklists, then organizes matchup results, turn logs, and replays. **Forge** is the rules engine and automated pilot; Crucible does not simulate Magic rules itself. Results describe Forge pilot games, not expected Arena win rates.
 
-The .NET project is [`src/DeckTester/DeckTester.csproj`](src/DeckTester/DeckTester.csproj). The app is named **Crucible**; the .NET project and repository directory retain their existing paths.
+The .NET project is [`src/DeckTester/DeckTester.csproj`](src/DeckTester/DeckTester.csproj). The public repository is [PesetTan/crucible](https://github.com/PesetTan/crucible), and the local workspace is `projects/crucible`. Build the application through `Crucible.slnx` or its .NET project.
 
 ## Start
 

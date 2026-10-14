@@ -4,7 +4,7 @@ Date: October 11, 2026 (America/Los_Angeles)
 
 Status: Implementation authorized in C# on October 11, 2026. The user waived automated tests. These specifications remain the target for the validated MVP; see [implementation status](../implementation-status.md) for implemented behavior and outstanding evidence gates.
 
-These specifications implement the scope of the [dated simulator plan](../plans/2026-10-11-mtg-simulator-plan.md). They are requirements and proposed design decisions, not claims that the engine capabilities or validation gates have passed.
+These specifications implement the scope of the [dated simulator plan](../plans/2026-10-11-crucible-plan.md). They are requirements and proposed design decisions, not claims that the engine capabilities or validation gates have passed.
 
 | File | Responsibility |
 |---|---|

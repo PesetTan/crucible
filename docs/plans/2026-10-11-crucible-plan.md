@@ -4,7 +4,7 @@ Date: October 11, 2026 (America/Los_Angeles)
 
 Status: Implementation authorized in C# on October 11, 2026; automated tests waived by the user. See [implementation status](../implementation-status.md) for delivered behavior and outstanding validation gates.
 
-Project location: `/Users/pesettan/Documents/Magic Arena/projects/mtg-simulator`
+Project location: `/Users/pesettan/Documents/Magic Arena/projects/crucible`
 
 ## Objective
 

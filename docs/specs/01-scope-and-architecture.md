@@ -27,7 +27,7 @@ The implemented local app can launch its simulation service and Blazor UI as sep
 
 The user selected C# when approving implementation on October 11, 2026; this supersedes the earlier Python/React proposal. The existing Forge engine remains Java and uses a minimal interop shim. Record compatible runtime and package versions in lockfiles. See [implementation status](../implementation-status.md) for actual capability and validation limits; specifications are not proof that their gates have passed.
 
-Keep app data under `projects/mtg-simulator/data/`, engine artifacts under `projects/mtg-simulator/vendor/`, and source code under the new project. Source databases remain at the repository root and are always opened read-only. Exclude generated engine bundles, replay data, and personal manifests from source control by default; commit documentation, source, fixtures, and dependency manifests intentionally.
+Keep app data under `projects/crucible/data/`, engine artifacts under `projects/crucible/vendor/`, and source code under the new project. Source databases remain at the repository root and are always opened read-only. Exclude generated engine bundles, replay data, and personal manifests from source control by default; commit documentation, source, fixtures, and dependency manifests intentionally.
 
 ## Capability investigation gate
 

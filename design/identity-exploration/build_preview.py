@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-OUT = Path(__file__).resolve().parents[2] / 'src/MtgSimulator/wwwroot/assets/brand/concepts/identity-sets'
+OUT = Path(__file__).resolve().parents[2] / 'src/DeckTester/wwwroot/assets/brand/concepts/identity-sets'
 OUT.mkdir(parents=True, exist_ok=True)
 
 def path(d, **attrs):
