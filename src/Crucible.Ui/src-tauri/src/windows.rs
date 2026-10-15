@@ -585,7 +585,7 @@ pub fn run() {
             });
             let ui=super::port("CRUCIBLE_UI_PORT",5077).map_err(std::io::Error::other)?;
             let opener=app.handle().clone();
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("setup.html".into()))
+            let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("setup.html".into()))
                 .data_directory(webview_data)
                 .title("Crucible Setup")
                 .inner_size(600.0, 340.0)
@@ -596,8 +596,16 @@ pub fn run() {
                 })
                 .on_navigation(move |url| url.scheme()=="http" &&
                     ((url.host_str()==Some("127.0.0.1")&&url.port()==Some(ui)) ||
-                     (url.host_str()==Some("tauri.localhost")&&url.path()=="/setup.html")))
-                .build()?;
+                     (url.host_str()==Some("tauri.localhost")&&url.path()=="/setup.html")));
+            // Release WebView2 loaders can ignore the environment-only browser options.
+            // Explicit automation opts in to these arguments; ordinary app launches retain
+            // Wry's browser defaults and expose no debugging listener.
+            if env::var("TAURI_WEBVIEW_AUTOMATION").as_deref()==Ok("true") {
+                if let Ok(arguments)=env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+                    window=window.additional_browser_args(&format!("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required {arguments}"));
+                }
+            }
+            window.build()?;
             let handle = app.handle().clone();
             thread::spawn(move || loop {
                 match bootstrap(&handle) {

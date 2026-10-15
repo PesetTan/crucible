@@ -1,9 +1,5 @@
 name: Windows Installed App Diagnostics
 on:
-  # Temporary beta-branch diagnostic trigger; the installer below is a frozen fixture.
-  push:
-    branches: [codex/windows-desktop-beta]
-    paths: ['.github/workflows/windows-installed-check.yml', 'tests/check_windows_desktop.py', 'tests/capture_windows_desktop.ps1']
   workflow_dispatch:
     inputs:
       installer_run_id:
@@ -33,7 +29,7 @@ jobs:
         with:
           name: crucible-windows-x64-beta
           path: dist/windows
-          run-id: ${{ inputs.installer_run_id || '38787895377' }}
+          run-id: ${{ inputs.installer_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install matching WebView2 driver
         run: ./scripts/install-windows-webdriver.ps1
