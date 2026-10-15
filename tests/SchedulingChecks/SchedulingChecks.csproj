@@ -7,15 +7,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/DeckTester/GameScheduler.cs" Link="GameScheduler.cs" />
-    <Compile Include="../../src/DeckTester/RuntimeEstimate.cs" Link="RuntimeEstimate.cs" />
-    <Compile Include="../../src/DeckTester/Models.cs" Link="Models.cs" />
-    <Compile Include="../../src/DeckTester/ReanimatorPilots.cs" Link="ReanimatorPilots.cs" />
-    <Compile Include="../../src/DeckTester/SubtypePilots.cs" Link="SubtypePilots.cs" />
-    <Compile Include="../../src/DeckTester/PilotNames.cs" Link="PilotNames.cs" />
-    <Compile Include="../../src/DeckTester/NameLibrary.cs" Link="NameLibrary.cs" />
+    <ProjectReference Include="../../src/Crucible.Core/Crucible.Core.csproj" />
     <Content Include="../../src/DeckTester/naming/pilots.json" Link="naming/pilots.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../src/DeckTester/naming/nouns.txt" Link="naming/nouns.txt" CopyToOutputDirectory="PreserveNewest" />
-    <Compile Include="../../src/DeckTester/AttemptPolicy.cs" Link="AttemptPolicy.cs" />
   </ItemGroup>
 </Project>

@@ -171,6 +171,7 @@ def main():
             decks=[d['manifest'] for d in library['decks'] if d['coverage']['status']!='blocked']
             # Prefer two fast interactive public lists, with a deterministic fallback.
             decks.sort(key=lambda d:(0 if 'Mono-Red Burn' in d['name'] else 1 if 'Rakdos Aggro' in d['name'] else 2,d['id']))
+            decks=list({d['name']:d for d in reversed(decks)}.values())[::-1]
             assert len(decks)>=2
             web.go('/workshop?deck='+decks[0]['id'])
             wait(lambda:'60 Main-Deck Cards' in web.text())

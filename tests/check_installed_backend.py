@@ -57,6 +57,7 @@ def main():
             child=start();checks.append('native installed startup and setup without Python')
             decks=call('/api/v1/decks')[1];assert decks and all(d['manifest']['sourceType']=='public' for d in decks)
             decks=sorted((d for d in decks if d['coverage']['status']!='blocked'),key=lambda d:(0 if 'Mono-Red Burn' in d['manifest']['name'] else 1 if 'Rakdos Aggro' in d['manifest']['name'] else 2,d['manifest']['id']))
+            decks=list({d['manifest']['name']:d for d in reversed(decks)}.values())[::-1]
             assert len(decks)>=2
             request=dict(deckIds=[d['manifest']['id'] for d in decks[:2]],gamesPerPair=2,workers=1,timeoutSeconds=180,turnLimit=150,rootSeed='9223372036854775807',diagnostic=True,staggerStarts=False,pilotMode='default-v1')
             # Use the actual configured default instead of guessing its identity.

@@ -19,6 +19,7 @@ The default program folder is `%LOCALAPPDATA%\Crucible Desktop`. Mutable data li
 | `data\replays` | Saved replay evidence |
 | `data\desktop\logs` | Setup and native-host logs |
 | `ui-state` | Presentation state such as build names |
+| `webview` | The Windows window's local browser profile |
 
 The installer includes the WebView2 bootstrapper. Initial engine setup needs an internet connection; it downloads and verifies Forge and Java, compiles the packaged bridge, and publishes an immutable bundle. Windows 11's built-in `System32\tar.exe` extracts the pinned Forge archive; Java ZIP extraction uses .NET. Users do not install .NET, Node, Rust, Python, or Java separately. Once setup completes, normal simulation use is local.
 
@@ -80,3 +81,9 @@ python3 tests/check_installed_backend.py --runtime <published-backend> --engine-
 The latter uses disposable state, a clean starter, and read-only engine setup inputs. It verifies real games and guarded shutdown/recovery without changing the live installation's database or active engine pointer.
 
 Windows ARM, the pilot optimizer, automatic updates, code signing, background operation, and launch at login are deferred. Native Windows 11 installation, display scaling, accessibility, and performance still need human testing. Simulation results remain local Forge pilot evidence rather than Arena win-rate forecasts.
+
+## Recorded Mac validation — October 15, 2026
+
+The native UI and backend published successfully on Apple Silicon with no build warnings. The native UI gateway passed its existing transport/security checks plus owner-authenticated graceful shutdown. An isolated installed-backend test seeded the clean catalog, completed two real Forge games with the maximum signed 64-bit root seed, opened replay data, rejected unconfirmed busy shutdown, stopped on the owner request, and reopened with completed results intact and no automatic resume.
+
+Shared starter/download checks, portable worker lifecycle checks, existing host/serialization checks, Svelte checking, and all eight client tests passed. The Windows lifecycle module and its unit tests passed an MSVC-target type check from the Mac using a test context; that is not a Windows executable or installer run. Windows CI execution is pending authorization to push the prepared branch to `PesetTan/crucible`. No Windows release has been published.
