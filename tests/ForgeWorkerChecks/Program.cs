@@ -65,6 +65,7 @@ try {
     Console.WriteLine("Forge worker lifecycle checks passed: reuse, cancellation, faults, timeout, recycling, parallel capacity, shutdown and legacy fallback.");
 } finally {
     await engine.DisposeAsync();Environment.SetEnvironmentVariable("MTG_PROJECT_ROOT",originalRoot);Environment.SetEnvironmentVariable("MTG_JAVA",originalJava);
+    Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
     Directory.Delete(root,true);
 }
 sealed class TestEnvironment:IHostEnvironment {

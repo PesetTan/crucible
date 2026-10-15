@@ -115,6 +115,7 @@ try{
     Console.WriteLine("Optimizer and protocol SQL cache isolation checks passed.");
 }finally{
     Environment.SetEnvironmentVariable("MTG_PROJECT_ROOT",previousRoot);
+    Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
     if(Directory.Exists(temporary))Directory.Delete(temporary,true);
 }
 
