@@ -129,11 +129,14 @@ def main():
                 self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(b'{"application":"another-program"}')
         foreign=ThreadingHTTPServer(('127.0.0.1',backend_port),Foreign)
         threading.Thread(target=foreign.serve_forever,daemon=True).start()
-        collision=subprocess.Popen([str(executable)],env=env)
+        # A non-automated collision window must not leave a browser process/profile
+        # for EdgeDriver to reuse without its remote-debugging flags.
+        collision_state=base/'Collision Data Ω'
+        collision=subprocess.Popen([str(executable)],env=dict(env,MTG_PROJECT_ROOT=str(collision_state)))
         try:
             wait(lambda:any(native.text(h)=='Crucible Could Not Start' for h in native.windows()),30)
             assert http(backend+'/api/v1/health')[1]['application']=='another-program'
-            assert not (state/'data/engine-bundles/active.json').exists()
+            assert not (collision_state/'data/engine-bundles/active.json').exists()
         finally:
             collision.terminate();collision.wait(timeout=10);foreign.shutdown();foreign.server_close()
         record('occupied backend port remains untouched and startup error is visible')
@@ -142,8 +145,17 @@ def main():
         driver=subprocess.Popen([shutil.which('msedgedriver'),f'--port={webdriver_port}','--verbose',f'--log-path={output / "edgedriver.log"}'],env=dict(env,TAURI_WEBVIEW_AUTOMATION='true'),stdout=driver_log,stderr=subprocess.STDOUT)
         url=f'http://127.0.0.1:{webdriver_port}'
         wait(lambda:http(url+'/status')[0]==200)
+        def capture_desktop(name):
+            capture=Path(__file__).with_name('capture_windows_desktop.ps1')
+            try:
+                subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-NonInteractive','-File',str(capture),'-OutputPath',str(output/name)],timeout=20,capture_output=True)
+            except (OSError,subprocess.TimeoutExpired):pass
         def launch():
-            result=Driver(url,executable,state/'webview')
+            # Capture while InitSession is pending; EdgeDriver kills the app on timeout.
+            startup_capture=threading.Timer(10,lambda:capture_desktop('desktop-startup.png'))
+            startup_capture.start()
+            try:result=Driver(url,executable,state/'webview')
+            finally:startup_capture.cancel()
             print('WebDriver connected; waiting for engine setup and the main app.',flush=True)
             def ready():
                 if any(native.text(h)=='Crucible Could Not Start' for h in native.windows()):
@@ -248,10 +260,7 @@ def main():
             print('Windows installed desktop checks passed: '+', '.join(checks))
         finally:
             if not succeeded:
-                capture=Path(__file__).with_name('capture_windows_desktop.ps1')
-                try:
-                    subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-NonInteractive','-File',str(capture),'-OutputPath',str(output/'desktop-failure.png')],timeout=20,capture_output=True)
-                except (OSError,subprocess.TimeoutExpired):pass
+                capture_desktop('desktop-failure.png')
                 try:
                     profile_files=[str(p.relative_to(state)) for p in (state/'webview').rglob('*') if p.is_file()]
                     devtools={str(p.relative_to(state)):p.read_text(encoding='utf-8',errors='replace')[:1000] for p in state.rglob('DevToolsActivePort')}
