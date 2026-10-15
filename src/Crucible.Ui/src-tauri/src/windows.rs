@@ -437,6 +437,7 @@ fn bootstrap(app: &tauri::AppHandle) -> Result<(), String> {
                 if let Ok(log) = fs::read_to_string(&setup_log) {
                     if let Some(line) = log.lines().rev().find(|line| {
                         line.starts_with("Downloading")
+                            || line.starts_with("Extracting")
                             || line.starts_with("Compiling")
                             || line.starts_with("Setup complete")
                     }) {

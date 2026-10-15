@@ -34,10 +34,12 @@ def http(url,method='GET',body=None,headers=None,timeout=15):
         except ValueError:value=raw.decode(errors='replace')
         return e.code,value
 
+class StartupFailure(Exception):pass
+
 class Driver:
     def __init__(self,url,application,profile):
         self.url=url
-        code,r=http(url+'/session','POST',{'capabilities':{'alwaysMatch':{'tauri:options':{'application':str(application),'webviewOptions':{'userDataFolder':str(profile)}}}}},timeout=120)
+        code,r=http(url+'/session','POST',{'capabilities':{'alwaysMatch':{'browserName':'webview2','ms:edgeChromium':True,'ms:edgeOptions':{'binary':str(application),'webviewOptions':{'userDataFolder':str(profile)}}}}},timeout=120)
         assert code==200,r
         self.id=r['value']['sessionId']
         self.call('POST','/timeouts',{'script':20000,'pageLoad':120000,'implicit':0})
@@ -135,14 +137,21 @@ def main():
         finally:
             collision.terminate();collision.wait(timeout=10);foreign.shutdown();foreign.server_close()
         record('occupied backend port remains untouched and startup error is visible')
-        webdriver_port,native_port=port(),port()
+        webdriver_port=port()
         driver_log=(output/'webdriver.log').open('wb')
-        driver=subprocess.Popen([shutil.which('tauri-driver'),'--port',str(webdriver_port),'--native-port',str(native_port),'--native-driver',shutil.which('msedgedriver')],env=env,stdout=driver_log,stderr=subprocess.STDOUT)
+        driver=subprocess.Popen([shutil.which('msedgedriver'),f'--port={webdriver_port}','--verbose',f'--log-path={output / "edgedriver.log"}'],env=dict(env,TAURI_WEBVIEW_AUTOMATION='true'),stdout=driver_log,stderr=subprocess.STDOUT)
         url=f'http://127.0.0.1:{webdriver_port}'
         wait(lambda:http(url+'/status')[0]==200)
         def launch():
             result=Driver(url,executable,state/'webview')
-            wait(result.main,1200)
+            print('WebDriver connected; waiting for engine setup and the main app.',flush=True)
+            def ready():
+                if any(native.text(h)=='Crucible Could Not Start' for h in native.windows()):
+                    logs=state/'data/desktop/logs'
+                    detail='\n'.join(f'{p.name}: {p.read_text(encoding="utf-8",errors="replace")[-4000:]}' for p in logs.glob('*') if p.is_file())
+                    raise StartupFailure('The app displayed a startup error.\n'+detail)
+                return result.main()
+            wait(ready,1200)
             wait(lambda:'Choose the Decks' in result.text(),60)
             return result
         def health(origin):return http(origin+'/api/v1/health')[1]
@@ -238,6 +247,16 @@ def main():
             succeeded=True
             print('Windows installed desktop checks passed: '+', '.join(checks))
         finally:
+            if not succeeded:
+                capture=Path(__file__).with_name('capture_windows_desktop.ps1')
+                try:
+                    subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-NonInteractive','-File',str(capture),'-OutputPath',str(output/'desktop-failure.png')],timeout=20,capture_output=True)
+                except (OSError,subprocess.TimeoutExpired):pass
+                try:
+                    profile_files=[str(p.relative_to(state)) for p in (state/'webview').rglob('*') if p.is_file()]
+                    devtools={str(p.relative_to(state)):p.read_text(encoding='utf-8',errors='replace')[:1000] for p in state.rglob('DevToolsActivePort')}
+                    (output/'startup-context.json').write_text(json.dumps({'windows':[native.text(h) for h in native.windows() if native.text(h).startswith('Crucible')],'webviewFiles':profile_files[:100],'devtoolsPorts':devtools},indent=2)+'\n')
+                except OSError:pass
             if web:
                 if not succeeded:
                     try:web.shot(output/'failure.png')

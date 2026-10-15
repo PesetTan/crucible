@@ -25,6 +25,7 @@ public static class EngineSetup
             Console.WriteLine("Downloading and verifying Forge 2.0.15 (approximately 300 MB)…");
             var archive=Path.Combine(paths.Data,"forge-2.0.15.tar.bz2");
             await DownloadVerified(http,"https://github.com/Card-Forge/forge/releases/download/forge-2.0.15/forge-installer-2.0.15.tar.bz2",archive,ForgeArchiveSha256);
+            Console.WriteLine("Extracting and validating Forge resources…");
             var staging=Path.Combine(paths.Data,"forge-setup-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(staging);
             try{
                 if(OperatingSystem.IsWindows())await ExtractForgeArchive(archive,staging);
@@ -49,6 +50,7 @@ public static class EngineSetup
             var package=metadata.RootElement[0].GetProperty("binary").GetProperty("package");
             var archive=Path.Combine(paths.Data,OperatingSystem.IsWindows()?"jdk.zip":"jdk.tar.gz");
             await DownloadVerified(http,package.GetProperty("link").GetString()!,archive,package.GetProperty("checksum").GetString()!);
+            Console.WriteLine("Extracting the local Java runtime…");
             var staging=Path.Combine(paths.Data,"jdk-setup-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(staging);
             try{
                 if(OperatingSystem.IsWindows())ZipFile.ExtractToDirectory(archive,staging);

@@ -1,0 +1,48 @@
+name: Windows Installed App Diagnostics
+on:
+  # Temporary beta-branch diagnostic trigger; the installer below is a frozen fixture.
+  push:
+    branches: [codex/windows-desktop-beta]
+    paths: ['.github/workflows/windows-installed-check.yml', 'tests/check_windows_desktop.py', 'tests/capture_windows_desktop.ps1']
+  workflow_dispatch:
+    inputs:
+      installer_run_id:
+        description: Completed Windows Desktop Beta run containing the installer to test
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: windows-installed-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  installed-app:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download previously built beta installer
+        uses: actions/download-artifact@v4
+        with:
+          name: crucible-windows-x64-beta
+          path: dist/windows
+          run-id: ${{ inputs.installer_run_id || '38787895377' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install matching WebView2 driver
+        run: ./scripts/install-windows-webdriver.ps1
+      - name: Exercise installed app with current diagnostics
+        run: python tests/check_windows_desktop.py --installer (Get-ChildItem dist/windows/*-setup.exe).FullName --output dist/windows/diagnostics
+      - name: Keep diagnostic screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crucible-windows-installed-diagnostics
+          path: dist/windows/diagnostics/
+          retention-days: 14

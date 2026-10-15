@@ -55,15 +55,7 @@ jobs:
         run: python tests/check_ui_host.py --runtime src/Crucible.Ui/src-tauri/resources/ui --output dist/windows/ui-host
       - name: Install Windows desktop WebDriver
         run: |
-          cargo install tauri-driver --locked --version 2.0.5
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          # Match the WebView2 runtime, which can differ from the installed Edge browser.
-          $runtimeKeys = @('HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}')
-          $version = $runtimeKeys | ForEach-Object { if (Test-Path $_) { (Get-ItemProperty $_).pv } } | Where-Object { $_ -and $_ -ne '0.0.0.0' } | Select-Object -First 1
-          if (-not $version) { throw 'WebView2 must be available on the Windows test runner.' }
-          Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile "$env:RUNNER_TEMP/edgedriver.zip"
-          Expand-Archive "$env:RUNNER_TEMP/edgedriver.zip" "$env:RUNNER_TEMP/edgedriver" -Force
-          "$env:RUNNER_TEMP/edgedriver" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          ./scripts/install-windows-webdriver.ps1
       - name: Installed-app, real Forge, upgrade, and uninstall checks
         run: python tests/check_windows_desktop.py --installer (Get-ChildItem dist/windows/*-setup.exe).FullName --output dist/windows/evidence
       - name: Keep installer and evidence
