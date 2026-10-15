@@ -1,6 +1,6 @@
 # Card attributes
 
-The local `standard_cards.sqlite` catalog has an `attributes` JSON object on every `cards` entry, defaulting to `{}`. These are local pilot annotations, separate from rules text and legality. Annotations cover core Reanimator pieces, reviewed Control choices and relevant graveyard interaction; other cards can be annotated later.
+The local `standard_cards.sqlite` catalog has an `attributes` JSON object on every `cards` entry, defaulting to `{}`. These are local pilot annotations, separate from rules text and legality. Annotations cover core Reanimator pieces, reviewed Control and Aggro choices, subtype development, and relevant graveyard interaction; other cards can be annotated later.
 
 The object is extensible: unknown keys and nested objects are retained. Appends recursively merge objects and add distinct array values. Existing values are preserved unless `replaceExisting` is explicitly enabled. Changes are recorded in `card_attributes_history`; the first migration makes an online backup at `standard_cards.sqlite.before-attributes.sqlite`.
 
@@ -72,3 +72,7 @@ Wistfulness is annotated for two green or two blue mana; Deceit for two blue or 
 `subtypePilot.developOnPass` maps exact versioned profile IDs to positive priorities for reviewed permanent development after a Forge pass. The bridge checks spell API, own-hand origin, empty stack, own main phase, engine timing and mana-only payment. Targeted, cloned, variable-cost and subability-bearing spells fall back; existing same-name legendary permanents are protected. Unknown profile keys are inert. The hand search is bounded at 24 cards; equal priorities keep own-hand/ability order. Candidate scores, actual source ID/API, baseline pass, selected action and public opponent evidence are recorded. This metadata supplements the preserved parent policy rather than establishing full subtype strategy validation.
 
 Append the reviewed catalog metadata using `python3 scripts/card-attributes.py --seed docs/subtype-pilots.seed.json`. Both comparison arms must receive identical new annotations, with the baseline bridge/profile retaining old behavior. Historical snapshots are never rewritten.
+
+## Current protocol integration
+
+Unified Reanimator v011 preserves the reviewed variant priorities and copy-payment gates. The opt-in v012 [Engagement Protocols](engagement-protocols.md) uses those same facts plus permitted public observations to describe contextual candidate features. Protocol definitions/settings are typed bridge code compiled into an immutable bundle, not free-form catalog expressions. Protocol catalogs and hashes are frozen separately in run provenance; existing annotation snapshots remain unchanged.

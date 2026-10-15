@@ -2,7 +2,7 @@
 
 Date: October 11, 2026 (America/Los_Angeles)
 
-Status: Proposed. Parent: [MVP specification index](README.md).
+Status: Design contract with outstanding validation gates. Parent: [specification index](README.md). Current behavior and recorded evidence: [implementation status](../implementation-status.md).
 
 ## User flows
 
@@ -12,7 +12,7 @@ Forge Pilots also shows programmatic attribute evaluations from immutable engine
 
 Pilot match win rates use saved `PilotProfiles` and completed outcomes from the focused history API. Show each exact profile's latest measured session, its W/L/D record and completed player appearances. Draws remain in the denominator; games with identical pilots contribute a record for each side. Keep sessions separate to avoid pooling reused results, builds, attributes or experiments. Expand evidence for source-session links and recorded build, attributes, policy, optimizer tuning, Performance Mode and seed identity. Older versions are opt-in; current profiles with no recorded games stay unmeasured. Do not infer missing legacy assignments from current deck classifications. These exploratory rates reflect the decks and opponents tested, not isolated pilot ability or Arena forecasts.
 
-1. **Choose decks:** show public/personal origin, exact variant, count, capture date, eligibility, and a readable list. Public 4-Color Reanimator and personal Reanimator are separate cards. Explain each blocked deck with the affected card, mechanic, or pilot fixture.
+1. **Choose decks:** select two to ten distinct exact versions; show public/personal origin, exact variant, count, capture date, eligibility, and a readable list. Public 4-Color Reanimator and personal Reanimator are separate cards. Explain each blocked deck with the affected card, mechanic, or pilot fixture.
 2. **Configure a run:** choose all pairings or one matchup; default to 200 games per pairing and balanced play/draw. Show total games, opening-policy limitation, tested pilot identity, and measured runtime estimate when available.
 3. **Run locally:** show valid completed games, total scheduled games, failures, active workers, elapsed time, and remaining estimate. Provide cancel and later resume. Do not display assumed win rates while no valid games have finished.
 4. **Compare results:** matchup matrix, W/L/D totals, play/draw splits, outcome-conditioned turn distributions, life/board charts, active-game denominators, and validation limitations. Unvalidated diagnostic runs receive a persistent diagnostic label.
@@ -42,10 +42,11 @@ Editorial annotations are an explicit exception to the simulation data boundary:
 
 ## App-owned HTTP contract
 
-Use `/api/v1`, JSON, stable IDs, and ISO 8601 timestamps with offsets. The following endpoints are proposed app APIs, not existing engine interfaces:
+Use `/api/v1`, JSON, stable IDs, and ISO 8601 timestamps with offsets. These are app-owned service routes rather than Forge interfaces. Validation/gate requirements remain design targets where [implementation status](../implementation-status.md) records an outstanding limitation:
 
 | Method and route | Contract |
 |---|---|
+| `GET /health` | Host readiness, role, ownership identity, active work, runtime mode, and JSON reflection status; see [Monitor](../crucible-monitor.md) |
 | `GET /capabilities` | Engine identity, verified capabilities, runtime requirements, gate status |
 | `GET /decks` | Immutable deck versions, provenance, counts, eligibility |
 | `GET /decks/{id}` | Full manifest and applicable validation reports |
@@ -78,11 +79,11 @@ Setup, focused session, history, and library reads share a bounded cache across 
 
 Preflight and run creation both verify capability/version hashes so a stale preflight cannot authorize a changed setup. An idempotency key reused with a different payload returns a conflict. Paths are resolved server-side from known IDs; the browser cannot select arbitrary filesystem output paths. All mutation endpoints require the local instance token.
 
-Progress polling may use short compact responses while running. Stop polling terminal runs. Detailed replay data is loaded only on demand and never implicitly sent to chat or an external service.
+Results poll focused state every three seconds while active and every ten seconds when stopped, with conditional ETags retaining unchanged state. Detailed replay data is loaded only on demand and never implicitly sent to chat or an external service.
 
 ## Session log pages and navigation
 
-The UI serves `/runs/{id}/logs/hands`, `/runs/{id}/logs/mana`, `/runs/{id}/logs/runtime`, and `/runs/{id}/logs/games`. Its backend client reads the corresponding service API responses or requested session snapshot; the UI host does not inspect SQLite, engine files, or replay files. The UI host also proxies raw session log and paginated game GET requests at its own origin. A UI restart can publish these pages without stopping an active simulation service.
+The UI serves `/runs/{id}/logs/hands`, `/runs/{id}/logs/mana`, `/runs/{id}/logs/runtime`, and `/runs/{id}/logs/games`. Its backend client reads the corresponding service API responses or requested session snapshot; simulation logs and replays do not use direct UI database/file reads. Editorial notes and pilot scorecards retain the separate local access described above. The UI host also proxies raw session log and paginated game GET requests at its own origin. A UI restart can publish these pages without stopping an active simulation service.
 
 On each log page, the `SESSION / {short id} / EVIDENCE` label links to the main session details page. Immediately below that label, a session-log navigation menu shows Hand Log, Mana Incident Log, Runtime Log, and Game Evidence with the current page selected, using the same selected-menu treatment as the main app navigation. At narrow widths the menu remains usable by horizontal scrolling. Refresh is a secondary control outside that menu. Game IDs in hand and mana rows link to the corresponding replay.
 

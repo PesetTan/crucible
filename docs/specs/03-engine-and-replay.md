@@ -2,13 +2,13 @@
 
 Date: October 11, 2026 (America/Los_Angeles)
 
-Status: Proposed. Parent: [MVP specification index](README.md).
+Status: Design contract with outstanding validation gates. Parent: [specification index](README.md). Current behavior and recorded evidence: [implementation status](../implementation-status.md).
 
 ## Engine responsibility
 
 The pinned engine resolves priority, phases, casting and payment, targets, triggers, combat, continuous/replacement effects, state-based actions, zones, and game outcomes. The adapter captures evidence and supplies pilots; it does not replace these rules with arithmetic approximations. Human-readable CLI output is diagnostic material, not the sole replay or outcome contract.
 
-The adapter contract below is an app-owned interface to be implemented after feasibility is demonstrated. It is not an assertion that Forge already exposes these commands.
+The normalized records below describe the design target, not a claim that every field is captured. The implemented bridge and worker transport are in `engine/ForgeBridge.java` and `ForgeEngine.cs`; the worker-reuse contract below is implemented, while complete decision/payment normalization, library order, lineage, and skipped-turn grouping remain outstanding. See [implementation status](../implementation-status.md) for replay limits.
 
 ## Process contract
 

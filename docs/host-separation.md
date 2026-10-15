@@ -1,9 +1,9 @@
 # Independent UI and simulation hosts
 
-Crucible now runs in two processes from a shared .NET project:
+Crucible runs as two independent hosts sharing `Crucible.Core`. The solution contains a Blazor frontend (`DeckTester`) and a standalone backend (`Crucible.Service`). [Crucible Monitor](crucible-monitor.md) packages a native AOT backend and a .NET frontend on macOS; the shell scripts below run JIT development builds.
 
 - **Simulation service:** `scripts/run-service.sh`, loopback port 5079. Owns deck imports, SQLite, game scheduling, Java engines, replays, timing evidence, and resource measurements. A file lock prevents a second simulation host from opening the same data directory. The service exposes API routes and does not render the interface.
-- **UI host:** `scripts/run-ui.sh`, port 5077. Owns Blazor pages, branding, navigation, browser preferences, and its separate protection keys. Registers an API client rather than the database, importer, coordinator, engine, or machine-resource sampler. It has no background simulation scheduler. `MTG_LAN_ADDRESS` enables iPad access to this host; the service stays on loopback.
+- **UI host:** `scripts/run-ui.sh`, port 5077. Owns Blazor pages, branding, navigation, browser preferences, and its separate protection keys. Uses an API client for simulation data instead of registering the simulation store, importer, coordinator, engine, or resource sampler. It reads local pilot scorecards and has a separate SQLite editorial-note store; see [AI notes](ai-notes.md). It has no background simulation scheduler. `MTG_LAN_ADDRESS` enables iPad access to this host; the service stays on loopback.
 
 ```sh
 # Terminal 1: leave this running during simulations.
@@ -13,7 +13,7 @@ Crucible now runs in two processes from a shared .NET project:
 MTG_LAN_ADDRESS=192.168.1.246 ./scripts/run-ui.sh
 ```
 
-`MTG_SERVICE_PORT` and `MTG_UI_PORT` override the script ports. `MTG_BACKEND_URL` overrides the UI's loopback service origin. Direct launches support `MTG_HOST_MODE=service|ui|combined` and `MTG_PORT`. The old combined mode is retained for compatibility; it couples both lifetimes and is not the recommended launch mode.
+`MTG_SERVICE_PORT` and `MTG_UI_PORT` override the script ports. `MTG_BACKEND_URL` overrides the UI's loopback service origin. `MTG_LAN_ADDRESS` must be a private IPv4 address assigned to this computer; replace the example with yours. Direct `DeckTester` launches support `MTG_HOST_MODE=service|ui|combined` and `MTG_PORT`; `Crucible.Service` accepts service mode only. The old combined mode couples both lifetimes and is retained for compatibility. Use Monitor or shell launches, with one backend owning the data directory. Native publishing and runtime checks are described in [Native backend](native-backend.md).
 
 ## API boundary
 
@@ -25,13 +25,15 @@ An updated UI can use an older service without restarting active games: if the f
 
 Run History uses `GET /api/v1/run-history`: one versioned response containing session progress, aggregate matchup outcomes, runtime records, active build identity, and only the decks referenced by those sessions. A single database read transaction projects game outcomes without deserializing attempts or turn samples. History does not load setup caches, resource sampling, card coverage, mana values, or separate per-session summaries. Search, sorting and pagination operate on the loaded history; the same focused request refreshes it every 10 seconds.
 
+Setup, selected-session, library, and history reads share a bounded server-side prepared-response cache. SQLite commit versions on persistent read-only connections, the active engine pointer, and Java availability invalidate it. Conditional requests can return 304 before rebuilding or serializing an unchanged payload. Resource capacity uses a separate live read; active simulations continue to invalidate result snapshots as they progress.
+
 Deck Workshop uses `GET /api/v1/workshop-state` for manifests, session metadata, active-session guards, mana-value sorting, turn-limit guidance and resource capacity. It excludes setup caches, timing calibration, coverage scans and game records. Empty drafts are not validated; loaded drafts fetch only their requested Arena card IDs during validation. Comparisons read only the selected matchup and load independently in parallel. Completed comparisons are reused while session timestamp and total are unchanged; active sessions and explicit Refresh fetch fresh results. Browser drafts, immutable saves, and the service-side idle guard remain authoritative.
 
 Deck Library uses `GET /api/v1/library-state` for exact manifests, card coverage and mana-value ordering. It excludes session, timing, capacity and setup-cache data. Conditional ETags cover the full library payload, including metadata and active-bundle coverage; unchanged polls return 304 and retain the same UI snapshot. Previous runs use the aggregate history endpoint, and unchanged session data does not rebuild deck histories or rerender the library. Card rows are created when a deck's card list opens, and rules markup is created when a card row opens. Imports refresh the focused view. During a rolling update, an older service remains usable through the existing snapshot API until it can be restarted safely.
 
 Actions use the existing import, run creation, pause (`/cancel` for wire compatibility), resume, retry, and delete endpoints. Run creation forwards `requireIdle=true` for the home-page startup guard. Each action obtains the current service token; credentials are kept inside the UI process and are not persisted. A service restart does not require restarting the UI to refresh its token.
 
-Replay records use the replay API, with `audit=true` only when explicitly enabled. The UI proxies GET session exports, replay downloads, and logs back to the browser at its own origin. Host/origin checks, API mutation tokens, Blazor antiforgery, the four-failure allowance, exact engine/adapter resume checks, and deletion confirmation are preserved.
+Replay records use the replay API, with `audit=true` only when explicitly enabled. The UI proxies session log, game, and replay GET requests at its own origin. Summary exports (`/export`) and replay downloads (`/replay-export`) are service-only; the UI explicitly rejects those proxy routes and has no export controls. Host/origin checks, API mutation tokens, Blazor antiforgery, the four-failure allowance, exact engine/adapter resume checks, and deletion confirmation are preserved.
 
 ## Reconnection and restarts
 

@@ -2,7 +2,7 @@
 
 Date: October 11, 2026 (America/Los_Angeles)
 
-Status: Proposed. Parent: [MVP specification index](README.md).
+Status: Design contract with outstanding validation gates. Parent: [specification index](README.md). Current behavior and recorded evidence: [implementation status](../implementation-status.md).
 
 ## Evidence record
 

@@ -2,11 +2,11 @@
 
 Date: October 11, 2026 (America/Los_Angeles)
 
-Status: Proposed. Parent: [MVP specification index](README.md).
+Status: Design contract with outstanding validation gates. Parent: [specification index](README.md). Current behavior and recorded evidence: [implementation status](../implementation-status.md).
 
 ## Intended outcome
 
-The user selects exact deck versions, runs complete local head-to-head Standard Bo1 games, compares matchup and turn-level results, and inspects any game's replay. The first validated matrix has five public decks and 200 games per distinct pairing (2,000 total). The separately identified personal Reanimator expands it to six decks and 3,000 games when its coverage and pilot gates pass.
+The user selects exact deck versions, runs complete local head-to-head Standard Bo1 games, compares matchup and turn-level results, and inspects any game's replay. The original validated-matrix target has five public decks and 200 games per distinct pairing (2,000 total). The separately identified personal Reanimator expands it to six decks and 3,000 games when its coverage and pilot gates pass. The current exploratory workspace supports two to ten selected versions from the larger saved library; ten decks yield 45 pairings and 9,000 slots at the default 200 per pairing.
 
 ## Included and excluded work
 
@@ -23,11 +23,11 @@ Exclude deck optimization, collection-aware crafting, automated database refresh
 | Engine adapter | Java around a pinned Forge build | Full rules execution, pilot integration, structured events |
 | App storage | SQLite plus compressed replay files | Immutable manifests, run history, summaries, detailed evidence |
 
-The implemented local app can launch its simulation service and Blazor UI as separate processes from the shared .NET project. The service owns SQLite, Java engines, replays, and scheduling on loopback port 5079; the UI host uses `IUiBackend` and service APIs on port 5077 and may expose that UI to an iPad on the local network. Session log pages fetch structured API records through this boundary. Restarting only the UI preserves an active simulation. See [host separation](../host-separation.md) for launch commands and recovery details.
+The implemented app runs its simulation service (`Crucible.Service`) and Blazor UI (`DeckTester`) as separate processes sharing `Crucible.Core`. The macOS Monitor packages the backend as Native AOT; shell scripts use JIT builds. The service owns SQLite, Java engines, replays, and scheduling on loopback port 5079; the UI host uses `IUiBackend` and service APIs on port 5077 and may expose that UI to an iPad on the local network. Session log pages fetch structured API records through this boundary. Restarting only the UI preserves an active simulation. See [host separation](../host-separation.md) for launch commands and recovery details.
 
 The user selected C# when approving implementation on October 11, 2026; this supersedes the earlier Python/React proposal. The existing Forge engine remains Java and uses a minimal interop shim. Record compatible runtime and package versions in lockfiles. See [implementation status](../implementation-status.md) for actual capability and validation limits; specifications are not proof that their gates have passed.
 
-Keep app data under `projects/crucible/data/`, engine artifacts under `projects/crucible/vendor/`, and source code under the new project. Source databases remain at the repository root and are always opened read-only. Exclude generated engine bundles, replay data, and personal manifests from source control by default; commit documentation, source, fixtures, and dependency manifests intentionally.
+Keep app data under `projects/crucible/data/`, engine artifacts under `projects/crucible/vendor/`, and source code under the new project. The source catalog is at `../../standard_cards.sqlite` relative to the Crucible repository and is opened read-only for imports. Explicit [card-attribute](../card-attributes.md) operations can append local pilot metadata; they are separate from import and simulation. Exclude generated engine bundles, replay data, and personal manifests from source control by default; commit documentation, source, fixtures, and dependency manifests intentionally.
 
 ## Capability investigation gate
 

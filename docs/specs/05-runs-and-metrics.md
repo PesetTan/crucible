@@ -2,13 +2,13 @@
 
 Date: October 11, 2026 (America/Los_Angeles)
 
-Status: Proposed. Parent: [MVP specification index](README.md).
+Status: Design contract with outstanding validation gates. Parent: [specification index](README.md). Current behavior and recorded evidence: [implementation status](../implementation-status.md).
 
 ## Immutable run configuration
 
 Store a run ID, creation time, exact deck versions, engine/adapter/pilot/rules identities, opening policy, coverage and validation reports, selected pairings, games per pairing, root seed, seed scheme version, limits, and worker configuration. Run labels can change; scientific inputs cannot. Changing an input creates another run.
 
-Default schedule: all unordered distinct-deck pairings, 200 slots per pairing, 100 starts for each deck. No mirror matches in the default matrix. Five decks produce 10 pairings and 2,000 slots; six produce 15 pairings and 3,000. A single-matchup run uses the same contract. Require an even slot count when requesting balanced play/draw.
+Default schedule: all unordered distinct-deck pairings, 200 slots per pairing, 100 starts for each deck. No mirror matches in the default matrix. Five decks produce 10 pairings and 2,000 slots; six produce 15 pairings and 3,000. Ten decks, the current selection maximum, produce 45 pairings and 9,000 slots. A single-matchup run uses the same contract. Require an even slot count when requesting balanced play/draw.
 
 Derive each slot's seed from SHA-256 over a versioned canonical encoding of root seed, pairing's ordered deck-version IDs, requested starter, and index within that starter's allocation. Record the full digest and the exact conversion to the pinned engine's accepted seed range. Audit collisions and reject a schedule with duplicate effective seeds. Retries retain the same slot seed; a fresh sampled game is a new slot, not a retry. Separate pilot streams where supported and document when a global engine stream is used.
 

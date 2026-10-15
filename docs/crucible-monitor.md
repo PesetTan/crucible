@@ -13,9 +13,9 @@ ditto --norsrc --noextattr 'dist/Crucible Monitor.app' "$HOME/Applications/Cruci
 open "$HOME/Applications/Crucible Monitor.app"
 ```
 
-The app contains a published .NET runtime payload and uses the installed .NET executable. It copies that payload to an immutable project build directory on first launch, so replacing the app cannot overwrite a running host's files. It is locally ad hoc signed. Install it in `~/Applications` and keep the checkout in a stable location for login startup. The packaging script also creates `dist/Crucible Monitor.zip` for transfer without Finder metadata. Connection Settings includes the actual login-item status and a link to macOS Login Items if system approval is needed. Turning off **Launch at Mac Login** unregisters it.
+The app bundles a Native AOT backend (`CrucibleBackend`) and a published Blazor frontend. The backend runs directly as a native executable; the frontend uses the installed .NET executable. See [Native backend](native-backend.md) for build commands, measurements, and compatibility details. It copies that payload to an immutable project build directory on first launch, so replacing the app cannot overwrite a running host's files. It is locally ad hoc signed. Install it in `~/Applications` and keep the checkout in a stable location for login startup. The packaging script also creates `dist/Crucible Monitor.zip` for transfer without Finder metadata. Connection Settings includes the actual login-item status and a link to macOS Login Items if system approval is needed. Turning off **Launch at Mac Login** unregisters it.
 
-The panel shows health, active work, last successful checks, and managed versus observed ownership. **Open Crucible** opens the browser. **View Logs** opens the monitor's configuration/log directory. **Advanced** holds connection settings, Build & Restart, and Roll Back. Each update can target the frontend, backend, or both. Build failures leave running components untouched; restart failure retains the previous runtime as an explicit rollback option.
+The panel shows health, active work, last successful checks, and managed versus observed ownership. **Open Crucible** opens the browser. **View Logs** opens the monitor's configuration/log directory. **Advanced** holds connection settings, Build & Restart, and Roll Back. Each update can target the frontend, backend, or both. Backend builds include a native executable self-check before stopping a running host. Build failures leave running components untouched; restart failure retains the previous runtime as an explicit rollback option.
 
 Quitting gracefully stops managed hosts, with confirmation for active or unknown backend work. A graceful-stop timeout requires a second, separate Force Stop approval. Cancelling keeps the app open and ownership tracked. Existing hosts remain observed until **Take Ownership** is selected. Older hosts without the health endpoint and unrelated port owners are never terminated automatically.
 
@@ -23,7 +23,7 @@ The menu bar uses Crucible's bowl-and-flame logo with a subdued bowl. A healthy 
 
 ## Health and storage
 
-`GET /api/v1/health` returns version 1, `application: crucible`, host role, PID, process start time, non-secret instance identity, project root, readiness, database availability, and active/queued run and optimizer counts. Ready hosts return 200; initializing hosts or unavailable backend databases return 503. The frontend endpoint remains healthy independently of backend outages. These probes check host/database readiness, not Forge correctness or simulation quality.
+`GET /api/v1/health` returns version 1, `application: crucible`, host role, PID, process start time, non-secret instance identity, project root, readiness, database availability, active/queued run and optimizer counts, `runtimeMode` (`native-aot` or `jit`), and `reflectionJsonEnabled`. Ready hosts return 200; initializing hosts or unavailable backend databases return 503. The frontend endpoint remains healthy independently of backend outages. These probes check host/database readiness, not Forge correctness or simulation quality.
 
 Checks run every five seconds, time out after two seconds, and flag persistent failure after three failures. Startup has a 60-second grace period; wake resets failures with a 15-second grace period. Failure notifications are deduplicated until recovery. If notifications are denied, the panel retains the warning. Intentional stops never cause automatic restart prompts.
 
@@ -36,7 +36,7 @@ For isolated development launches, `CRUCIBLE_MONITOR_STATE_DIR` overrides app co
 ```sh
 swift run --package-path macos/CrucibleMonitor MonitorChecks
 dotnet run --project tests/HostSeparationChecks/HostSeparationChecks.csproj --no-restore
-python3 tests/check_monitor_hosts.py --runtime 'dist/Crucible Monitor.app/Contents/Resources/runtime'
+python3 tests/check_monitor_hosts.py --runtime 'dist/Crucible Monitor.app/Contents/Resources/runtime' --backend-runtime 'dist/Crucible Monitor.app/Contents/Resources/runtime/service'
 ```
 
 Swift checks use an executable assertion runner, so they work with Command Line Tools without XCTest. Lifecycle fixtures use temporary fake hosts; published-host checks use disposable databases and ports. No real simulations are interrupted by these checks.

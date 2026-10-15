@@ -1,6 +1,6 @@
 # Exploratory subtype pilots v001
 
-The mode `subtypes-v001+aggro-v001+control-v1+reanimator-v9` assigns a first-release profile to each of the 30 non-Reanimator library subtypes. Exact case-insensitive subtype matches take precedence over broad strategy; Reanimator retains its v9 variant rules. Unknown subtypes use the existing exact broad Aggro/Control policy or Forge Default. Legacy modes keep their prior assignments. Historical deck manifests, attributes, sessions and engine bundles remain unchanged.
+The current opt-in mode `subtypes-v001+aggro-v001+control-v1+reanimator-v011` assigns a first-release profile to each of the 30 non-Reanimator library subtypes and unified v011 to Reanimator. Exact case-insensitive subtype matches take precedence over broad strategy. The original release used `subtypes-v001+aggro-v001+control-v1+reanimator-v9`; the comparison and publication records below describe that historical release, including its original Reanimator variants. Unknown subtypes use the existing exact broad Aggro/Control policy or Forge Default. Legacy modes keep their prior assignments. Historical deck manifests, attributes, sessions and engine bundles remain unchanged.
 
 ## Bounded behavior
 
@@ -67,7 +67,7 @@ A coverage pass found that 5-Color Spell Control lacks Tablet/Goggles. Its revie
 
 All **120 serial executions** completed: 60 matched schedules, one start per side for each of 30 exact subtype representatives. Raw replays, sequences, 57,488 state checkpoints, terminal outcomes and identical paired requests were independently audited. The candidate made **102** audited development overrides, each from its own captured hand and followed by the actual engine hand-to-stack event. The 27 original saved run payloads remain hash-identical.
 
-The paired cohort has **1 gained wins, 2 regressions and 57 unchanged winners**. Its baseline/candidate win counts are 29/28 across 60 heterogeneous diagnostic samples. These are paired diagnostic counts, not a pooled matchup estimate or an Arena forecast. No general performance gain is established. The new subtype mode is available explicitly; the established Aggro/Control/Reanimator mode remains the default.
+The paired cohort has **1 gained win, 2 regressions and 57 unchanged winners**. Its baseline/candidate win counts are 29/28 across 60 heterogeneous diagnostic samples. These are paired diagnostic counts, not a pooled matchup estimate or an Arena forecast. No general performance gain is established. The new subtype mode is available explicitly; the established Aggro/Control/Reanimator mode remains the default.
 
 | Subtype | Exact representative | Baseline wins / 2 | Candidate wins / 2 | Gains / regressions | Development overrides |
 |---|---|---:|---:|---:|---:|
@@ -108,7 +108,7 @@ Historical source-game integrity audits used `877b809a5fe441008fa59374f8224b0a` 
 
 Regressions are retained and identified in `audit.json`: sample 2 (Auras), sample 38 (Midrange). They demonstrate that extra reviewed development can still change subsequent actions adversely. Full subtype strategy fixtures, varied opponents, every variant and the inherited information audit remain open.
 
-## Publication and live verification
+## Historical publication and live verification
 
 Published immutable bundle: `656092f7e33fb10bd16be765879d566e5c9800f0413293a8436249004f59dc43-943137409838ea936a47a5692a531f3257c1ce9859c0dd246b1e31850ef5b50c`. All seven bridge class hashes exactly match the tested candidate, with unchanged engine resources. Published sample 1 reproduced every candidate state checkpoint and selected action, including two exercised development choices. Existing runs remain pinned to their recorded bundles.
 

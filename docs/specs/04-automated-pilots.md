@@ -1,5 +1,9 @@
 # 04 — Automated pilot requirements
 
+Date: October 11, 2026 (America/Los_Angeles)
+
+Status: Design contract with outstanding validation gates. Parent: [specification index](README.md). Current behavior and recorded evidence: [implementation status](../implementation-status.md).
+
 ## Engagement Protocols preview
 
 The opt-in `aggro-v001+control-v1+reanimator-v012` mode adds typed, declarative Engagement Protocols for Reanimator. A shared evaluator combines public observations and candidate features across supported decisions; other assignments and Standard defaults remain unchanged. See [Engagement Protocols](../engagement-protocols.md) for configuration, information boundaries, inspection and the frozen matched comparison workflow.
@@ -7,10 +11,6 @@ The opt-in `aggro-v001+control-v1+reanimator-v012` mode adds typed, declarative 
 ## Bounded pilot optimization
 
 The [Pilot Optimizer](../pilot-optimizer.md) adds frozen, resumable CLI/API experiments for existing pilots. Defaults are two hours of local computation, three scoped code revisions with focused real-engine fixtures, 12 candidates, 10 screening pairs and 40 untouched holdout pairs. Registered numeric overlays preserve base annotations and ability eligibility. New required-fixture failures, changed legacy decisions and worse holdout outcomes reject candidates. Technical failures are not losses. Promotion is explicit, requires complete evidence, and publishes an immutable opt-in policy; historical runs remain pinned. General pilot validation gates below remain applicable.
-
-Date: October 11, 2026 (America/Los_Angeles)
-
-Status: Proposed. Parent: [MVP specification index](README.md).
 
 ## Unified Reanimator v011
 
@@ -20,9 +20,9 @@ One decision implementation retains v10 copy-payment gates and existing prioriti
 
 Consolidation verification: six complete balanced legacy-versus-unified pairs retained identical terminal outcomes and state checkpoints. The unified profile passed 12 diagnostic positions and a 44-position focused copy/priority suite. Experiment `0b5cdc232a4d46d68fa997061bb18064` screened the control and three numeric variants in 40 paired comparisons, then completed 40 distinct holdout pairs. The finalist retained 16 wins and 24 losses with zero gains/regressions; no tuned policy was promoted. The report and raw audit are in `data/reports/reanimator-unified-v011/`. This is finite exploratory evidence.
 
-## Exploratory Reanimator policy implementation
+## Historical Reanimator policy releases
 
-New sessions default to `aggro-v001+control-v1+reanimator-v10`; the subtype option is `subtypes-v001+aggro-v001+control-v1+reanimator-v10`. Forge Default remains available as a baseline, and all previously supported v9 modes retain their assignments. Exact case-insensitive `subtype=Reanimator` takes precedence. Variant priorities remain Cryomancer, then Sultai, then Terror, then shared; broad Aggro/Control and the 30 subtype profiles retain their existing behavior. The new mode/profile IDs and bridge/attributes hashes isolate caches and session reuse. Saved runs remain pinned to their recorded profiles, frozen annotations and immutable bundles.
+The historical v10 release used `aggro-v001+control-v1+reanimator-v10` and `subtypes-v001+aggro-v001+control-v1+reanimator-v10`. New sessions now use the v011 modes above by default, or v012 through the explicit Engagement Protocols preview. Forge Default remains available as a baseline, and all previously supported v9 modes retain their assignments. Exact case-insensitive `subtype=Reanimator` takes precedence. Variant priorities remain Cryomancer, then Sultai, then Terror, then shared; broad Aggro/Control and the 30 subtype profiles retain their existing behavior. The new mode/profile IDs and bridge/attributes hashes isolate caches and session reuse. Saved runs remain pinned to their recorded profiles, frozen annotations and immutable bundles.
 
 Version 10 adds reviewed copy-payment gates. Wistfulness and Deceit keep defensive value only when the copier's actual recorded mana payment satisfies at least one annotated entry-effect color condition. The bridge verifies those gates against the offered creature's printed entry triggers; absent or mismatched annotations and cloned offered cards retain their previous scores. Non-copy retrieval, casting, mana selection and combat retain existing behavior. See [card attributes](../card-attributes.md). The c17ea3ec audit verified all 1,000 source replays. Seventy stratified matched pairs retained identical outcomes; eight source-selected copy failure cases improved from one to three wins, with two gains and no lost win. This targeted diagnostic result is not a matchup-wide estimate. Complete requests, replays and the review are retained under `data/reports/pilot-review-c17ea3ec/`.
 

@@ -1,8 +1,8 @@
-# MVP implementation specifications
+# Design contracts and validation targets
 
-Date: October 11, 2026 (America/Los_Angeles)
+Originally specified October 11, 2026; current-state notes updated October 14, 2026 (America/Los_Angeles).
 
-Status: Implementation authorized in C# on October 11, 2026. The user waived automated tests. These specifications remain the target for the validated MVP; see [implementation status](../implementation-status.md) for implemented behavior and outstanding evidence gates.
+The app is implemented and remains exploratory. These documents combine design contracts, subsequent extensions, and outstanding validated-result requirements. Use [implementation status](../implementation-status.md) for shipped behavior and evidence, [operating guides](../README.md) for current workflows, and [development checks](../development.md) for the test entry points. The initial test waiver is historical; the repository now includes .NET, Java, Python, and Swift checks.
 
 These specifications implement the scope of the [dated simulator plan](../plans/2026-10-11-crucible-plan.md). They are requirements and proposed design decisions, not claims that the engine capabilities or validation gates have passed.
 
@@ -17,8 +17,9 @@ These specifications implement the scope of the [dated simulator plan](../plans/
 | [07 — Validation and acceptance](07-validation-and-acceptance.md) | Required fixtures, trace audits, release criteria, and review procedure |
 | [08 — Mana incident logging](08-mana-incident-logging.md) | Per-player mana-starved/mana-flooded detection, evidence, and filters |
 | [09 — Mulligan tracking](09-mulligan-tracking.md) | Each synthetic player's mulligans before keep and kept hand size |
+| [10 — Expanded deck library](10-expanded-deck-library.md) | Historical library expansion and the current ten-deck run cap |
 
-Implementation order: capability investigation → data manifests → rules and pilot fixtures → audited small batch → interface and full batch. The interface may be developed with clearly labeled fixtures, but fixture data must never appear as simulated results.
+The original implementation order was: capability investigation → data manifests → rules and pilot fixtures → audited small batch → interface and full batch. The interface may be developed with clearly labeled fixtures, but fixture data must never appear as simulated results.
 
 All files share the following invariants:
 
@@ -29,6 +30,8 @@ All files share the following invariants:
 - Wins, rules draws, technical failures, and administrative stops have separate statuses.
 - Results are conditional on engine version, pilot versions, exact decks, rules snapshot, and opening-hand policy.
 - No claimed Arena hand-smoothing parity until verified; ordinary London mulligans are explicitly labeled as an approximation.
+
+Current selection supports two to ten decks, independent of library size. Standard uses unified Reanimator v011; v012 Engagement Protocols and the subtype policy are opt-in. The service is now a separate project with native macOS publishing. Earlier five/six-deck acceptance cohorts and historical pilot comparisons retain their identities.
 
 When documents conflict, resolve the conflict before implementation. The plan defines the intended scope; these specifications supply implementation details. Changes to scope or a failed engine-selection gate require an explicit revised decision, not a silent relaxation of requirements.
 

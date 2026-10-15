@@ -1,42 +1,57 @@
 # Implementation status
 
-Date: October 11, 2026 (America/Los_Angeles)
+Updated October 14, 2026 (America/Los_Angeles). This describes the current source and recorded local evidence. The [specifications](specs/README.md) also contain validation targets that have not passed; their presence is not a release certification.
 
-The user authorized implementation in C# and waived automated tests. The application uses .NET 10, ASP.NET Core, Blazor Server, and SQLite. Forge 2.0.15 remains the existing rules engine behind a minimal Java interoperability shim.
+## Runtime and operation
 
-## Implemented
+Crucible uses .NET 10, ASP.NET Core, Blazor Server, SQLite, and Forge 2.0.15 through a Java bridge. `Crucible.Core` shares backend implementation; `Crucible.Service` hosts the service independently of the `DeckTester` interface. The macOS Monitor packages a Native AOT backend with generated JSON serialization and a .NET frontend. Shell scripts run JIT development hosts. Legacy combined/service modes remain available in `DeckTester` for compatibility.
 
-- Read-only imports of eleven exact public lists with fingerprint verification and the separately identified captured personal Reanimator.
-- Immutable composition/source identities and local card-support inventory, including scripts packaged inside Forge's card archive.
-- Real headless opposed games with forced and verified starting player, ordinary London mulligans, no cheat shuffle, no ante, and no between-game sideboarding.
-- Seed schedules, parallel execution, per-attempt limits, persistent slots/attempts, cancellation, explicit resume/retry, restart recovery, and duplicate-run idempotency.
-- Typed game outcomes; timeouts and administrative stops separated from rules draws.
-- Compressed replay capture with per-state checksums and completed-file integrity checks; turn/event navigation and explicit private-hand audit view.
-- W/L/D and play/draw metrics, matchup Wilson intervals, matrix, conditional turn distributions, equal-opponent aggregation, and turn-end life/board/hand/graveyard charts with observed-game counts.
-- Local interface, API, qualified CSV/JSON export, project-local engine setup, and loopback-only service configuration.
-- Per-player mana-starved/mana-flooded incident logging with versioned definitions, turn-by-turn count evidence, game filters, and replay jump links. Existing completed replays are analyzed locally without rerunning their games.
-- Per-player mulligans before keep, kept hand sizes, recorded keep decisions, and per-deck frequency/mean/play-draw summaries. Compatible legacy replays retain a separate derivation label.
+The service owns simulations, imports, run storage, engine workers, and replays on loopback port 5079. The UI uses service APIs on port 5077; editorial notes are a separate local SQLite exception, and pilot scorecards are read from local report artifacts. A UI restart preserves active simulations. [Crucible Monitor](crucible-monitor.md) manages startup, health, ownership, approved recovery, component builds, and rollback. It never automatically resumes interrupted sessions.
 
-## Verification performed
+Immutable Forge bundles pin engine resources and compiled pilots per session. Worker-capable bundles reuse initialized JVMs within one session with fresh game/pilot state, seed, and replay per game. Faults destroy workers; normal recycling and session shutdown release them. Historical bundles retain their original execution protocol. See [host separation](host-separation.md) and [engine/replay contract](specs/03-engine-and-replay.md).
 
-The C# application and Java interoperability shim compiled. The C# build completed with zero warnings and errors. All six source decklists imported with their expected counts, and all required main-deck card names had exact Forge script entries. A two-game opposed integration run between the public 4-Color Reanimator and Mono-White Auras completed with one verified start for each deck, stored terminal results, turn samples, and compressed replays. These are startup/integration checks, not statistical matchup evidence.
+## Implemented workspace
 
-A second two-game opposed run between Mono-White Auras and Mono-White Lifegain completed with authoritative per-player opening-hand records under the updated shim. The older replays were analyzed for mana incidents and legacy mulligan accounting. Interactive framework assets are served successfully by the local app.
+| Area | Current behavior |
+| --- | --- |
+| Deck library | Exact public, captured personal, and custom versions; composition/source identity, coverage, friendly variants, collapsed lists, lineage, and linked past sessions |
+| Run setup | Two to ten exact versions, balanced starts, even games per matchup, two to four parallel games, fixed seeds, preflight, and optional Forge Performance Mode |
+| Lifecycle | Persistent slots and attempts, pause/resume, bounded failure retry, restart recovery, deletion, idempotent creation, and compatible completed-game reuse |
+| Results | W/L/D, play/draw splits, Wilson intervals, equal-opponent averages, ten-deck Field/By deck explorer, and turn-end charts with contributing observations |
+| Evidence | Separate Hand, Mana Incident, Runtime, and Game Evidence logs; filters, sorting, pagination, and replay links |
+| Replay | Compressed engine events/checkpoints, hashes, turn navigation, triggers, public pilot explanations, and an explicit private-hand audit view |
+| Workshop | Catalog search, Arena text resolution, browser drafts, grouped quantity editing, immutable saves, pilot previews, matchup reruns, and scoped baseline comparisons |
+| Forge Pilots | Assignment preview, exact and historical profiles, frozen fixture scorecards/source, per-session measured rates, and protocol inspection |
+| Editorial notes | Attributed, append-only saved commentary, seeded from an authored catalog; no automatic per-game model calls |
+| Optimizer | CLI/API experiments with frozen inputs, bounded search/revisions, distinct holdout evidence, profiling, and explicit immutable opt-in promotion |
 
-No automated test suite or fixture project was created. The existing documentation reviews preceded implementation and do not certify its game fidelity.
+The source catalog and saved library can grow independently of the run limit. Ten selected decks produce 45 pairings and 9,000 games at the 200-game default. Older five/six/twelve-deck planning examples do not set the current selection cap.
 
-## Outstanding validated-MVP gates
+Focused snapshots and conditional reads keep setup, selected sessions, library, and history separate. Server-side prepared reads avoid rebuilding unchanged responses; resource capacity is sampled separately. The UI retains its last snapshot during service outages and reconnects. Browser controls, disclosure state, and selections persist locally. Theme tokens, shared deck labels, and shared comboboxes support desktop and narrow layouts.
 
-The rules, generated-object coverage, pilot strategy, hidden-information boundary, and deterministic trace audits in the specifications remain outstanding. Validated-result mode is blocked. Only explicitly labeled exploratory runs are enabled.
+## Current pilots
 
-The current replay is a viewer of captured full-state checkpoints and engine event descriptions. Complete normalized legal-decision/payment tracing, private library order, zone-change lineage, mana-pool visualization, and exact skipped-turn cycle grouping are not implemented. The app exposes these limitations and does not infer the missing fields. Arena hand-smoothing parity, independently refreshed legality, and causal loss attribution are not claimed.
+Standard uses Aggro v001, Control v1, unified Reanimator v011, and Forge Default fallback. Exact Reanimator subtype takes precedence. The opt-in subtype mode adds 30 bounded permanent-development profiles and keeps Reanimator v011. **Standard + Engagement Protocols (Preview)** instead uses Reanimator v012 with Standard Execution, Counterplay, Graveyard Security, Stabilize, and Race. Other Standard assignments stay the same.
 
-The default full 2,000/3,000-game matrices are available to schedule locally but have not been run or independently validated during implementation. Full sample sizes do not remove pilot or engine bias.
+Protocols share typed definitions, permitted observations, candidate features, and one deterministic evaluator. Supported casting, tutor, discard, recovery, and copy hooks retain Forge legality/payment checks. Counterplay waits at most one own turn per critical card instance; Race and urgent pressure disable discretionary waiting. Combat, mulligans, general protection sequencing, and unsupported actions retain inherited behavior. Saved sessions freeze profiles, annotations, protocol catalogs, and bundle identity; new modes do not rewrite historical evidence.
 
-## Deck Workshop — October 12, 2026
+See [Engagement Protocols](engagement-protocols.md), [subtype pilots](subtype-pilots.md), [Aggro](aggro-pilot.md), [Control](control-pilot.md), and [pilot requirements/history](specs/04-automated-pilots.md) for exact scope and recorded cohorts.
 
-Deck Workshop provides local catalog search and Arena-text resolution, browser-persisted drafts, immutable custom versions with parent provenance, matchup reruns, and scoped baseline comparisons. Library and session matchup links enter the workspace; workshop sessions link back to it. The service owns card validation and deck creation, while the UI communicates through IUiBackend.
+## Verification and recorded evidence
 
-Acceptance evidence: build with no warnings; WorkshopChecks cover parsing/printing ambiguity, copy limits/exceptions, sideboards, version immutability, source byte integrity, oriented statistics, missing diagnostics, legacy records, and cache keys. HostSeparationChecks verify service boundaries. Visible Safari verification used a two-game edited Mono-White Auras matchup against Sultai Reanimator and opened its saved replay. This small verification sample establishes the workflow, not a deck recommendation or a measured improvement.
+The repository now includes .NET executable check projects, Java real-engine positions, Python checks and matched-game runners, and Swift Monitor checks. The [development guide](development.md) lists entry points and prerequisites. The initial October 11 startup checks and decision to waive tests describe that initial implementation only; they no longer describe the repository's verification coverage.
 
-Draft restoration was visibly rechecked after fixing initialization order: a renamed 60-card draft with 21 Plains and 3 Shardmage's Rescue survives refresh. Responsive verification used Safari at 375 pixels; controls and comparison cards fit the narrow layout. Reopening a workshop result retains that result's settings, while its original baseline remains fixed.
+- Engagement Protocols: 64 focused checks, 60 copy/payment positions, and a frozen 48-schedule comparison (96 serial executions). Baseline/candidate wins were 29/32, with four gains, one regression, and 43 unchanged outcomes. The final refinement preserved 32,043 candidate checkpoints. The workspace and replay inspection were checked at desktop and 390px. Graveyard Security has fixture evidence but was not activated by the complete-game cohort.
+- Subtype pilots: 60 paired schedules across 30 representatives (120 executions), 29/28 baseline/candidate wins, one gain and two regressions. This limited opponent set does not establish general improvement.
+- Native backend: the recorded serial JIT/AOT comparison measured 199.6/127.9 MiB resident memory after API reads and 1.34/1.08 seconds to readiness. Two matched complete games per backend retained identical normalized outcomes/replays, with 953 records and 657 checkpoints. These measurements are local, finite observations; see [native backend](native-backend.md) for conditions and artifacts.
+- Host, Workshop, scheduling, cache identity, generated serialization, notes, worker lifecycle, and Monitor checks cover their focused contracts. These checks do not certify every card, pilot, or complete rules interaction.
+
+Reports, exact requests, replay evidence, and benchmark artifacts live in ignored `data/` directories; they are not included with a clone. Feature guides distinguish their historical release cohorts from the currently selected bundle. Updating this documentation does not rerun those experiments.
+
+## Remaining validation limits
+
+Only **Exploratory Mode** is enabled. Full rules/generated-object coverage, deck-specific strategic fixtures, the inherited Forge hidden-information audit, and deterministic trace acceptance remain incomplete. Script presence does not establish correctness. Custom reviewed hooks use own information and public observations; this does not validate all inherited Forge decisions.
+
+The replay is a viewer of captured checkpoints and engine diagnostics. It lacks a complete normalized legal-decision/payment trace, private library order, full zone-change lineage, mana-pool visualization, and exact skipped-turn cycle grouping. Actual turns remain authoritative. Technical stops and incomplete games remain separate from rules draws and win-rate denominators.
+
+Arena hand-smoothing parity, independently refreshed legality, calibrated pilot skill, causal loss attribution, and Arena matchup forecasts are not claimed. Forge Performance Mode remains a separate experimental setting. Large schedules and completed samples do not remove engine or pilot bias.

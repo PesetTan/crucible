@@ -1,5 +1,7 @@
 # Magic Standard Arena Bo1 Simulator Plan
 
+Historical plan. For the current architecture, ten-deck selection limit, pilot modes, and recorded verification, see [implementation status](../implementation-status.md) and the [documentation index](../README.md). Original scope and estimates below are retained as planning history.
+
 Date: October 11, 2026 (America/Los_Angeles)
 
 Status: Implementation authorized in C# on October 11, 2026; automated tests waived by the user. See [implementation status](../implementation-status.md) for delivered behavior and outstanding validation gates.
