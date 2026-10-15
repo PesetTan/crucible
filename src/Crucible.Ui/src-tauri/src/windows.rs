@@ -455,7 +455,12 @@ fn bootstrap(app: &tauri::AppHandle) -> Result<(), String> {
                             || line.starts_with("Compiling")
                             || line.starts_with("Setup complete")
                     }) {
-                        progress(app, line);
+                        let message = if line.starts_with("Compiling") {
+                            "Preparing the simulation engine…"
+                        } else if line.starts_with("Setup complete") {
+                            "Setup is complete. Starting Crucible…"
+                        } else { line };
+                        progress(app, message);
                     }
                 }
                 thread::sleep(Duration::from_millis(400));

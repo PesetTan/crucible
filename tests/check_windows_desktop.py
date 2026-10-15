@@ -102,9 +102,11 @@ def main():
     if os.name!='nt':p.error('This integration check requires Windows.')
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=True)
     installer=args.installer.resolve();checks=[];driver=None;web=None
+    with installer.open('rb') as file:installer_hash=hashlib.file_digest(file,'sha256').hexdigest()
+    (output/'installer-provenance.json').write_text(json.dumps({'installer':installer.name,'sha256':installer_hash,'installerRunId':os.environ.get('CRUCIBLE_INSTALLER_RUN_ID',os.environ.get('GITHUB_RUN_ID')),'testCommit':os.environ.get('GITHUB_SHA')},indent=2)+'\n')
     def record(message):
         checks.append(message);print('Passed: '+message,flush=True)
-    with tempfile.TemporaryDirectory(prefix='Crucible Windows Ω ') as temporary:
+    with tempfile.TemporaryDirectory(prefix='Crucible Windows Ω ',ignore_cleanup_errors=True) as temporary:
         base=Path(temporary);install=base/'Installed App Ω';state=base/'Saved Data Ω'
         state.mkdir();ui_port,backend_port=port(),port();assert ui_port!=backend_port
         ui=f'http://127.0.0.1:{ui_port}';backend=f'http://127.0.0.1:{backend_port}'
@@ -123,6 +125,15 @@ def main():
             return exes[0]
         executable=install_app();record('silent per-user install in a Unicode/spaced directory')
         native=Native()
+        def capture_desktop(name):
+            capture=Path(__file__).with_name('capture_windows_desktop.ps1')
+            try:
+                subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-NonInteractive','-File',str(capture),'-OutputPath',str(output/name),'-ProcessOutputPath',str(output/(Path(name).stem+'-processes.json'))],timeout=20,capture_output=True)
+            except (OSError,subprocess.TimeoutExpired):pass
+        def stop_fixture(child):
+            if child.poll() is None:
+                subprocess.run(['taskkill','/PID',str(child.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                child.wait(timeout=20)
         class Foreign(BaseHTTPRequestHandler):
             def log_message(self,*args):pass
             def do_GET(self):
@@ -134,11 +145,18 @@ def main():
         collision_state=base/'Collision Data Ω'
         collision=subprocess.Popen([str(executable)],env=dict(env,MTG_PROJECT_ROOT=str(collision_state)))
         try:
-            wait(lambda:any(native.text(h)=='Crucible Could Not Start' for h in native.windows()),30)
+            def collision_error():
+                if collision.poll() is not None:raise StartupFailure(f'Collision app exited: {collision.returncode}')
+                return any(native.text(h)=='Crucible Could Not Start' for h in native.windows())
+            wait(collision_error,90)
             assert http(backend+'/api/v1/health')[1]['application']=='another-program'
             assert not (collision_state/'data/engine-bundles/active.json').exists()
+        except Exception:
+            capture_desktop('collision-failure.png')
+            (output/'collision-context.json').write_text(json.dumps({'windows':[native.text(h) for h in native.windows() if native.text(h).startswith('Crucible')]},indent=2)+'\n')
+            raise
         finally:
-            collision.terminate();collision.wait(timeout=10);foreign.shutdown();foreign.server_close()
+            stop_fixture(collision);foreign.shutdown();foreign.server_close()
         record('occupied backend port remains untouched and startup error is visible')
         webdriver_port,debug_port=port(),port()
         app_processes=[]
@@ -146,11 +164,6 @@ def main():
         driver=subprocess.Popen([shutil.which('msedgedriver'),f'--port={webdriver_port}','--verbose',f'--log-path={output / "edgedriver.log"}'],env=dict(env,TAURI_WEBVIEW_AUTOMATION='true'),stdout=driver_log,stderr=subprocess.STDOUT)
         url=f'http://127.0.0.1:{webdriver_port}'
         wait(lambda:http(url+'/status')[0]==200)
-        def capture_desktop(name):
-            capture=Path(__file__).with_name('capture_windows_desktop.ps1')
-            try:
-                subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-NonInteractive','-File',str(capture),'-OutputPath',str(output/name),'-ProcessOutputPath',str(output/(Path(name).stem+'-processes.json'))],timeout=20,capture_output=True)
-            except (OSError,subprocess.TimeoutExpired):pass
         def launch():
             # Capture while InitSession is pending; EdgeDriver kills the app on timeout.
             child=subprocess.Popen([str(executable)],env=dict(env,TAURI_WEBVIEW_AUTOMATION='true',WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f'--remote-debugging-port={debug_port} --remote-debugging-address=127.0.0.1'))
@@ -213,7 +226,7 @@ def main():
                     assert not (lock_root/'data/engine-bundles/active.json').exists()
                     record('database ownership conflict is visible; external native host remains untouched')
                 finally:
-                    if blocker and blocker.poll() is None:blocker.terminate();blocker.wait(timeout=10)
+                    if blocker:stop_fixture(blocker)
                     if existing.poll() is None:
                         try:
                             token=http(owner_origin+'/api/v1/session')[1]['instanceToken']
@@ -274,6 +287,7 @@ def main():
             assert [health(origin)['instanceId'] for origin in [ui,backend]]==before
             native.close();native.choose('Stop And Exit')
             wait(lambda:down(ui) and down(backend),45)
+            wait(lambda:app_processes[-1].poll() is not None,45)
             web.dispose();web=None
             web=launch()
             assert health(backend)['activeRuns']==0 and health(backend)['queuedRuns']==0
@@ -284,7 +298,8 @@ def main():
             wait(lambda:health(backend)['activeRuns']>0)
             api('/api/v1/runs/'+interrupted+'/cancel','POST')
             wait(lambda:health(backend)['activeRuns']==0)
-            native.close();wait(lambda:down(ui) and down(backend),45);web.dispose();web=None
+            native.close();wait(lambda:down(ui) and down(backend),45)
+            wait(lambda:app_processes[-1].poll() is not None,45);web.dispose();web=None
             record('Keep Open / Stop And Exit, graceful owned-host shutdown, saved results, explicit resume')
             catalog=state/'catalog.sqlite';catalog_hash=hashlib.sha256(catalog.read_bytes()).hexdigest()
             replay_hashes={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
