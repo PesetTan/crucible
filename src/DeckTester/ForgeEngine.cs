@@ -31,7 +31,7 @@ public sealed class ForgeEngine(AppPaths paths, Store store, CardAttributes? att
             throw new ArgumentException("No selected deck uses the optimized target profile.");
         return policy;
     }
-    public static string FileHash(string path) { using var stream=File.OpenRead(path);return Convert.ToHexStringLower(SHA256.HashData(stream)); }
+    public static string FileHash(string path) { using var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);return Convert.ToHexStringLower(SHA256.HashData(stream)); }
     private static Dictionary<string,string> LoadScripts(EngineBundle bundle)
     {
         var result=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);var folder=Path.Combine(bundle.Resources,"cardsfolder");
