@@ -119,8 +119,8 @@ public sealed class DeckImporter(AppPaths paths, Store store)
         foreach(var group in cards.Where(c=>c.Zone is "MainDeck" or "Sideboard").GroupBy(c=>c.Name))
             if(group.Sum(c=>c.Quantity)>4&&!group.First().Type.Contains("Basic Land",StringComparison.Ordinal))throw new InvalidDataException($"Copy limit exceeded for {group.Key}.");
         var pairs=cards.Where(c=>c.Zone=="MainDeck").GroupBy(c=>c.Name).OrderBy(g=>g.Key,StringComparer.Ordinal).Select(g=>new object[]{g.Key,g.Sum(c=>c.Quantity)}).ToList();
-        var listHash=Hash(JsonSerializer.Serialize(pairs,new JsonSerializerOptions{Encoder=JavaScriptEncoder.UnsafeRelaxedJsonEscaping}));
-        var manifestHash=Hash(Json.Encode(new{ name,type,sourceId,snapshot,url,cards }));
+        var listHash=Hash(Json.EncodeRelaxed(pairs));
+        var manifestHash=Hash(Json.Encode(new DeckFingerprint(name,type,sourceId,snapshot,url,cards)));
         return new(manifestHash,name,type,type=="personal"?"Saved snapshot":"Exact public list",sourceId,snapshot,url,listHash,manifestHash,DateTimeOffset.UtcNow,cards,note);
     }
 }

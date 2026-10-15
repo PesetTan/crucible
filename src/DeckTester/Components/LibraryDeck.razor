@@ -15,6 +15,7 @@
         <a class="button library-edit" href="@($"/workshop?deck={Deck.Id}")">Edit a copy</a>
     </div>
     <div class="library-deck-sections">
+        <AiNote Scope="deck" Subject="@Deck.Id" Context="@Deck.ManifestHash" />
         <details class="library-disclosure" open="@cardsOpen">
             <summary @onclick="()=>cardsOpen=!cardsOpen" @onclick:preventDefault>Card list <span>@Deck.MainCount main
                     @if(Deck.SideCount>0){<text> · @Deck.SideCount sideboard</text>}

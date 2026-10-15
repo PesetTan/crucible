@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#faf8f2" />
+    <meta name="theme-color" content="#e8e8ee" />
     <meta name="color-scheme" content="light dark" />
     <base href="/" />
     <script src="@Assets["theme.js"]"></script>
@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="branding.css" />
     <link rel="stylesheet" href="DeckTester.styles.css" />
+    <link rel="stylesheet" href="@Assets["theme-polish.css"]" />
     <link rel="icon" type="@Branding.IconType" href="@Branding.Icon" />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
@@ -22,5 +23,7 @@
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
     <script src="@Assets["source-rate.js"]"></script>
+    <script src="@Assets["disclosures.js"]"></script>
+    <script src="@Assets["motion.js"]"></script>
 </body>
 </html>

@@ -30,6 +30,77 @@ import java.security.MessageDigest;
 import java.util.*;
 
 public final class ForgeBridge {
+    static final String PROTOCOL_REANIMATOR = "reanimator-v012";
+    // Pure protocol engine: these records deliberately contain no Forge objects.
+    enum CandidateFeature { DEFENSIVE, DEFENSIVE_DISCARD, COMBO_DISCARD, DEVELOPMENT, COMPLETE_COMBO, COUNTER_EXPOSED, GRAVEYARD_EXPOSED }
+    record ProtocolSettings(int lowLife, int maximumDelayTurns, int handSearchLimit) {}
+    static final ProtocolSettings PROTOCOL_SETTINGS = new ProtocolSettings(8, 1, 24);
+    record DecisionContext(boolean counterRisk, boolean graveyardInterference, boolean urgentPressure,
+            boolean comboOpponent, int ownTurn, List<String> evidence, boolean mayDelay) {
+        DecisionContext { evidence=List.copyOf(evidence); }
+        DecisionContext(boolean counter,boolean hate,boolean urgent,boolean combo,int turn,List<String> evidence){this(counter,hate,urgent,combo,turn,evidence,true);}
+        DecisionContext withDelay(boolean allowed){return new DecisionContext(counterRisk,graveyardInterference,urgentPressure,comboOpponent,ownTurn,evidence,allowed);}
+    }
+    record CandidateFeatures(int id, int baseline, Set<CandidateFeature> features) {
+        CandidateFeatures { features=Set.copyOf(features); }
+    }
+    record ProtocolDefinition(String id, String name, String condition, String response, int priority,
+            java.util.function.Predicate<DecisionContext> activation, Map<CandidateFeature,Integer> preferences,
+            int maximumDelayTurns) {
+        ProtocolDefinition { preferences=Map.copyOf(preferences); }
+    }
+    record ProtocolEvaluation(List<String> activeProtocols, List<Integer> rank) {}
+    static final class EngagementProtocols {
+        static final String VERSION="engagement-protocols-v1";
+        static final List<ProtocolDefinition> REANIMATOR=List.of(
+            new ProtocolDefinition("standard-execution","Standard Execution","Always available",
+                "Use the pilot's existing priorities for supported choices.",0,c->true,Map.of(),0),
+            new ProtocolDefinition("counterplay","Counterplay","Observed counter capability and compatible public basic-land mana",
+                "Prefer useful development before exposing a prepared combo; wait at most "+PROTOCOL_SETTINGS.maximumDelayTurns()+" own turn(s) per card.",10,
+                c->c.counterRisk()&&c.mayDelay()&&!c.urgentPressure()&&!c.comboOpponent(),
+                Map.of(CandidateFeature.COUNTER_EXPOSED,-1,CandidateFeature.DEVELOPMENT,1),PROTOCOL_SETTINGS.maximumDelayTurns()),
+            new ProtocolDefinition("race","Race","Public evidence identifies a combo opponent",
+                "Prefer completing and executing a prepared combo; disable optional counterplay delays.",20,
+                DecisionContext::comboOpponent,Map.of(CandidateFeature.COMPLETE_COMBO,1,CandidateFeature.COMBO_DISCARD,-1),0),
+            new ProtocolDefinition("stabilize","Stabilize","Life at most "+PROTOCOL_SETTINGS.lowLife()+" with an opposing creature, or opposing visible power at least life",
+                "Prefer reviewed defensive choices over optional combo setup.",30,
+                DecisionContext::urgentPressure,Map.of(CandidateFeature.DEFENSIVE,1,CandidateFeature.DEFENSIVE_DISCARD,-1),0),
+            new ProtocolDefinition("graveyard-security","Graveyard Security","Relevant graveyard interference is visible",
+                "Avoid optional exposed graveyard setup and prefer independent development.",40,
+                DecisionContext::graveyardInterference,Map.of(CandidateFeature.GRAVEYARD_EXPOSED,-1),0));
+        static final Map<String,List<ProtocolDefinition>> REGISTRY=Map.of(PROTOCOL_REANIMATOR,REANIMATOR);
+        static List<ProtocolDefinition> definitions(String profile) { return REGISTRY.getOrDefault(profile,List.of()); }
+        static int delayLimit(List<ProtocolDefinition> definitions,DecisionContext context){return definitions.stream()
+            .filter(d->d.activation().test(context)).mapToInt(ProtocolDefinition::maximumDelayTurns).max().orElse(0);}
+        static ProtocolEvaluation evaluate(List<ProtocolDefinition> definitions,DecisionContext context,CandidateFeatures candidate) {
+            List<ProtocolDefinition> active=definitions.stream().filter(d->d.activation().test(context))
+                .sorted(Comparator.comparingInt(ProtocolDefinition::priority).reversed()).toList();
+            List<Integer> rank=new ArrayList<>();
+            for(ProtocolDefinition definition:active)rank.add(definition.preferences().entrySet().stream()
+                .filter(e->candidate.features().contains(e.getKey())).mapToInt(Map.Entry::getValue).sum());
+            rank.add(candidate.baseline());
+            return new ProtocolEvaluation(active.stream().map(ProtocolDefinition::id).toList(),List.copyOf(rank));
+        }
+        static int compare(ProtocolEvaluation left,ProtocolEvaluation right) {
+            for(int i=0;i<left.rank().size();i++){int comparison=Integer.compare(left.rank().get(i),right.rank().get(i));if(comparison!=0)return comparison;}
+            return 0;
+        }
+        static final class Memory {
+            final Map<Integer,Integer> deferredAt=new HashMap<>();
+            boolean mayDefer(int card,int turn,int limit){return limit>0&&(!deferredAt.containsKey(card)||turn-deferredAt.get(card)<limit);}
+            void deferred(int card,int turn){deferredAt.putIfAbsent(card,turn);}
+        }
+        static Map<String,Object> catalog() {
+            var definitions=REANIMATOR.stream().map(d->map("id",d.id(),"name",d.name(),"condition",d.condition(),
+                "response",d.response(),"priority",d.priority(),"maximumDelayTurns",d.maximumDelayTurns(),
+                "preferences",Arrays.stream(CandidateFeature.values()).filter(d.preferences()::containsKey)
+                    .collect(java.util.stream.Collectors.toMap(Enum::name,d.preferences()::get,(a,b)->a,LinkedHashMap::new)))).toList();
+            var catalog=map("version",VERSION,"profile",PROTOCOL_REANIMATOR,"settings",PROTOCOL_SETTINGS,"definitions",definitions);
+            try{catalog.put("hash",HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.toJson(catalog).getBytes(StandardCharsets.UTF_8))));}
+            catch(Exception failure){throw new IllegalStateException(failure);}
+            return catalog;
+        }
+    }
     static final String UNIFIED_REANIMATOR = "reanimator-v011";
     static final String PILOT = "reanimator-adaptive-v9";
     static final String CONTROL = "control-shared-v1";
@@ -80,6 +151,7 @@ public final class ForgeBridge {
     static final Map<String,Map<Integer,PublicCard>> publiclySeen = new LinkedHashMap<>();
     static final Map<String,Integer> personalTurns = new LinkedHashMap<>();
     static final Map<String,Boolean> acceptedByPolicy = new LinkedHashMap<>();
+    static final Map<String,List<String>> activeProtocolsByPlayer=new LinkedHashMap<>();
 
     static Map<String,Object> map(Object... values) {
         Map<String,Object> result = new LinkedHashMap<>();
@@ -105,9 +177,80 @@ public final class ForgeBridge {
         final String name,oracle;
         final boolean creature,onBattlefield,exiled;
         final int manaValue;
+        List<CounterRoute> counters=List.of();
         PublicCard(String name,String oracle,boolean creature,int manaValue,boolean onBattlefield,boolean exiled){
             this.name=name;this.oracle=oracle;this.creature=creature;this.manaValue=manaValue;this.onBattlefield=onBattlefield;this.exiled=exiled;
         }
+    }
+    record CounterRoute(String name,List<Integer> colored,int generic,String valid) {}
+    static PublicCard publicCard(Card card,boolean battlefield,boolean exiled) {
+        var fact=new PublicCard(card.getName(),str(property(card.getCurrentState(),"getOracleText")),card.isCreature(),card.getCMC(),battlefield,exiled);
+        List<CounterRoute> routes=new ArrayList<>();
+        if(!card.isCloned())for(SpellAbility sa:card.getSpellAbilities()) {
+            if(sa.getApi()!=ApiType.Counter||!sa.isSpell()||sa.getSubAbility()!=null||sa.getPayCosts()==null
+                ||!sa.getPayCosts().isOnlyManaCost()||sa.hasParam("Condition")||sa.hasParam("AILogic")&&"Never".equals(sa.getParam("AILogic")))continue;
+            String valid=sa.getParamOrDefault("ValidTgts","");
+            if(valid.equals("Card")&&"Spell".equals(sa.getParamOrDefault("TargetType","")))valid="Spell";
+            if(!Set.of("Spell","Spell.Creature","Spell.Noncreature").contains(valid))continue;
+            var cost=card.getManaCost();List<Integer> colored=new ArrayList<>();boolean ordinary=!cost.isNoCost();
+            for(var shard:cost){int mask=shard.getColorMask();if(Integer.bitCount(mask)!=1||shard.isPhyrexian()||shard.toString().contains("2/")||shard.toString().equals("X")){ordinary=false;break;}colored.add(mask);}
+            if(ordinary)routes.add(new CounterRoute(card.getName(),List.copyOf(colored),cost.getGenericCost(),valid));
+        }
+        fact.counters=List.copyOf(routes);return fact;
+    }
+    // Public basic lands only: conditional mana, alternative costs and unknown routes remain unsupported.
+    static boolean publicManaMatches(List<Integer> sources,List<Integer> colored,int generic) {
+        if(sources.size()<colored.size()+generic)return false;
+        return assignPublicMana(sources,colored,0,new boolean[sources.size()]);
+    }
+    static boolean assignPublicMana(List<Integer> sources,List<Integer> colored,int index,boolean[] used) {
+        if(index==colored.size())return true;
+        for(int i=0;i<sources.size();i++)if(!used[i]&&(sources.get(i)&colored.get(index))!=0){
+            used[i]=true;if(assignPublicMana(sources,colored,index+1,used))return true;used[i]=false;
+        }return false;
+    }
+    static DecisionContext protocolObservation(Game g,Player self,boolean creatureSpell) {
+        OpponentEstimate estimate=estimateOpponent(g,self);List<String> evidence=new ArrayList<>(estimate.evidence);
+        boolean counterRisk=false,hate=false;int creatures=0,power=0;
+        for(Player opponent:self.getOpponents()) {
+            Map<Integer,PublicCard> visible=new LinkedHashMap<>(publiclySeen.getOrDefault(opponent.getName(),Map.of()));
+            List<Integer> mana=new ArrayList<>();
+            for(ZoneType zone:List.of(ZoneType.Battlefield,ZoneType.Graveyard,ZoneType.Exile))for(Card card:opponent.getCardsIn(zone)) {
+                if(card.isFaceDown())continue;
+                visible.put(card.getId(),publicCard(card,zone==ZoneType.Battlefield,zone==ZoneType.Exile));
+                if(zone!=ZoneType.Battlefield)continue;
+                if(card.isCreature()){creatures++;power+=Math.max(0,card.getNetPower());}
+                if(blocksGraveyardSetup(attributes(card),str(property(card.getCurrentState(),"getOracleText")),card.isCloned())){
+                    hate=true;evidence.add(card.getName()+" (visible graveyard interference)");
+                }
+                if(card.isLand()&&card.getType().isBasic()&&!card.isTapped()){
+                    int mask=0;String[] types={"Plains","Island","Swamp","Mountain","Forest"};
+                    for(int i=0;i<types.length;i++)if(card.getType().hasSubtype(types[i]))mask|=forge.card.MagicColor.WUBRG[i];
+                    mana.add(mask);
+                }
+            }
+            for(PublicCard fact:visible.values())for(CounterRoute route:fact.counters)
+                if((route.valid().equals("Spell")||route.valid().equals(creatureSpell?"Spell.Creature":"Spell.Noncreature"))
+                    &&publicManaMatches(mana,route.colored(),route.generic())){
+                    counterRisk=true;evidence.add(route.name()+" (observed counter route; compatible untapped basic lands)");
+                }
+        }
+        boolean urgent=creatures>0&&(self.getLife()<=PROTOCOL_SETTINGS.lowLife()||power>=self.getLife());
+        if(urgent)evidence.add("Visible board pressure: "+power+" opposing power, "+self.getLife()+" life");
+        return new DecisionContext(counterRisk,hate,urgent,estimate.kind.startsWith("combo"),personalTurns.getOrDefault(self.getName(),0),evidence.stream().distinct().toList());
+    }
+    static CandidateFeatures protocolFeatures(Card card,int baseline,ZoneType destination,Player self,boolean prepared,boolean casting,boolean discard) {
+        Set<CandidateFeature> features=EnumSet.noneOf(CandidateFeature.class);JsonObject attrs=attributes(card);
+        boolean copier=role(attrs,"graveyard_copier"),payoff=role(attrs,"mass_reanimation");
+        boolean defense=number(object(object(attrs,"pilot"),"opponentBonuses"),"aggro",0)>0||role(attrs,"interaction");
+        if(defense&&!discard)features.add(CandidateFeature.DEFENSIVE);
+        if(defense&&discard)features.add(CandidateFeature.DEFENSIVE_DISCARD);
+        if(copier&&discard)features.add(CandidateFeature.COMBO_DISCARD);
+        if(payoff&&discard&&prepared)features.add(CandidateFeature.COMPLETE_COMBO);
+        if(baseline>0&&!copier&&!payoff&&!discard)features.add(CandidateFeature.DEVELOPMENT);
+        if(copier&&prepared&&!discard){features.add(CandidateFeature.COMPLETE_COMBO);if(casting)features.add(CandidateFeature.COUNTER_EXPOSED);}
+        if((discard&&payoff)||copier&&(casting||destination==ZoneType.Battlefield))features.add(CandidateFeature.GRAVEYARD_EXPOSED);
+        return new CandidateFeatures(card.getId(),baseline,features);
     }
     // The classifier receives only public zones. Deck manifests and concealed zones never enter it.
     static OpponentEstimate estimateOpponent(Game g,Player self) {
@@ -117,8 +260,7 @@ public final class ForgeBridge {
             for(ZoneType zone:new ZoneType[]{ZoneType.Battlefield,ZoneType.Graveyard,ZoneType.Exile})
                 for(Card card:opponent.getCardsIn(zone)) {
                     if(card.isFaceDown())continue;
-                    visible.put(card.getId(),new PublicCard(card.getName(),str(property(card.getCurrentState(),"getOracleText")),card.isCreature(),card.getCMC(),
-                        zone==ZoneType.Battlefield,zone==ZoneType.Exile));
+                    visible.put(card.getId(),publicCard(card,zone==ZoneType.Battlefield,zone==ZoneType.Exile));
                 }
         }
         return classifyPublicCards(new ArrayList<>(visible.values()));
@@ -149,10 +291,14 @@ public final class ForgeBridge {
         decision(player,profile,action,options,selected,estimate,reason,Map.of());
     }
     static void decision(String player,String profile,String action,List<String> options,String selected,OpponentEstimate estimate,String reason,Map<String,Object> context) {
-        var record=map("kind","pilot_decision","player",player,"pilotProfile",profile,"pilotVersion",SUBTYPE_PARENTS.containsKey(profile)?profile:usesAggro(profile)?AGGRO:usesControl(profile)?"control-adaptive-v1":profile.equals(UNIFIED_REANIMATOR)?UNIFIED_REANIMATOR:profile.endsWith("-v10")?"reanimator-adaptive-v10":PILOT,"decision",action,
+        var record=map("kind","pilot_decision","player",player,"pilotProfile",profile,"pilotVersion",SUBTYPE_PARENTS.containsKey(profile)?profile:usesAggro(profile)?AGGRO:usesControl(profile)?"control-adaptive-v1":profile.equals(PROTOCOL_REANIMATOR)?PROTOCOL_REANIMATOR:profile.equals(UNIFIED_REANIMATOR)?UNIFIED_REANIMATOR:profile.endsWith("-v10")?"reanimator-adaptive-v10":PILOT,"decision",action,
             "options",options,"selected",selected,"opponentClass",estimate.kind,"opponentConfidence",estimate.confidence,
             "visibleEvidence",estimate.evidence,"reason",reason);
         record.putAll(context);
+        if(profile.equals(PROTOCOL_REANIMATOR)){
+            record.put("activeProtocols",activeProtocolsByPlayer.getOrDefault(player,List.of("standard-execution")));
+            record.put("protocolSetVersion",EngagementProtocols.VERSION);
+        }
         if(optimizerPoliciesByPlayer.containsKey(player))record.put("optimizerPolicyId",optimizerPoliciesByPlayer.get(player).get("id").getAsString());
         emit(record);
     }
@@ -212,7 +358,7 @@ public final class ForgeBridge {
     // Own frozen annotations select a priority table, not a separate pilot identity.
     // Never read the opponent's deck, concealed cards, or library ordering.
     static String reanimatorScoreProfile(Player player,String profile) {
-        if(!profile.equals(UNIFIED_REANIMATOR))return profile;
+        if(!profile.equals(UNIFIED_REANIMATOR)&&!profile.equals(PROTOCOL_REANIMATOR))return profile;
         Map<String,JsonObject> own=attributesByPlayer.getOrDefault(player.getName(),Map.of());
         for(String variant:List.of("cryomancer","sultai","terror"))
             for(JsonObject attrs:own.values()) {
@@ -443,9 +589,10 @@ public final class ForgeBridge {
                     var view=cast.sa().getHostCard();
                     if(!view.isFaceDown()) {
                         Card source=null;
-                        for(Card candidate:game.getCardsInGame())if(candidate.getId()==view.getId()){source=candidate;break;}
+                        for(ZoneType zone:List.of(ZoneType.Stack,ZoneType.Battlefield,ZoneType.Graveyard,ZoneType.Exile))
+                            for(Card candidate:game.getCardsIn(zone))if(candidate.getId()==view.getId()&&!candidate.isFaceDown())source=candidate;
                         PublicCard fact=source==null?new PublicCard(view.getName(),"",false,99,false,false)
-                            :new PublicCard(source.getName(),str(property(source.getCurrentState(),"getOracleText")),source.isCreature(),source.getCMC(),false,false);
+                            :publicCard(source,false,false);
                         publiclySeen.computeIfAbsent(cast.si().getActivatingPlayer().getName(),key->new LinkedHashMap<>()).put(view.getId(),fact);
                     }
                 }
@@ -476,6 +623,73 @@ public final class ForgeBridge {
         @Override public Player createIngamePlayer(Game g,int id){
             Player p=new Player(getName(),g,id);
             p.setFirstController(new PlayerControllerAi(g,p,this){
+                private final EngagementProtocols.Memory protocolMemory=new EngagementProtocols.Memory();
+                private DecisionContext protocolContext(boolean creatureSpell) {
+                    return recordProtocolContext(protocolObservation(g,p,creatureSpell));
+                }
+                private DecisionContext recordProtocolContext(DecisionContext context) {
+                    var active=EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),context,new CandidateFeatures(0,0,Set.of())).activeProtocols();
+                    if(!active.equals(activeProtocolsByPlayer.put(p.getName(),active)))
+                        emit(map("kind","protocol_state","player",p.getName(),"pilotProfile",profile,"activeProtocols",active,
+                            "protocolSetVersion",EngagementProtocols.VERSION,"visibleEvidence",context.evidence(),
+                            "reason",EngagementProtocols.definitions(profile).stream().filter(d->active.contains(d.id())).map(d->d.name()+": "+d.response()).toList().toString()));
+                    return context;
+                }
+                private boolean preparedCombo() {return p.getCardsIn(ZoneType.Graveyard).stream().anyMatch(c->role(attributes(c),"mass_reanimation"));}
+                private boolean reviewedPermanent(SpellAbility sa) {
+                    return sa!=null&&sa.isSpell()&&sa.getHostCard()!=null&&!sa.getHostCard().isCloned()&&!sa.usesTargeting()
+                        &&sa.getSubAbility()==null&&sa.getPayCosts()!=null&&sa.getPayCosts().isOnlyManaCost()
+                        &&!sa.getHostCard().getManaCost().toString().contains("X")
+                        &&(sa.getApi()==ApiType.PermanentCreature||sa.getApi()==ApiType.PermanentNoncreature);
+                }
+                private List<SpellAbility> protocolSpells(List<SpellAbility> baseline) {
+                    if(!profile.equals(PROTOCOL_REANIMATOR)||!g.getStack().isEmpty()||!g.getPhaseHandler().isPlayerTurn(p)
+                        ||!g.getPhaseHandler().getPhase().isMain()||baseline!=null&&baseline.size()>1)return baseline;
+                    SpellAbility original=baseline==null||baseline.isEmpty()?null:baseline.get(0);
+                    if(original!=null&&!reviewedPermanent(original))return baseline;
+                    boolean prepared=preparedCombo();
+                    if(original!=null&&!role(attributes(original.getHostCard()),"graveyard_copier"))return baseline;
+                    DecisionContext context=protocolObservation(g,p,original==null||original.getHostCard().isCreature());
+                    if(original==null&&context.graveyardInterference()){recordProtocolContext(context);return baseline;}
+                    List<SpellAbility> offered=new ArrayList<>();
+                    if(original!=null)offered.add(original);
+                    for(Card card:p.getCardsIn(ZoneType.Hand).stream().limit(PROTOCOL_SETTINGS.handSearchLimit()).toList())for(SpellAbility sa:card.getSpellAbilities()){
+                        if(sa==original||!reviewedPermanent(sa))continue;
+                        JsonObject attrs=attributes(card);
+                        if(!role(attrs,"graveyard_copier")&&number(object(attrs,"pilot"),"priority",0)<=0)continue;
+                        if(original==null&&(!role(attrs,"graveyard_copier")||!prepared))continue;
+                        sa.setActivatingPlayer(p);
+                        if(sa.canPlay()&&sa.canCastTiming(p)&&ComputerUtilCost.canPayCost(sa,p,false))offered.add(sa);
+                    }
+                    SpellAbility best=original;ProtocolEvaluation bestRank=null;boolean canWait=false;
+                    SpellAbility critical=original!=null?original:offered.stream().filter(sa->role(attributes(sa.getHostCard()),"graveyard_copier")).findFirst().orElse(null);
+                    int delayLimit=EngagementProtocols.delayLimit(EngagementProtocols.definitions(profile),context);
+                    if(critical!=null&&prepared)canWait=protocolMemory.mayDefer(critical.getHostCard().getId(),context.ownTurn(),delayLimit);
+                    boolean expired=critical!=null&&prepared&&delayLimit>0&&!canWait;
+                    // Once the allowance expires, neither passing nor repeated development may renew caution.
+                    DecisionContext rankingContext=recordProtocolContext(context.withDelay(canWait));
+                    if(canWait)bestRank=EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),context,new CandidateFeatures(-1,0,Set.of()));
+                    if(canWait)best=null;
+                    List<Object> scores=new ArrayList<>();
+                    for(SpellAbility sa:offered){
+                        Card card=sa.getHostCard();int score=attributeScore(attributes(card),reanimatorScoreProfile(p,profile),estimateOpponent(g,p),ZoneType.Battlefield,false,prepared);
+                        if(role(attributes(card),"graveyard_copier")&&prepared)score=Math.max(score,100);
+                        if(score<=0)continue;
+                        CandidateFeatures features=protocolFeatures(card,score,ZoneType.Battlefield,p,prepared,true,false);
+                        Set<CandidateFeature> flags=EnumSet.noneOf(CandidateFeature.class);flags.addAll(features.features());
+                        if(!canWait)flags.remove(CandidateFeature.COUNTER_EXPOSED);
+                        var rank=EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),rankingContext,new CandidateFeatures(card.getId(),score,flags));
+                        scores.add(map("id",card.getId(),"rank",rank.rank(),"features",flags));
+                        if(bestRank==null||EngagementProtocols.compare(rank,bestRank)>0){best=sa;bestRank=rank;}
+                    }
+                    if(best==original&&!(original==null&&canWait)&&!expired)return baseline;
+                    if(canWait)protocolMemory.deferred(critical.getHostCard().getId(),context.ownTurn());
+                    decision(p.getName(),profile,"protocol-cast",offered.stream().map(sa->sa.getHostCard().getName()).toList(),best==null?"(wait)":best.getHostCard().getName(),estimateOpponent(g,p),
+                        expired?"The waiting allowance expired; commit without renewing discretionary caution.":"Shared engagement preferences selected a reviewed cast or bounded wait; Forge controls payment and resolution.",
+                        map("baseline",original==null?"Forge pass":original.getHostCard().getName(),"selectedId",best==null?null:best.getHostCard().getId(),
+                            "protocolDelay",canWait,"candidateScores",scores,"visibleEvidence",context.evidence()));
+                    return best==null?null:List.of(best);
+                }
                 private final Set<SpellAbility> declinedRecoveries=Collections.newSetFromMap(new IdentityHashMap<>());
                 @Override public boolean confirmAction(SpellAbility sa,PlayerActionConfirmMode mode,String message,List<String> options,Card cardToShow,Map<String,Object> params) {
                     if(mode==PlayerActionConfirmMode.ChangeZoneGeneral && declinedRecoveries.remove(sa))return true;
@@ -576,7 +790,7 @@ public final class ForgeBridge {
                             "Forge retains interaction timing, spell selection, mana payment, card advantage and win-condition sequencing.",
                             map("source",sa.getHostCard().getName(),"abilityApi",str(sa.getApi()),"targets",sa.getTargets().toString()));
                     }
-                    return chosen;
+                    return protocolSpells(chosen);
                 }
                 private boolean speakerTutor(SpellAbility sa) {
                     if (!isReanimator(profile)) return false;
@@ -641,6 +855,8 @@ public final class ForgeBridge {
                         ||p.getCardsIn(ZoneType.Graveyard).stream().anyMatch(c->role(attributes(c),"mass_reanimation"));
                     OpponentEstimate opponent=estimateOpponent(g,p);
                     Card best=null;int bestScore=0;List<Object> scores=new ArrayList<>();
+                    DecisionContext protocol=profile.equals(PROTOCOL_REANIMATOR)?protocolContext(true):null;
+                    ProtocolEvaluation bestRank=null;
                     for(Card card:candidates){
                         int score=attributeScore(attributes(card),reanimatorScoreProfile(p,profile),opponent,destination,hasSpider,hasBringer);
                         boolean complete=preparedRecovery(flag(object(attributes(sa.getHostCard()),"pilot"),"completePreparedCombo"),
@@ -650,7 +866,7 @@ public final class ForgeBridge {
                             p.getCardsIn(ZoneType.Graveyard).stream().anyMatch(c->role(attributes(c),"mass_reanimation")));
                         if(role(p,source,"graveyard_copier")) {
                             score=copyEffectScore(score,attributes(card),sa.getApi(),destination,sa.getHostCard().wasCast());
-                            if((profile.endsWith("-v10")||profile.equals(UNIFIED_REANIMATOR))&&destination==ZoneType.Battlefield)score=copyManaGateScore(score,card,sa);
+                            if((profile.endsWith("-v10")||profile.equals(UNIFIED_REANIMATOR)||profile.equals(PROTOCOL_REANIMATOR))&&destination==ZoneType.Battlefield)score=copyManaGateScore(score,card,sa);
                         }
                         if(role(p,source,"permanent_recovery") && sa.getApi()==ApiType.ChangeZone)
                             score=landRecoveryScore(score,card.isLand(),destination,
@@ -658,7 +874,11 @@ public final class ForgeBridge {
                         long held=p.getCardsIn(ZoneType.Hand).stream().filter(c->c.getName().equals(card.getName())).count();
                         score=duplicateHandScore(score,attributes(card),destination,held>0);
                         scores.add(map("id",card.getId(),"name",card.getName(),"score",score,"copiesInOwnHand",held));
-                        if(score>bestScore){best=card;bestScore=score;}
+                        if(protocol!=null&&score>0){
+                            var features=protocolFeatures(card,score,destination,p,preparedCombo()&&!hasSpider,false,false);
+                            var rank=EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),protocol,features);
+                            if(bestRank==null||EngagementProtocols.compare(rank,bestRank)>0){best=card;bestScore=score;bestRank=rank;}
+                        }else if(protocol==null&&score>bestScore){best=card;bestScore=score;}
                     }
                     if(best!=null)decision(p.getName(),profile,action,candidates.stream().map(Card::getName).toList(),best.getName(),opponent,
                         "Choose a legal "+source+" option using the shared Reanimator priorities and visible opponent evidence.",
@@ -735,6 +955,26 @@ public final class ForgeBridge {
                     return super.chooseCardsToDiscardFrom(discarder,sa,offered,min,max,visible);
                 }
                 @Override public CardCollection chooseCardsToDiscardFrom(Player discarder,SpellAbility sa,CardCollection valid,int min,int max,CardCollectionView visible) {
+                    CardCollection baseline=legacyDiscards(discarder,sa,profile.equals(PROTOCOL_REANIMATOR)?new CardCollection(valid):valid,min,max,visible);
+                    if(!profile.equals(PROTOCOL_REANIMATOR)||discarder!=p||min!=max||min<=0||baseline==null||baseline.size()!=min||sa==null||sa.getHostCard()==null)return baseline;
+                    if(!role(attributes(sa.getHostCard()),"discard_outlet")&&!role(attributes(sa.getHostCard()),"creature_tutor"))return baseline;
+                    DecisionContext context=protocolContext(true);List<Card> candidates=new ArrayList<>(valid);
+                    boolean heldCopier=p.getCardsIn(ZoneType.Hand).stream().anyMatch(c->role(attributes(c),"graveyard_copier"));
+                    // Retain mandatory-count, early-land and sole-copier guards before ranking optional alternatives.
+                    long copiers=p.getCardsIn(ZoneType.Hand).stream().filter(c->role(attributes(c),"graveyard_copier")).count();
+                    if(copiers==1&&candidates.size()>min)candidates.removeIf(c->role(attributes(c),"graveyard_copier")&&flag(object(attributes(c),"pilot"),"protectLastInHand"));
+                    if(p.getCardsIn(ZoneType.Battlefield).stream().filter(Card::isLand).count()<3&&candidates.stream().filter(c->!c.isLand()).count()>=min)candidates.removeIf(Card::isLand);
+                    Map<Card,ProtocolEvaluation> ranks=new IdentityHashMap<>();
+                    for(Card card:candidates)ranks.put(card,EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),context,
+                        protocolFeatures(card,baseline.contains(card)?1:0,ZoneType.Graveyard,p,heldCopier&&!preparedCombo(),false,true)));
+                    candidates.sort((a,b)->-EngagementProtocols.compare(ranks.get(a),ranks.get(b)));
+                    if(candidates.size()<min)return baseline;
+                    CardCollection selected=new CardCollection(candidates.subList(0,min));
+                    if(!new HashSet<>(selected).equals(new HashSet<>(baseline)))decision(p.getName(),profile,"protocol-discard",valid.stream().map(Card::getName).toList(),selected.stream().map(Card::getName).toList().toString(),estimateOpponent(g,p),
+                        "Shared engagement preferences rank legal discards after mandatory counts and resource guards.",map("visibleEvidence",context.evidence()));
+                    return selected;
+                }
+                private CardCollection legacyDiscards(Player discarder,SpellAbility sa,CardCollection valid,int min,int max,CardCollectionView visible) {
                     if(isReanimator(profile)&&discarder==p&&sa!=null&&sa.getApi()==ApiType.Discard&&min==max&&min>0) {
                         boolean hasPayoffRoute=attributesByPlayer.getOrDefault(p.getName(),Map.of()).values().stream().anyMatch(attrs->role(attrs,"mass_reanimation"));
                         long copiers=p.getCardsIn(ZoneType.Hand).stream().filter(c->role(attributes(c),"graveyard_copier")).count();
@@ -804,7 +1044,7 @@ public final class ForgeBridge {
     static void resetGameState() throws Exception {
         game=null;captureFailure=null;sequence=0;actualTurn=0;
         speakerDiscardHints.clear();publiclySeen.clear();personalTurns.clear();acceptedByPolicy.clear();
-        attributesByPlayer.clear();optimizerPoliciesByPlayer.clear();optimizerFixturePolicy=null;
+        attributesByPlayer.clear();optimizerPoliciesByPlayer.clear();activeProtocolsByPlayer.clear();optimizerFixturePolicy=null;
         AiCache.clear();
         for(String type:List.of("forge.game.Game","forge.game.spellability.SpellAbility",
                 "forge.game.trigger.Trigger","forge.game.replacement.ReplacementEffect","forge.game.staticability.StaticAbility")) {
@@ -846,7 +1086,7 @@ public final class ForgeBridge {
                 attributesByPlayer.put(i==0?"A":"B",cardAttributes);
                 if(d.getMain().countAll()!=60)throw new IllegalArgumentException("Expected exactly 60 loaded main-deck cards.");
                 String profile=request.has(i==0?"pilotA":"pilotB")?request.get(i==0?"pilotA":"pilotB").getAsString():"forge-default";
-                if(!SUBTYPE_PARENTS.containsKey(profile)&&!Set.of(AGGRO,CONTROL,UNIFIED_REANIMATOR,"forge-default","reanimator-terror-v9","reanimator-sultai-v9","reanimator-cryomancer-v9","reanimator-shared-v9",
+                if(!SUBTYPE_PARENTS.containsKey(profile)&&!Set.of(AGGRO,CONTROL,UNIFIED_REANIMATOR,PROTOCOL_REANIMATOR,"forge-default","reanimator-terror-v9","reanimator-sultai-v9","reanimator-cryomancer-v9","reanimator-shared-v9",
                     "reanimator-terror-v10","reanimator-sultai-v10","reanimator-cryomancer-v10","reanimator-shared-v10").contains(profile))
                     throw new IllegalArgumentException("Unknown pilot profile: "+profile);
                 profiles.put(i==0?"A":"B",profile);
@@ -876,6 +1116,7 @@ public final class ForgeBridge {
                 "detail","DurationMs="+((System.nanoTime()-started)/1000000)));
     }
     public static void main(String[] args) {
+        if(Arrays.asList(args).contains("--protocol-catalog")){System.out.println(json.toJson(EngagementProtocols.catalog()));return;}
         output=System.out;System.setOut(System.err);
         boolean worker=Arrays.asList(args).contains("--worker");
         try {

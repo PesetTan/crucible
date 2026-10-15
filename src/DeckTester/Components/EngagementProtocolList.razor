@@ -1,0 +1,13 @@
+<details class="engagement-protocols">
+    <summary>Engagement Protocols · Preview</summary>
+    @if(Catalog is {} catalog){
+        <p class="small muted">Learned from public observations during each game. Compatible protocols combine automatically.</p>
+        <dl>@foreach(var protocol in catalog.Definitions.OrderByDescending(d=>d.Priority)){
+            <dt><strong>@protocol.Name</strong></dt>
+            <dd><span>@protocol.Condition.</span><p>@protocol.Response</p></dd>
+        }</dl>
+    }else{<p class="small muted">Protocol definitions are unavailable from the active engine bundle.</p>}
+</details>
+@code {
+    [Parameter] public ProtocolCatalog? Catalog { get; set; }
+}

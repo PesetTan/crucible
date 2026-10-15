@@ -1,5 +1,6 @@
 @using System.Globalization
 <div class="trigger-chart-heading"><h3>Triggered Abilities</h3><span class="small muted">@Games.Count / @CompletedGames completed games recorded</span></div>
+<AiNote Scope="chart" Subject="trigger-activity" />
 @if (Games.Count == 0) {
     <p class="small muted">@(Loading?"Reading trigger records…":"No trigger-aware replays in this matchup yet.")</p>
 } else {

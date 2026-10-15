@@ -2,6 +2,8 @@ namespace DeckTester;
 
 public static class ReanimatorPilots
 {
+    public const string EngagementMode = "aggro-v001+control-v1+reanimator-v012";
+    public const string Engagement = "reanimator-v012";
     public const string Adaptive = "reanimator-adaptive-v9";
     public const string ControlMode = "control-adaptive-v1+reanimator-v9";
     public const string CurrentControlMode = "control-adaptive-v1+reanimator-v011";
@@ -23,6 +25,7 @@ public static class ReanimatorPilots
     public static string DisplayName(string? profile)
     {
         if (profile is null) return "unknown";
+        if (profile == EngagementMode) return "Standard + Engagement Protocols (Preview)";
         if (PilotNames.Name(profile) is {} name) return name;
         if (profile == CurrentSubtypeMode) return "Subtype pilots v001 + reanimator-v011";
         if (profile == LegacySubtypeModeV10) return "Subtype pilots v001 + reanimator-v010";
@@ -60,6 +63,7 @@ public static class ReanimatorPilots
 
     public static string Profile(DeckManifest deck, string mode)
     {
+        if(mode==EngagementMode)return string.Equals(deck.Subtype,"Reanimator",StringComparison.OrdinalIgnoreCase)?Engagement:Profile(deck,CurrentAggroMode);
         if (mode is CurrentSubtypeMode or CurrentAggroMode or CurrentControlMode) {
             if (string.Equals(deck.Subtype, "Reanimator", StringComparison.OrdinalIgnoreCase)) return Unified;
             var current = mode == CurrentSubtypeMode ? SubtypePilots.Profile(deck) : Profile(deck);
@@ -78,5 +82,5 @@ public static class ReanimatorPilots
         return mode == Adaptive && string.Equals(deck.Subtype, "Reanimator", StringComparison.OrdinalIgnoreCase)
             ? Profile(deck) : Default;
     }
-    public static bool ValidMode(string mode) => mode is CurrentSubtypeMode or CurrentAggroMode or CurrentControlMode or LegacySubtypeModeV10 or LegacyAggroModeV10 or SubtypePilots.Mode or AggroMode or ControlMode or Adaptive or Baseline;
+    public static bool ValidMode(string mode) => mode is EngagementMode or CurrentSubtypeMode or CurrentAggroMode or CurrentControlMode or LegacySubtypeModeV10 or LegacyAggroModeV10 or SubtypePilots.Mode or AggroMode or ControlMode or Adaptive or Baseline;
 }

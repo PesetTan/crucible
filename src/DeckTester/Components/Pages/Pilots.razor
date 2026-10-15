@@ -5,6 +5,7 @@
 <div class="eyebrow">AUTOMATED PLAY / PILOT PROFILES</div>
 <h1>Forge Pilots.</h1>
 <p class="lead">Explore the automated pilots available for your decks.</p>
+<AiNote Scope="page" Subject="pilots" />
 <p class="small muted">Profiles supplement Forge's decisions. Results describe exploratory pilot games. Each session keeps its recorded pilot settings.</p>
 @if(Backend.ConnectionError is {} connection){<div class="error" role="status">@connection</div>}
 <div class="pilot-toolbar">
@@ -23,7 +24,7 @@
             <tbody>@foreach(var profile in RateProfiles()){
                 var records=winRates.GetValueOrDefault(profile)??[];
                 var latest=records.FirstOrDefault();
-                <tr @key="profile"><th scope="row">@Label(profile)<small><code>@profile</code></small></th>
+                <tr @key="profile"><th scope="row">@Label(profile)<small><code>@profile</code></small><AiNote Scope="pilot" Subject="@profile" /></th>
                     <td><strong class="@(latest is null?"muted":"")">@(latest is null?"Unmeasured":Metrics.Rate(latest.Rate))</strong></td>
                     <td class="pilot-record">@(latest is null?"—":$"{latest.Wins} / {latest.Losses} / {latest.Draws}")</td>
                     <td>@if(latest is null){<span class="small muted">No completed games with this recorded profile.</span>}
@@ -64,7 +65,9 @@
         <details class="pilot-profile" @key="group.Key">
             <summary><strong>@Label(group.Key)</strong><span class="muted">@(winRates.GetValueOrDefault(group.Key)?.FirstOrDefault() is {} rate?$"{Metrics.Rate(rate.Rate)} · {rate.Games:N0} appearances":"Win rate unmeasured") · @group.Count() deck @(group.Count()==1?"version":"versions")</span></summary>
             <p class="small muted">Profile ID: <code>@group.Key</code></p>
+            <AiNote Scope="pilot" Subject="@group.Key" />
             <PilotScorecard Profile="@group.Key" Evaluation="evaluation" />
+            @if(group.Key==ReanimatorPilots.Engagement){<EngagementProtocolList Catalog="history?.Capabilities.Protocols" />}
             <ul class="pilot-decks">
                 @foreach(var deck in group.OrderBy(DeckDisplay.Text)){
                     <li><a href="@($"/decks#{deck.Id}")" aria-label="@($"Open {DeckDisplay.Text(deck)} in Deck Library")"><DeckIdentity Deck="deck" Compact="true" /></a><span class="small muted">@DeckStrategy.Label(deck.Strategy)</span></li>
@@ -86,10 +89,12 @@
     private List<DeckManifest> decks=[];
     private readonly SelectOption[] modes=[
         new(ReanimatorPilots.CurrentAggroMode,"Standard (default)"),
+        new(ReanimatorPilots.EngagementMode,"Standard + Engagement Protocols (Preview)"),
         new(ReanimatorPilots.CurrentSubtypeMode,"By deck subtype"),
         new(ReanimatorPilots.Baseline,"Forge Default")
     ];
     private string ModeDescription=>mode switch{
+        ReanimatorPilots.EngagementMode=>"Reanimator uses public observations to combine Engagement Protocols. Other assignments match Standard. This mode is opt-in.",
         ReanimatorPilots.CurrentSubtypeMode=>"Uses subtype-specific pilots where available, including Reanimator.",
         ReanimatorPilots.Baseline=>"Uses Forge's built-in pilot for every deck.",
         _=>"Uses Aggro, Control, or Reanimator pilots where available; other decks use Forge Default."
@@ -115,7 +120,7 @@
         }finally{evaluation=Evaluations.Read();loading=false;}
     }
     private List<string> RateProfiles(){
-        var current=new[]{ReanimatorPilots.Default,ReanimatorPilots.Unified,ReanimatorPilots.Aggro,ReanimatorPilots.Control}.Concat(SubtypePilots.Profiles.Values);
+        var current=new[]{ReanimatorPilots.Default,ReanimatorPilots.Unified,ReanimatorPilots.Engagement,ReanimatorPilots.Aggro,ReanimatorPilots.Control}.Concat(SubtypePilots.Profiles.Values);
         var profiles=includeOlder?current.Concat(PilotNames.ById.Keys).Concat(winRates.Keys):current;
         var search=query.Trim();
         return profiles.Distinct().Where(p=>search.Length==0||$"{p} {Label(p)}".Contains(search,StringComparison.OrdinalIgnoreCase)
@@ -130,6 +135,7 @@
     private static string Label(string profile)=>PilotNames.Name(profile) is {} name?$"{name} · {Role(profile)}":Role(profile);
     private static string Role(string profile)=>profile switch{
         ReanimatorPilots.Unified=>"Reanimator v011",
+        ReanimatorPilots.Engagement=>"Reanimator v012",
         ReanimatorPilots.Default=>"Forge Default",
         ReanimatorPilots.Aggro=>"Aggro v001",
         ReanimatorPilots.Control=>"Control v001",

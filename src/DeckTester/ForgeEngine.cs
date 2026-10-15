@@ -67,7 +67,8 @@ public sealed class ForgeEngine(AppPaths paths, Store store, CardAttributes? att
              "London mulligans approximate Arena Bo1 opening hands. No hand smoothing is guessed.",
              "Replay captures engine snapshots; event narratives are engine diagnostics, not a complete normalized decision protocol.",
              "Exact skipped-turn cycle grouping and mana-pool replay are unavailable; actual turns are authoritative.",
-             "Legality uses the dated local snapshot and is not independently refreshed by this app."]){AttributesHash=attributes?.CatalogHash()};
+             "Legality uses the dated local snapshot and is not independently refreshed by this app."]){AttributesHash=attributes?.CatalogHash(),
+                Protocols=active is not null&&File.Exists(Path.Combine(active.Directory,"protocol-catalog.json"))?Json.Decode<ProtocolCatalog>(File.ReadAllText(Path.Combine(active.Directory,"protocol-catalog.json"))):null};
     }
     private string ForgeCardName(string name, Dictionary<string,string> available)
     {
@@ -87,6 +88,8 @@ public sealed class ForgeEngine(AppPaths paths, Store store, CardAttributes? att
     {
         var blockers=Capabilities().Blockers.ToList();
         if(!ReanimatorPilots.ValidMode(request.PilotMode))blockers.Add("Unknown pilot mode.");
+        if(request.PilotMode==ReanimatorPilots.EngagementMode&&Capabilities().Protocols?.Profile!=ReanimatorPilots.Engagement)
+            blockers.Add("The active engine bundle does not include Engagement Protocols. Activate the updated bundle first.");
         if(!request.Diagnostic)blockers.Add("Validated runs are unavailable until rules, pilot, and information-boundary gates pass. Use an explicitly exploratory run.");
         if(request.DeckIds.Distinct().Count()!=request.DeckIds.Count||request.DeckIds.Count is <2 or >SimulationLimits.MaximumDecks)blockers.Add($"Select 2 to {SimulationLimits.MaximumDecks} distinct deck versions.");
         if(request.GamesPerPair<2||request.GamesPerPair>1000||request.GamesPerPair%2!=0)blockers.Add("Choose an even number of games per matchup between 2 and 1,000.");
@@ -124,14 +127,14 @@ public sealed class ForgeEngine(AppPaths paths, Store store, CardAttributes? att
         var attemptId=$"{slot.Id}-{attemptNumber}";
         var outputPath=Path.Combine(paths.Replays,attemptId+".jsonl.gz");var temp=outputPath+".partial";
         var timer=Stopwatch.StartNew();
-        var request=new {attemptId,seed=slot.Seed,starter=slot.Starter==slot.DeckA?0:1,turnLimit=run.Config.TurnLimit,performanceMode=run.Config.PerformanceMode,
-            optimizerPolicyA=run.Config.OptimizerPolicy is {} policyA&&run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckA)==policyA.Profile?policyA:null,
-            optimizerPolicyB=run.Config.OptimizerPolicy is {} policyB&&run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckB)==policyB.Profile?policyB:null,
-            pilotVersion=run.Config.Pilot,
-            pilotA=run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckA)??ReanimatorPilots.Profile(store.Deck(slot.DeckA),run.Config.Pilot),
-            pilotB=run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckB)??ReanimatorPilots.Profile(store.Deck(slot.DeckB),run.Config.Pilot),
-            deckA=store.Deck(slot.DeckA).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new{Name=ForgeCardName(c.Name,Scripts(bundle)),c.Quantity,Attributes=run.Config.CardAttributes?.GetValueOrDefault(c.Name)??c.Attributes}),
-            deckB=store.Deck(slot.DeckB).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new{Name=ForgeCardName(c.Name,Scripts(bundle)),c.Quantity,Attributes=run.Config.CardAttributes?.GetValueOrDefault(c.Name)??c.Attributes})};
+        var request=new ForgeGameRequest(attemptId,slot.Seed,slot.Starter==slot.DeckA?0:1,run.Config.TurnLimit,run.Config.PerformanceMode,
+            run.Config.OptimizerPolicy is {} policyA&&run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckA)==policyA.Profile?policyA:null,
+            run.Config.OptimizerPolicy is {} policyB&&run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckB)==policyB.Profile?policyB:null,
+            run.Config.Pilot,
+            run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckA)??ReanimatorPilots.Profile(store.Deck(slot.DeckA),run.Config.Pilot),
+            run.Config.PilotProfiles?.GetValueOrDefault(slot.DeckB)??ReanimatorPilots.Profile(store.Deck(slot.DeckB),run.Config.Pilot),
+            store.Deck(slot.DeckA).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new ForgeDeckCard(ForgeCardName(c.Name,Scripts(bundle)),c.Quantity,run.Config.CardAttributes?.GetValueOrDefault(c.Name)??c.Attributes)).ToList(),
+            store.Deck(slot.DeckB).Cards.Where(c=>c.Zone=="MainDeck").Select(c=>new ForgeDeckCard(ForgeCardName(c.Name,Scripts(bundle)),c.Quantity,run.Config.CardAttributes?.GetValueOrDefault(c.Name)??c.Attributes)).ToList());
         var encodedRequest=Json.Encode(request);
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         timeout.CancelAfter(TimeSpan.FromSeconds(run.Config.TimeoutSeconds));

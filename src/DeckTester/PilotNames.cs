@@ -13,8 +13,7 @@ public static class PilotNames
     private static IReadOnlyDictionary<string, string> Load()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "naming", "pilots.json");
-        var names = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
-            ?? throw new InvalidDataException($"The pilot name map is empty: {path}");
+        var names = Json.Decode<Dictionary<string, string>>(File.ReadAllText(path));
         if (names.Count == 0 || names.Any(entry => string.IsNullOrWhiteSpace(entry.Key)
             || !NameLibrary.Nouns.Contains(entry.Value, StringComparer.OrdinalIgnoreCase)))
             throw new InvalidDataException($"Pilot names must come from naming/nouns.txt: {path}");

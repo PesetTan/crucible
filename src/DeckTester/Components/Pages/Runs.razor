@@ -6,6 +6,7 @@
 <div class="eyebrow">YOUR LOCAL PLAYTESTS</div>
 <div class="section-head history-heading"><div><h1>Run History.</h1><p class="muted">Track your sessions. Compare what happened.</p></div><a class="button primary" href="/">New Session</a></div>
 <p class="history-interpretation">Exploratory Forge results · Win rates describe these local games, not Arena forecasts.</p>
+<AiNote Scope="page" Subject="history" />
 @if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
 @if(ReplayCleanupIncomplete){<div class="notice"><strong>Session Deleted</strong><span>Some replay files could not be removed from disk.</span></div>}
 @if(loading){<section class="empty" role="status"><p>Loading session history…</p></section>}

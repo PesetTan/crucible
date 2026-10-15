@@ -1,0 +1,27 @@
+@inject AiNoteStore Notes
+@if(error is not null){<p class="small muted" role="status">AI notes unavailable.</p>}
+else if(notes.FirstOrDefault() is {} note){
+    <details class="ai-note" data-disclosure-key="@($"ai-note:{note.Id}")" aria-label="@($"AI note: {note.Title}")" @key="note.Id">
+        <summary><span class="ai-note-label">AI NOTE</span><span class="ai-note-title">@note.Title</span></summary>
+        <div class="ai-note-content">
+            @if(Context is not null&&note.Context is not null&&Context!=note.Context){<p class="ai-note-context">Written for an earlier context. Review the saved evidence below.</p>}
+            <p class="ai-note-body">@note.Body</p>
+            <footer class="ai-note-signature">— @note.Author · @note.Model · <time datetime="@note.WrittenAt.ToString("O")">@note.WrittenAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt zzz")</time></footer>
+            <details class="ai-note-evidence"><summary>Evidence &amp; authorship</summary><p>@note.Evidence</p><p>Model ID: @(note.ExactModelId??"Exact runtime ID was not exposed to the author; model family is recorded above.")</p></details>
+            @if(notes.Count>1){<details class="ai-note-history"><summary>Earlier notes · @(notes.Count-1)</summary>@foreach(var earlier in notes.Skip(1)){<article><strong>@earlier.Title</strong><p class="ai-note-body">@earlier.Body</p><p class="small muted">— @earlier.Author · @earlier.Model · @earlier.WrittenAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt zzz")</p><p class="small muted">@earlier.Evidence</p></article>}</details>}
+        </div>
+    </details>
+}
+@code {
+    [Parameter,EditorRequired]public string Scope{get;set;}="";
+    [Parameter,EditorRequired]public string Subject{get;set;}="";
+    [Parameter]public string? FallbackSubject{get;set;}
+    [Parameter]public string? Context{get;set;}
+    private List<DeckTester.AiNoteRecord> notes=[];
+    private string? loadedScope,loadedSubject,loadedFallback,error;
+    protected override void OnParametersSet(){
+        if(loadedScope==Scope&&loadedSubject==Subject&&loadedFallback==FallbackSubject)return;
+        loadedScope=Scope;loadedSubject=Subject;loadedFallback=FallbackSubject;error=null;
+        try{notes=Notes.Read(Scope,Subject);if(notes.Count==0&&FallbackSubject is not null)notes=Notes.Read(Scope,FallbackSubject);}catch(Exception e)when(e is Microsoft.Data.Sqlite.SqliteException or System.Text.Json.JsonException or System.IO.InvalidDataException){notes=[];error=e.Message;}
+    }
+}

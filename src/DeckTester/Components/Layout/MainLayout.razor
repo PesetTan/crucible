@@ -2,7 +2,7 @@
 @inject BrandSettings Branding
 <div class="shell">
     <aside class="sidebar">
-        <a class="brand" href="/" aria-label="Crucible home"><span class="brand-logo-wrap"><span class="brand-logo" aria-hidden="true" style="--brand-logo:url('@Branding.Logo')"></span></span><span>Crucible<small>STANDARD · BO1</small></span></a>
+        <a class="brand" href="/" aria-label="Crucible home"><span class="brand-logo-wrap"><span class="brand-logo" aria-hidden="true"><span class="brand-logo-bowl" style="--brand-mask:url('@Branding.LogoBowl')"></span><span class="brand-logo-flame" style="--brand-mask:url('@Branding.LogoFlame')"></span></span></span><span>Crucible<small>STANDARD · BO1</small></span></a>
         <div class="nav-label">WORKSPACE</div>
         <nav><NavLink href="/" Match="NavLinkMatch.All"><span aria-hidden="true"></span> Deck Tester</NavLink><NavLink href="/decks"><span aria-hidden="true"></span> Deck Library</NavLink><NavLink href="/workshop"><span aria-hidden="true"></span> Deck Workshop</NavLink><NavLink href="/pilots"><span aria-hidden="true"></span> Forge Pilots</NavLink><NavLink href="/runs"><span aria-hidden="true"></span> Run History</NavLink></nav>
         <div class="sidebar-utilities">

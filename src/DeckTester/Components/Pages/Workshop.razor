@@ -4,6 +4,7 @@
 @inject IUiBackend Backend
 <PageTitle>Deck Workshop — Crucible</PageTitle>
 <div class="workshop-heading"><div class="eyebrow">EDIT / RERUN / COMPARE</div><h1>Deck Workshop.</h1><p class="muted">Edit a copy, rerun a matchup, and compare the results.</p></div>
+<AiNote Scope="page" Subject="workshop" />
 @if(Backend.ConnectionError is {} connection){<div class="error" role="status">@connection</div>}
 @if(error is not null){<div class="error" role="alert">@error</div>}
 @if(message is not null){<div class="notice" role="status"><span>@message</span>@if(savedId is not null){<DeckIdentity Deck="@decks.FirstOrDefault(d=>d.Id==savedId)" Compact="true" />}</div>}

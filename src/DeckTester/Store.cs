@@ -229,7 +229,7 @@ public sealed class Store
     private static bool SameProfiles(Dictionary<string,string>? left,Dictionary<string,string>? right) =>
         left is null || right is null ? left is null && right is null :
         left.Count==right.Count && left.All(pair=>right.TryGetValue(pair.Key,out var profile)&&profile==pair.Value);
-    public static bool CompatibleSession(RunConfig left,RunConfig right)=>left.RootSeed==right.RootSeed&&left.EngineHash==right.EngineHash&&left.AdapterHash==right.AdapterHash&&left.PerformanceMode==right.PerformanceMode&&left.Pilot==right.Pilot&&left.OpeningPolicy==right.OpeningPolicy&&left.SeedScheme==right.SeedScheme&&left.AttributesHash==right.AttributesHash&&left.OptimizerPolicy?.Id==right.OptimizerPolicy?.Id&&SameProfiles(left.PilotProfiles,right.PilotProfiles)&&SameCombination(left.DeckIds,right.DeckIds);
+    public static bool CompatibleSession(RunConfig left,RunConfig right)=>left.RootSeed==right.RootSeed&&left.EngineHash==right.EngineHash&&left.AdapterHash==right.AdapterHash&&left.PerformanceMode==right.PerformanceMode&&left.Pilot==right.Pilot&&left.OpeningPolicy==right.OpeningPolicy&&left.SeedScheme==right.SeedScheme&&left.AttributesHash==right.AttributesHash&&left.OptimizerPolicy?.Id==right.OptimizerPolicy?.Id&&left.ProtocolSet?.Hash==right.ProtocolSet?.Hash&&SameProfiles(left.PilotProfiles,right.PilotProfiles)&&SameCombination(left.DeckIds,right.DeckIds);
     public OptimizerPolicy PublishedOptimizerPolicy(string id)
     {
         if(id.Length!=64||id.Any(c=>!char.IsAsciiHexDigit(c)))throw new ArgumentException("Invalid optimizer policy ID.");
@@ -262,6 +262,7 @@ public sealed class Store
                 AND json_extract(r.payload,'$.config.seedScheme')=$scheme
                 AND coalesce(json_extract(r.payload,'$.config.attributesHash'),'none')=$attributes
                 AND coalesce(json_extract(r.payload,'$.config.optimizerPolicy.id'),'none')=$optimizer
+                AND coalesce(json_extract(r.payload,'$.config.protocolSet.hash'),'none')=$protocols
                 AND json_extract(s.payload,'$.status')='completed'
                 AND json_extract(s.payload,'$.result') IS NOT NULL
                 AND json_extract(s.payload,'$.attempts[#-1].status')='completed'
@@ -273,6 +274,7 @@ public sealed class Store
         cmd.Parameters.AddWithValue("$profiles",config.PilotProfiles is null?"null":Json.Encode(config.PilotProfiles));
         cmd.Parameters.AddWithValue("$attributes",config.AttributesHash??"none");cmd.Parameters.AddWithValue("$opening",config.OpeningPolicy);cmd.Parameters.AddWithValue("$scheme",config.SeedScheme);
         cmd.Parameters.AddWithValue("$optimizer",config.OptimizerPolicy?.Id??"none");
+        cmd.Parameters.AddWithValue("$protocols",config.ProtocolSet?.Hash??"none");
         return cmd;
     }
     public HashSet<CachedGameKey> CachedGameKeys(RunConfig config)

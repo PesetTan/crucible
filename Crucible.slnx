@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="src/DeckTester/DeckTester.csproj" />
+  <Project Path="src/Crucible.Core/Crucible.Core.csproj" />
+  <Project Path="src/Crucible.Service/Crucible.Service.csproj" />
 </Solution>

@@ -86,6 +86,16 @@ public sealed class EngineBundleManager(string root)
             await compiler.WaitForExitAsync();
             if (compiler.ExitCode != 0) throw new InvalidOperationException("Forge bridge compilation failed; active bundle was not changed.");
         }
+        var catalogProcess=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(javac)!,OperatingSystem.IsWindows()?"java.exe":"java")) {
+            WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true
+        };
+        foreach(var arg in new[]{"-cp",Build+Path.PathSeparator+jar,"ForgeBridge","--protocol-catalog"})catalogProcess.ArgumentList.Add(arg);
+        string protocolCatalog;
+        using(var exporter=Process.Start(catalogProcess)??throw new InvalidOperationException("Could not export protocols.")){
+            protocolCatalog=await exporter.StandardOutput.ReadToEndAsync();await exporter.WaitForExitAsync();
+            if(exporter.ExitCode!=0)throw new InvalidOperationException("Protocol export failed.");
+            _=Json.Decode<ProtocolCatalog>(protocolCatalog);
+        }
         var sourceEngine = EngineHash(Vendor, jarName);
         var sourceAdapter = AdapterHash(Build);
         var id = Id(sourceEngine, sourceAdapter);
@@ -99,6 +109,7 @@ public sealed class EngineBundleManager(string root)
                 if (File.Exists(sourceProfile)) File.Copy(sourceProfile, Path.Combine(staging, "forge.profile.properties"));
                 CopyTree(Path.Combine(Vendor, "res"), Path.Combine(staging, "res"));
                 CopyTree(Build, Path.Combine(staging, "bridge"));
+                File.WriteAllText(Path.Combine(staging,"protocol-catalog.json"),protocolCatalog);
                 if (EngineHash(staging, jarName) != sourceEngine || AdapterHash(Path.Combine(staging, "bridge")) != sourceAdapter)
                     throw new InvalidDataException("Forge files changed during publication; active bundle was not changed.");
                 // Older bridges do not understand worker requests. Detect the capability
@@ -125,6 +136,6 @@ public sealed class EngineBundleManager(string root)
             File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)));
     }
 
-    private sealed record ActivePointer(string Id);
-    private sealed record BundleManifest(string EngineHash, string AdapterHash, string JarName = "forge-gui-desktop-2.0.15-jar-with-dependencies.jar", int WorkerProtocolVersion = 0);
+    internal sealed record ActivePointer(string Id);
+    internal sealed record BundleManifest(string EngineHash, string AdapterHash, string JarName = "forge-gui-desktop-2.0.15-jar-with-dependencies.jar", int WorkerProtocolVersion = 0);
 }

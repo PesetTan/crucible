@@ -1,5 +1,9 @@
 # 04 — Automated pilot requirements
 
+## Engagement Protocols preview
+
+The opt-in `aggro-v001+control-v1+reanimator-v012` mode adds typed, declarative Engagement Protocols for Reanimator. A shared evaluator combines public observations and candidate features across supported decisions; other assignments and Standard defaults remain unchanged. See [Engagement Protocols](../engagement-protocols.md) for configuration, information boundaries, inspection and the frozen matched comparison workflow.
+
 ## Bounded pilot optimization
 
 The [Pilot Optimizer](../pilot-optimizer.md) adds frozen, resumable CLI/API experiments for existing pilots. Defaults are two hours of local computation, three scoped code revisions with focused real-engine fixtures, 12 candidates, 10 screening pairs and 40 untouched holdout pairs. Registered numeric overlays preserve base annotations and ability eligibility. New required-fixture failures, changed legacy decisions and worse holdout outcomes reject candidates. Technical failures are not losses. Promotion is explicit, requires complete evidence, and publishes an immutable opt-in policy; historical runs remain pinned. General pilot validation gates below remain applicable.

@@ -1,5 +1,6 @@
 <div class="chart" aria-label="@Title">
     <div class="chart-title"><div class="chart-heading"><h3>@Title</h3>@if(HelpText is not null){<MetricInfo Title="@Title" Text="@HelpText" />}</div><span class="muted">@(GameLength?$"Ending {AxisUnit}":Rounds?"Ending Rounds":"Actual Player Turns")</span></div>
+    <AiNote Scope="chart" Subject="@(NoteRunId is null?Title:$"{NoteRunId}:{Title}")" FallbackSubject="@Title" />
     @if(Series.All(s=>s.Points.Count==0)){<p class="muted">@(GameLength?"No completed games yet.":"No turn-end measurements yet.")</p>}
     else{
         <div class="series-plot">
@@ -31,6 +32,7 @@
         Series.SelectMany(s=>s.Points.Select(p=>(Name:s.Name,Deck:s.Deck,Point:p))),
         (row,column)=>column switch{"deck"=>row.Name,"turn"=>row.Point.Turn,"value"=>row.Point.Value,"count"=>row.Point.Count,_=>(IComparable?)null});
 
+    [Parameter]public string? NoteRunId{get;set;}
     [Parameter]public string Title{get;set;}="";
     [Parameter]public string? HelpText{get;set;}
     [Parameter]public bool GameLength{get;set;}

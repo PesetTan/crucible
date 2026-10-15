@@ -125,8 +125,8 @@ public sealed class DeckWorkshop(AppPaths paths,Store store,ForgeEngine engine)
     {
         var cards=main.Concat(sideboard).ToList();
         var pairs=main.GroupBy(c=>c.Name).OrderBy(g=>g.Key,StringComparer.Ordinal).Select(g=>new object[]{g.Key,g.Sum(c=>c.Quantity)}).ToList();
-        var listHash=DeckImporter.Hash(System.Text.Json.JsonSerializer.Serialize(pairs,new System.Text.Json.JsonSerializerOptions{Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping}));
-        var name=request.Name.Trim();var hash=DeckImporter.Hash(Json.Encode(new{name,sourceType="custom",parentDeckId=parent?.Id,cards}));
+        var listHash=DeckImporter.Hash(Json.EncodeRelaxed(pairs));
+        var name=request.Name.Trim();var hash=DeckImporter.Hash(Json.Encode(new WorkshopFingerprint(name,"custom",parent?.Id,cards)));
         return new(hash,name,"custom","Workshop version",parent?.SourceDeckId??"",parent?.Snapshot??"Local Arena catalog",parent?.SourceUrl,listHash,hash,DateTimeOffset.UtcNow,cards,
             parent is null?"Custom Arena list; legality uses the dated local catalog. No ownership is inferred.":$"Workshop copy of {parent.Name} ({parent.ListHash[..8]}); source captured {parent.Snapshot}. Public results belong to the original list.") {ParentDeckId=parent?.Id};
     }

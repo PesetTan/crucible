@@ -5,6 +5,7 @@
 @inject IUiBackend Engine
 @if(Store.ConnectionError is {} connectionError){<div class="error" role="status">@connectionError</div>}
 <PageTitle>Game Replay — Crucible</PageTitle>
+<AiNote Scope="page" Subject="replay" />
 <div class="replay-page" inert="@(!SelectionsReady)">
 <div class="eyebrow">GAME EVIDENCE / @Id[..Math.Min(8,Id.Length)]</div><div class="section-head"><h1>Every Turn,<br /><em>on the Record.</em></h1><div class="replay-heading-actions"><a class="button" href="@BackHref">← Back to @BackLabel</a>@if(BackLogHref is not null){<a class="button" href="@($"/runs/{RunId}")">Session Results</a>}</div></div>
 @if(error is not null){<div class="error">@error</div>}
@@ -14,12 +15,13 @@
 <div class="replay-toolbar"><button @onclick="Previous" disabled="@(offset==0&&index==0)">Previous Event</button><button @onclick="Next" disabled="@ended">Next Event</button><button @onclick="PreviousTurn" disabled="@(turnPositions.Count==0||Current?.ActualTurn<=turnPositions[0].Turn)">Previous Turn</button><button @onclick="NextTurn" disabled="@(turnPositions.Count==0||Current?.ActualTurn>=turnPositions[^1].Turn)">Next Turn</button><button @onclick="TogglePlay">@(playing?"Pause":"Autoplay")</button><label><input type="checkbox" @bind="audit" @bind:after="ReloadAudit" /> Omniscient Hand Audit</label><span class="audit-info" tabindex="0" aria-label="About Omniscient Hand Audit" aria-describedby="audit-help">ⓘ<span class="audit-tooltip" id="audit-help" role="tooltip">Shows both players’ private hands and full event details.</span></span></div>
 @if(turnPositions.Count>1){<div class="turn-scrubber"><label for="replay-turn-scrubber">Scrub turns</label><input id="replay-turn-scrubber" type="range" min="@turnPositions[0].Turn" max="@turnPositions[^1].Turn" step="1" value="@scrubTurn" @oninput="PreviewTurn" @onchange="CommitTurn" aria-valuetext="@($"Actual turn {scrubTurn}")" /><output for="replay-turn-scrubber">Turn @scrubTurn of @turnPositions[^1].Turn</output></div>}
 @if(Current is {} record){
-    <div class="checkpoint"><span class="pill">Actual Turn @record.ActualTurn</span><strong>@(record.Kind=="trigger"?"Triggered Ability":record.Kind=="pilot_decision"?"Pilot Decision":record.Event?.Replace("GameEvent",""))</strong><span>@(record.ExtraTurn==true?"Extra Turn":"")</span><span class="muted">Event @record.Sequence</span></div>
+    <div class="checkpoint"><span class="pill">Actual Turn @record.ActualTurn</span><strong>@(record.Kind=="trigger"?"Triggered Ability":record.Kind=="protocol_state"?"Engagement Protocols":record.Kind=="pilot_decision"?"Pilot Decision":record.Event?.Replace("GameEvent",""))</strong><span>@(record.ExtraTurn==true?"Extra Turn":"")</span><span class="muted">Event @record.Sequence</span></div>
     <section class="turn-timeline" aria-label="Turn phase timeline">
         <ol class="turn-phases">@for(var phaseIndex=0;phaseIndex<PhaseNames.Length;phaseIndex++){var current=PhaseIndex(state?.Phase)==phaseIndex;<li class="@(current?"current":"") @(PhaseIndex(state?.Phase)>phaseIndex?"passed":"")" aria-current="@(current?"step":null)"><strong>@PhaseNames[phaseIndex]</strong>@if(current){<small>@StepLabel(state!.Phase!)</small>}</li>}</ol>
     </section>
     @if(record.Kind=="trigger"){<div class="notice"><strong>Trigger · @(record.TriggerCategory??"Unclassified")</strong><span>@record.TriggerSource · <CardRules Text="@record.TriggerText" /></span></div>}
     @if(record.Kind=="pilot_decision"){<div class="notice"><strong>Pilot decision · @ReanimatorPilots.DisplayName(record.PilotProfile)</strong><span>@record.Decision: @record.Selected<br />Opponent estimate: @(record.OpponentClass??"unknown") · heuristic score @(record.OpponentConfidence??0)/100<br />@record.Reason</span><details><summary>Legal options and public evidence</summary><p>Options: @(record.Options is null?"Enable Omniscient Hand Audit to inspect offered options.":string.Join(", ",record.Options))</p><p>Evidence: @string.Join(", ",record.VisibleEvidence??[])</p></details></div>}
+    @if(record.ActiveProtocols is {Count:>0} activeProtocols){<div class="notice" aria-label="Active Engagement Protocols"><strong>Engagement Protocols · @record.ProtocolSetVersion</strong><span>@string.Join(" · ",activeProtocols.Select(ProtocolLabel))</span>@if(record.Kind=="protocol_state"){<p>@record.Reason</p><p class="small muted">@string.Join(", ",record.VisibleEvidence??[])</p>}@if(record.ProtocolDelay==true){<p>Bounded caution: this card's waiting allowance has started.</p>}</div>}
     @if(state is {} snapshot){
         <div class="board-grid">@foreach(var player in snapshot.Players){
             <section class="player-board"><div class="player-head"><div><span class="tag">@(snapshot.ActivePlayer==player.Id?"ACTIVE PLAYER":"OPPONENT")</span><h2><DeckIdentity Deck="@(Store.Deck(player.Id=="A"?slot!.DeckA:slot!.DeckB))" /></h2></div><div class="life-total">@player.Life<small>LIFE</small></div></div>
@@ -36,6 +38,7 @@
 <details><summary>Events on This Page</summary><div class="event-list">@for(int i=0;i<records.Count;i++){var position=i;var r=records[i];<button @onclick="()=>Choose(position)"><span>Turn @r.ActualTurn · #@r.Sequence</span><strong>@(r.Kind=="trigger"?$"Trigger · {r.TriggerCategory??"Unclassified"}":r.Event?.Replace("GameEvent","")??r.Kind)</strong></button>}</div></details>
 </div>
 @code{
+    private string ProtocolLabel(string id)=>Store.Run(RunId).Config.ProtocolSet?.Definitions.FirstOrDefault(d=>d.Id==id)?.Name??id.Replace('-',' ');
     private async Task PollConnection(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(lifetime.Token))await InvokeAsync(async()=>{await Store.Refresh(RunId,lifetime.Token);if(slot is null&&Store.ConnectionError is null){slot=Store.Slot(RunId,Id);turnPositions=await Engine.ReplayTurns(slot);await Load();Choose(0);error=null;}StateHasChanged();});}catch(OperationCanceledException){}}
 
     protected override string SelectionKey => "replay";

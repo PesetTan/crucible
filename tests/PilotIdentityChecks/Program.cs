@@ -93,9 +93,10 @@ try{
     var profiles=new Dictionary<string,string>{["A"]="control-shared-v1",["B"]="forge-default"};
     var untuned=adaptive with{PilotProfiles=profiles};
     var tuned=optimized with{PilotProfiles=profiles};
+    var protocolConfig=untuned with{ProtocolSet=new ProtocolCatalog("v1",ReanimatorPilots.Engagement,"protocol-hash",System.Text.Json.JsonSerializer.SerializeToElement(new{maximumDelayTurns=1}),[])};
     using(var db=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+Path.Combine(paths.Data,"simulator.sqlite"))){
         db.Open();
-        foreach(var (id,cfg) in new[]{("untuned",untuned),("tuned",tuned)}){
+        foreach(var (id,cfg) in new[]{("untuned",untuned),("tuned",tuned),("protocol",protocolConfig)}){
             var sampleRun=new SimulationRun(id,DateTimeOffset.UtcNow,"completed",cfg,1);
             var sampleSlot=new GameSlot(id+"-game",id,"A","B","A",1,0,"completed",
                 [new Attempt(1,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow,"completed","replay.gz","checksum",null)],
@@ -109,7 +110,9 @@ try{
     Check(cacheStore.CachedGames(untuned).Values.Single().RunId=="untuned","SQL cache lookup excludes optimized results from the untuned arm");
     Check(cacheStore.CachedGames(tuned).Values.Single().RunId=="tuned","SQL cache lookup requires the exact optimizer identity");
     Check(cacheStore.CachedGameKeys(tuned with{OptimizerPolicy=tuned.OptimizerPolicy! with{Id=new string('c',64)}}).Count==0,"Unknown optimizer identities cannot reuse games");
-    Console.WriteLine("Optimizer SQL cache isolation checks passed.");
+    Check(cacheStore.CachedGames(protocolConfig).Values.Single().RunId=="protocol","SQL cache requires the saved protocol hash");
+    Check(cacheStore.CachedGameKeys(protocolConfig with{ProtocolSet=protocolConfig.ProtocolSet! with{Hash="changed"}}).Count==0,"Unknown protocol hash cannot reuse cached games");
+    Console.WriteLine("Optimizer and protocol SQL cache isolation checks passed.");
 }finally{
     Environment.SetEnvironmentVariable("MTG_PROJECT_ROOT",previousRoot);
     if(Directory.Exists(temporary))Directory.Delete(temporary,true);
@@ -125,6 +128,21 @@ Check(ReanimatorPilots.Profile(aggro,ReanimatorPilots.CurrentControlMode)==Reani
 Check(ReanimatorPilots.Profile(control,ReanimatorPilots.CurrentControlMode)==ReanimatorPilots.Control,"Current Control-only mode preserves Control");
 Check(ReanimatorPilots.ValidMode(ReanimatorPilots.CurrentControlMode),"Unified Control-only mode accepted");
 Console.WriteLine("Unified Reanimator assignment and legacy/cache checks passed.");
+
+
+Check(PilotNames.Name(ReanimatorPilots.Engagement)=="Liliana","Protocol pilot alias belongs to the lore vocabulary");
+Check(ReanimatorPilots.ValidMode(ReanimatorPilots.EngagementMode),"Protocol opt-in mode is valid");
+Check(ReanimatorPilots.Profile(metadataDeck,ReanimatorPilots.EngagementMode)==ReanimatorPilots.Engagement,"Protocol mode assigns v012 to Reanimator");
+Check(ReanimatorPilots.Profile(aggro,ReanimatorPilots.EngagementMode)==ReanimatorPilots.Aggro,"Protocol mode retains Aggro");
+Check(ReanimatorPilots.Profile(control,ReanimatorPilots.EngagementMode)==ReanimatorPilots.Control,"Protocol mode retains Control");
+Check(ReanimatorPilots.Profile(metadataDeck,ReanimatorPilots.CurrentAggroMode)==ReanimatorPilots.Unified,"Standard remains v011");
+var protocols=new ProtocolCatalog("v1",ReanimatorPilots.Engagement,"hash",System.Text.Json.JsonSerializer.SerializeToElement(new{maximumDelayTurns=1}),[]);
+Check(!Store.CompatibleSession(adaptive,adaptive with{ProtocolSet=protocols}),"Protocol snapshot isolates compatibility");
+Check(!Store.CompatibleSession(adaptive with{ProtocolSet=protocols},adaptive with{ProtocolSet=protocols with{Hash="changed"}}),"Changed protocol hash cannot reuse a session");
+Check(Json.Decode<RunConfig>(Json.Encode(adaptive)).ProtocolSet is null,"Historical runs have no implied protocols");
+var replay=Json.Decode<ReplayRecord>("{\"kind\":\"protocol_state\",\"sequence\":1,\"actualTurn\":2,\"activeProtocols\":[\"counterplay\"],\"protocolSetVersion\":\"v1\"}");
+Check(replay.ActiveProtocols?.Single()=="counterplay","Replay retains protocol transitions");
+Console.WriteLine("Engagement Protocol identity checks passed.");
 
 sealed class OptimizerCheckEnvironment:Microsoft.Extensions.Hosting.IHostEnvironment
 {

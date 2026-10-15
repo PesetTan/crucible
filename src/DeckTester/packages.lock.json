@@ -62,6 +62,13 @@
         "dependencies": {
           "SQLitePCLRaw.core": "3.0.5"
         }
+      },
+      "crucible.core": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Data.Sqlite": "[10.0.12, )",
+          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )"
+        }
       }
     }
   }

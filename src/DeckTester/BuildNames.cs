@@ -24,7 +24,7 @@ public sealed class BuildNames(string path, ILogger<BuildNames>? logger = null)
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
                 using var ownership = new FileStream(path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
                 var saved = File.Exists(path)
-                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)) ?? throw new InvalidDataException("Empty build name registry.")
+                    ? Json.Decode<Dictionary<string, string>>(File.ReadAllText(path))
                     : new Dictionary<string, string>(StringComparer.Ordinal);
                 if (saved.TryGetValue(key, out existing)) { known = saved; return existing; }
                 var used = saved.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -38,7 +38,7 @@ public sealed class BuildNames(string path, ILogger<BuildNames>? logger = null)
                 var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
-                    File.WriteAllText(temporary, JsonSerializer.Serialize(saved));
+                    File.WriteAllText(temporary, Json.Encode(saved));
                     File.Move(temporary, path, overwrite: true);
                 }
                 finally { if (File.Exists(temporary)) File.Delete(temporary); }

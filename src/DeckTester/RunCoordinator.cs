@@ -13,6 +13,10 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     private readonly ConcurrentDictionary<string,byte> queued=new();
     private readonly ConcurrentDictionary<string,CancellationTokenSource> active=new();
     private readonly SemaphoreSlim mutations=new(1,1);
+    private int ready;
+    public bool IsReady=>Volatile.Read(ref ready)==1;
+    public int ActiveCount=>active.Count;
+    public int QueuedCount=>Math.Max(0,queued.Count-active.Count);
     private void Enqueue(string id){if(queued.TryAdd(id,0))queue.Writer.TryWrite(id);}
     public async Task<string> Create(RunRequest request,string key,bool requireIdle=false)
     {
@@ -33,17 +37,18 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             Pilot:request.PilotMode,StaggerStarts:request.StaggerStarts,EstimatedGameSeconds:request.EstimatedGameSeconds,StartLeadSeconds:request.StartLeadSeconds,
             StartupSpacingSeconds:request.StartupSpacingSeconds,PerformanceMode:request.PerformanceMode,
             PilotProfiles:decks.ToDictionary(deck=>deck,deck=>ReanimatorPilots.Profile(store.Deck(deck) with{Cards=store.Deck(deck).Cards.Select(c=>c with{Attributes=attributeSnapshot?.Cards.GetValueOrDefault(c.Name)??c.Attributes}).ToList()},request.PilotMode)))
-            {CardAttributes=attributeSnapshot?.Cards,AttributesHash=attributeSnapshot?.Hash,OptimizerPolicy=engine.OptimizerPolicy(request)};
+            {CardAttributes=attributeSnapshot?.Cards,AttributesHash=attributeSnapshot?.Hash,OptimizerPolicy=engine.OptimizerPolicy(request),
+                ProtocolSet=request.PilotMode==ReanimatorPilots.EngagementMode?capability.Protocols:null};
         var id=Guid.NewGuid().ToString("N");var slots=new List<GameSlot>();var seeds=new HashSet<long>();
         for(var a=0;a<decks.Count;a++)for(var b=a+1;b<decks.Count;b++)for(var starter=0;starter<2;starter++)for(var index=0;index<request.GamesPerPair/2;index++){
-            var digest=SHA256.HashData(Encoding.UTF8.GetBytes(Json.Encode(new{scheme="sha256-v1",rootSeed=request.RootSeed,a=decks[a],b=decks[b],starter,index})));
+            var digest=SHA256.HashData(Encoding.UTF8.GetBytes(Json.Encode(new SeedFingerprint("sha256-v1",request.RootSeed,decks[a],decks[b],starter,index))));
             var seed=BinaryPrimitives.ReadInt64BigEndian(digest);if(!seeds.Add(seed))throw new InvalidOperationException("Seed collision detected.");
             slots.Add(new(Guid.NewGuid().ToString("N"),id,decks[a],decks[b],decks[starter==0?a:b],seed,index,"pending",[]));
         }
         var cache=store.CachedGames(config);
         slots=slots.Select(slot=>Reuse(slot,cache)).ToList();
         var run=new SimulationRun(id,DateTimeOffset.UtcNow,slots.All(slot=>slot.Status=="completed")?"completed":"queued",config,slots.Count){WorkshopBaseline=request.WorkshopBaseline,WorkshopDeckId=request.WorkshopDeckId};
-        var actualId=await store.CreateRun(run,slots,key,DeckImporter.Hash(request.WorkshopDeckId is null&&request.WorkshopBaseline is null?Json.Encode(config):Json.Encode(new{config,request.WorkshopBaseline,request.WorkshopDeckId})));
+        var actualId=await store.CreateRun(run,slots,key,DeckImporter.Hash(request.WorkshopDeckId is null&&request.WorkshopBaseline is null?Json.Encode(config):Json.Encode(new WorkshopRunFingerprint(config,request.WorkshopBaseline,request.WorkshopDeckId))));
         if(actualId==id&&run.Status=="completed"){
             var now=DateTimeOffset.UtcNow;
             await store.SaveSessionTiming(new(Guid.NewGuid().ToString("N"),id,now,now,now,0,0,0,"completed"));
@@ -108,6 +113,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             }
             await store.SaveRun(run with{Status="cancelled",Error="Service restarted; resume explicitly with original seeds."});
         }
+        Volatile.Write(ref ready,1);
         await foreach(var id in queue.Reader.ReadAllAsync(stoppingToken)) {
             using var executionLease=executionGate is null?null:await executionGate.Acquire(stoppingToken);
             using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);

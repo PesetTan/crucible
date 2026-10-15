@@ -38,6 +38,8 @@ In a second terminal, start the interface:
 
 Open [Crucible](http://127.0.0.1:5077). The service listens on `127.0.0.1:5079`; the UI listens on `127.0.0.1:5077`. Interface changes need only a UI restart. Keep the service running while games are active. Setup downloads the pinned Forge engine and a project-local Java 17 runtime, then builds the interop shim.
 
+On macOS, [Crucible Monitor](docs/crucible-monitor.md) provides a native menu bar app that starts both hosts, reports health, requests recovery approval, and opens at login. Build it with `./scripts/package-monitor.sh`, then install the generated app in your Applications folder using the linked instructions.
+
 To hot-swap Forge card resources, the jar, or the pilot bridge after editing them, run `./scripts/activate-forge.sh`. It compiles the bridge, copies the engine into an immutable bundle under `data/engine-bundles/`, verifies its hashes, and atomically selects it for new sessions. If more than one `forge-gui-desktop-*-jar-with-dependencies.jar` is in `vendor/`, set `MTG_FORGE_JAR` to the one to activate. Crucible and its simulation service stay running. Each session keeps its original bundle, including after pause and resume; games already in progress finish with that bundle. Old bundles remain on disk so older sessions can resume. A change to Crucible's .NET code still requires restarting its relevant host.
 
 For access from another device on your private network, start the UI with `MTG_LAN_ADDRESS=<this-computer's-private-IPv4> ./scripts/run-ui.sh`. The service stays on loopback. The existing `MTG_*` environment variables remain supported; see [host setup](docs/host-separation.md).

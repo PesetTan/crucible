@@ -1,0 +1,79 @@
+/* Shared gold, graphite, and silver presentation. Colors live in branding.json. */
+:root {
+    --motion-fast: 180ms;
+    --motion-meter: 400ms;
+    --motion-ease: cubic-bezier(.2, .7, .3, 1);
+}
+
+.brand-logo-wrap .brand-logo { position:relative; background:none; mask:none; -webkit-mask:none; }
+.brand-logo > span { position:absolute; inset:0; display:block; mask:var(--brand-mask) center/contain no-repeat; -webkit-mask:var(--brand-mask) center/contain no-repeat; }
+.brand-logo-bowl { background:var(--theme-brand-bowl); }
+.brand-logo-flame { background:var(--theme-brand-flame); transform-origin:50% 55%; transition:transform var(--motion-fast) var(--motion-ease),filter var(--motion-fast); }
+.brand:hover .brand-logo-flame,.brand:focus-visible .brand-logo-flame { transform:translateY(-.75px) scale(1.025); filter:brightness(1.08); }
+.sidebar > nav > a.active { box-shadow:inset 2px 0 var(--theme-brand-flame); }
+.sidebar > nav > a { padding-block:11px; }
+.deck-card.selected { border-color:var(--theme-selection-border); }
+.deck-card:not(.blocked):not(:has(input:disabled)):hover,.deck-card:has(input:focus-visible) {
+    background:var(--theme-card-selected);
+    border-color:var(--theme-selection-border);
+}
+
+/* Shared interaction feedback stays local to the control being used. */
+button,.button,.history-row,.recent-link,.deck-card,.sidebar nav a,.deck-select-option,summary {
+    transition:background-color var(--motion-fast),border-color var(--motion-fast),color var(--motion-fast),box-shadow var(--motion-fast);
+}
+.deck-card,.primary { transition:background-color var(--motion-fast),border-color var(--motion-fast),color var(--motion-fast),transform var(--motion-fast) var(--motion-ease),box-shadow var(--motion-fast); }
+@media (hover:hover) and (pointer:fine) {
+    .deck-card:not(.blocked):not(:has(input:disabled)):hover,.primary:not(:disabled):hover { transform:translateY(-1px); }
+    .primary:not(:disabled):hover { box-shadow:0 3px 10px var(--theme-shadow-soft); }
+}
+.primary:active { transform:translateY(0); }
+button:not(:disabled):hover,button:focus-visible,a.button:hover,a.button:focus-visible,nav a:hover,nav a:focus-visible {
+    background:var(--theme-button-hover);
+    border-color:var(--theme-selection-border);
+    color:var(--text);
+}
+.primary:hover,.primary:focus-visible { background:var(--theme-primary-hover); color:var(--theme-primary-text); }
+.history-row:hover,.history-row:focus-visible,.recent-link:hover,.recent-link:focus-visible { background:var(--theme-card-selected); border-color:var(--theme-selection-border); }
+.progress > div,.active-run-meter > div,.history-progress-track > span,.focus-bar i {
+    transition:width var(--motion-meter) var(--motion-ease),background-color var(--motion-fast);
+}
+.field-cell,.focus-opponent,.matchup-view-switch button { transition:background-color var(--motion-fast),border-color var(--motion-fast),color var(--motion-fast); }
+.field-cell.rate-high { color:var(--theme-rate-high-text); }
+.field-cell:hover,.field-cell:focus-visible { background:var(--theme-card-selected); color:var(--text); }
+.focus-opponent:hover,.focus-opponent:focus-visible { background:var(--theme-card-selected); }
+.series-hover-layer .series-hover-turn:hover,.series-hover-layer .series-hover-turn:focus-visible { background:transparent; border:0; box-shadow:none; }
+
+/* Content-sized spacing follows the approved preview without replacing shared deck components. */
+main { padding:34px 34px 44px; }
+h1 { font-size:clamp(32px,3.2vw,44px); line-height:1.16; letter-spacing:-1.2px; margin:14px 0 18px; }
+h1 em { font-style:normal; }
+.lead { font-size:15px; line-height:1.7; margin-bottom:22px; }
+.panel { padding:22px; margin:18px 0; border-radius:8px; }
+.section-head { margin-bottom:16px; }
+.notice { padding:12px 15px; margin:20px 0; gap:14px; font-size:12px; }
+.deck-grid { gap:11px; }
+.deck-card { padding:14px; border-radius:6px; }
+.deck-card h3 { font-size:15px; }
+.stats-grid { gap:14px; }
+.deck-select-list { animation:none; }
+
+@media (max-width:1050px) { main { padding:28px 24px 36px; } }
+@media (max-width:700px) {
+    main { padding:24px 18px 32px; }
+    h1 { font-size:32px; letter-spacing:-1px; }
+    .panel { padding:16px; }
+    .deck-card { padding:12px; }
+    .deck-card h3 { font-size:13px; }
+    .notice { gap:8px; }
+    .sidebar > nav > a.active { box-shadow:inset 0 -2px var(--theme-brand-flame); }
+}
+@media (prefers-reduced-motion:reduce) {
+    :root { --motion-fast:0s; --motion-meter:0s; }
+    .brand:hover .brand-logo-flame,.brand:focus-visible .brand-logo-flame,.deck-card:hover,.primary:hover { transform:none!important; filter:none; }
+    .progress > div,.active-run-meter > div,.history-progress-track > span,.focus-bar i,.deck-card .mana-symbols { transition:none; }
+}
+@media (forced-colors:active) {
+    .brand-logo > span { background:CanvasText; forced-color-adjust:none; }
+    .sidebar > nav > a.active { outline:1px solid Highlight; box-shadow:none; }
+}

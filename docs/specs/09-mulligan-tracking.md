@@ -22,6 +22,7 @@ For complete, integrity-checked replays produced under this app's fixed two-play
 
 ## Presentation
 
+- The session results “Mulligans Before Keep” section starts collapsed; its heading expands or collapses the summary table and explanatory text.
 - Per-game and replay views: each player's count before keep, final kept size, and evidence/forced-keep qualification.
 - Per-deck summaries: recorded player appearances, total and mean mulligans, median, maximum, frequencies of 0/1/2/3+, mean kept size, and mean mulligans on play/draw.
 - Count a kept opening seven as zero mulligans, not one hand attempt. Missing capture is unknown rather than zero.

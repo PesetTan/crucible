@@ -9,3 +9,6 @@ engine/build/
 __pycache__/
 *.py[cod]
 ui-state/
+.build/
+dist/
+.swiftpm/

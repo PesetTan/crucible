@@ -47,7 +47,7 @@ public sealed class CardAttributes
     {
         var node=JsonNode.Parse(string.IsNullOrEmpty(text)?"{}":text);
         if(node is not JsonObject)throw new InvalidDataException("Card attributes must be a JSON object.");
-        return JsonSerializer.SerializeToElement(Canonical(node),Json.Options);
+        return Json.Element(Canonical(node));
     }
     private static JsonNode? Canonical(JsonNode? node)=>node switch {
         JsonObject obj=>new JsonObject(obj.OrderBy(p=>p.Key,StringComparer.Ordinal).Select(p=>new KeyValuePair<string,JsonNode?>(p.Key,Canonical(p.Value)))),

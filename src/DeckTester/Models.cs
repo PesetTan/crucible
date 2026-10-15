@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace DeckTester;
 
@@ -10,13 +11,24 @@ public sealed record RunNoteSection(string Heading,List<string> Paragraphs);
 
 public static class Json
 {
-    public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = false,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+    public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) {
+        WriteIndented=false,
+        TypeInfoResolver=CreateResolver()
     };
-    public static string Encode<T>(T value) => JsonSerializer.Serialize(value, Options);
-    public static T Decode<T>(string value) => JsonSerializer.Deserialize<T>(value, Options) ?? throw new InvalidDataException("Empty JSON document.");
+    // The UI and fixture tools may serialize their own anonymous objects. Native
+    // publishing substitutes IsReflectionEnabledByDefault=false and removes this
+    // fallback; every service payload must exist in CrucibleJsonContext.
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming","IL2026",Justification="Reflection fallback is guarded by JsonSerializer.IsReflectionEnabledByDefault and removed in Native AOT.")]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Aot","IL3050",Justification="Reflection fallback is guarded by JsonSerializer.IsReflectionEnabledByDefault and removed in Native AOT.")]
+    private static IJsonTypeInfoResolver CreateResolver()=>JsonSerializer.IsReflectionEnabledByDefault
+        ? JsonTypeInfoResolver.Combine(CrucibleJsonContext.Default,new DefaultJsonTypeInfoResolver())
+        : CrucibleJsonContext.Default;
+    private static readonly JsonSerializerOptions relaxed=new(Options){Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping};
+    public static JsonTypeInfo<T> Info<T>(JsonSerializerOptions? options=null)=>(JsonTypeInfo<T>)(options??Options).GetTypeInfo(typeof(T));
+    public static string Encode<T>(T value) => JsonSerializer.Serialize(value,Info<T>());
+    public static string EncodeRelaxed<T>(T value)=>JsonSerializer.Serialize(value,Info<T>(relaxed));
+    public static JsonElement Element<T>(T value)=>JsonSerializer.SerializeToElement(value,Info<T>());
+    public static T Decode<T>(string value) => JsonSerializer.Deserialize(value,Info<T>()) ?? throw new InvalidDataException("Empty JSON document.");
 }
 
 public sealed record CardEntry(int ArenaId, string Name, int Quantity, string Zone, string Set, string Type, string Cost, string Text, bool LocallyLegal, string LinkedFaces)
@@ -46,7 +58,10 @@ public sealed record DeckCoverage(string DeckId, string Status, List<CoverageIte
 public sealed record Capabilities(bool Available, string Engine, string EngineHash, string AdapterHash, string JavaPath, List<string> Blockers, List<string> Limitations)
 {
     public string? AttributesHash { get; init; }
+    public ProtocolCatalog? Protocols { get; init; }
 }
+public sealed record EngagementProtocol(string Id,string Name,string Condition,string Response,int Priority,int MaximumDelayTurns,Dictionary<string,int> Preferences);
+public sealed record ProtocolCatalog(string Version,string Profile,string Hash,JsonElement Settings,List<EngagementProtocol> Definitions);
 public sealed record RunRequest(List<string> DeckIds, int GamesPerPair = 200, int Workers = 2, int TimeoutSeconds = 180, int TurnLimit = 150, long RootSeed = 42, bool Diagnostic = true,
     bool StaggerStarts = true, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = 1, bool PerformanceMode = false, string PilotMode = ReanimatorPilots.CurrentAggroMode)
 {
@@ -59,6 +74,7 @@ public sealed record RunConfig(List<string> DeckIds, int GamesPerPair, int Worke
     bool StaggerStarts = false, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = null, bool PerformanceMode = false,
     Dictionary<string,string>? PilotProfiles = null)
 {
+    public ProtocolCatalog? ProtocolSet { get; init; }
     public OptimizerPolicy? OptimizerPolicy { get; init; }
     public Dictionary<string,JsonElement>? CardAttributes { get; init; }
     public string? AttributesHash { get; init; }
@@ -98,7 +114,8 @@ public sealed record ReplayRecord(string Kind, long Sequence, int ActualTurn, st
     string? AttemptId, string? Winner, bool? Draw, string? Reason, int? Starter, bool? ExtraTurn,string? Player=null,int? Mulligans=null,int? KeptHandSize=null,bool? PolicyAccepted=null,
     string? TriggerCategory=null,string? TriggerText=null,string? TriggerSource=null,string? TriggerCaptureVersion=null,
     string? PilotProfile=null,string? PilotVersion=null,string? Decision=null,List<string>? Options=null,string? Selected=null,
-    string? OpponentClass=null,int? OpponentConfidence=null,List<string>? VisibleEvidence=null);
+    string? OpponentClass=null,int? OpponentConfidence=null,List<string>? VisibleEvidence=null,
+    List<string>? ActiveProtocols=null,string? ProtocolSetVersion=null,bool? ProtocolDelay=null);
 public sealed record TriggerEventSummary(int ActualTurn,string Category);
 public sealed record TriggerGameSummary(string GameId,int ActualTurns,List<TriggerEventSummary> Events);
 public sealed record ChartPoint(int Turn,double Value,int Count);

@@ -67,8 +67,8 @@ public sealed class PilotEvaluationStore(AppPaths paths)
             }
         }
     }
-    private sealed record Pointer(string Directory,string Sha256);
-    private sealed record ActivePointer(string Id);
+    internal sealed record Pointer(string Directory,string Sha256);
+    internal sealed record ActivePointer(string Id);
 
     public PilotSourceDocument ReadSource(PilotEvaluationReport report,string file)
     {

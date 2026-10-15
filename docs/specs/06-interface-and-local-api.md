@@ -34,6 +34,12 @@ Show both players, life, board, hand counts, graveyards, exile, relevant counter
 
 Provide previous/next event, previous/next turn, jump to cycle, and autoplay controls. A cycle summarizes its included actual turns; unsupported cycle grouping must fall back visibly to actual turns. Selecting a decisive loss event highlights the relevant objects where evidence permits. Failed games show failure status rather than a fabricated winner.
 
+## Signed AI commentary
+
+Use the shared `AiNote` disclosure for saved deck summaries, pilot descriptions, chart guidance, and exact-session observations. Persist commentary in SQLite with its author, model family, optional exact model ID, actual writing time, and evidence/context. Revisions append new records and preserve earlier attribution. Never infer an unavailable runtime model ID or silently author new commentary during rendering. Scope deck notes to immutable versions and measured chart observations to the exact run and field; selected matchups fall back to general metric guidance. See [AI notes](../ai-notes.md).
+
+Editorial annotations are an explicit exception to the simulation data boundary: the UI and service may use the separate `AiNoteStore` against the same database for short annotation transactions. This permits signed editorial updates without restarting the simulation service. Simulation state, slots, and replays continue through the existing backend. `GET /ai-notes?scope=...&subject=...` reads revisions; instance-token-protected `POST /ai-notes` appends a signed record. Existing matchup analysis retains its original provenance.
+
 ## App-owned HTTP contract
 
 Use `/api/v1`, JSON, stable IDs, and ISO 8601 timestamps with offsets. The following endpoints are proposed app APIs, not existing engine interfaces:
@@ -48,6 +54,9 @@ Use `/api/v1`, JSON, stable IDs, and ISO 8601 timestamps with offsets. The follo
 | `POST /runs` | Create and queue a validated configuration; require idempotency key |
 | `GET /runs` | Paginated run history and status |
 | `GET /run-history` | Versioned history view: aggregate matchup outcomes, progress, runtimes, build identity and referenced decks; excludes setup caches and game evidence |
+| `GET /ui-state` | Setup snapshot with conditional ETag revalidation; reuse prepared data while its databases and engine selection are unchanged |
+| `GET /runs/{runId}/state` | Focused session snapshot with conditional ETag revalidation |
+| `GET /resources` | Current advisory processor/memory capacity, sampled independently of cached setup data |
 | `GET /workshop-state` | Versioned editor state: library manifests, session metadata, active guards, mana values, turn guidance and capacity; excludes setup caches and game evidence |
 | `GET /library-state` | Versioned library manifests, coverage and mana sorting; conditional ETag revalidation returns 304 for unchanged data |
 | `GET /runs/{id}` | Configuration, progress, gate status, and failure counts |
@@ -64,6 +73,8 @@ Use `/api/v1`, JSON, stable IDs, and ISO 8601 timestamps with offsets. The follo
 | `GET /runs/{run}/games/{id}/replay-export` | Explicit replay download |
 
 Use a consistent error envelope with code, readable message, and precise blocking items. Invalid inputs return 422; blocked capability/state conflicts return 409; missing IDs return 404. No response invents unknown metrics. Return null plus an explanation for unavailable measurements. Pagination and replay-range limits keep large logs out of ordinary responses.
+
+Setup, focused session, history, and library reads share a bounded cache across UI circuits. SQLite `data_version` is compared on persistent read-only connections to both the simulation and source-card databases; commits from any other connection invalidate prepared reads. Engine selection and Java availability changes also invalidate them. No read transaction stays open between requests. A write during assembly prevents retaining that response as current. Unchanged conditional requests return 304 before rebuilding, hashing, or serializing the payload. Capacity remains a separate live read; cached setup capacity is only a fallback when connecting to older services. Active simulations still invalidate the cache as they progress; this cache chiefly removes repeated idle work.
 
 Preflight and run creation both verify capability/version hashes so a stale preflight cannot authorize a changed setup. An idempotency key reused with a different payload returns a conflict. Paths are resolved server-side from known IDs; the browser cannot select arbitrary filesystem output paths. All mutation endpoints require the local instance token.
 
@@ -137,3 +148,7 @@ Compare results starts collapsed except when explicitly entering a result compar
 ## Pilot optimization API
 
 Service-only `/api/v1/pilot-optimizations` supplies CLI discovery, idempotent experiment creation, controlled source/fixture staging, start/pause/resume, status/report, bounded evidence/source excerpts, JFR diagnostics and explicit promotion. All mutations use existing instance-token/origin checks. Experiment execution shares scheduling exclusion with ordinary sessions. New run/preflight requests optionally accept `optimizerPolicyId`; saved configs freeze the published policy and isolate reuse/timing by its immutable identity. No optimizer UI is added. See [Pilot Optimizer](../pilot-optimizer.md) for the complete workflow and safeguards.
+
+### Results section disclosure preferences
+
+All session results sections start collapsed: deck pilots, mulligans, matchup explorer, matchup details, and field-over-time charts. Each section and nested disclosure remembers its open/closed choice in this browser across refreshes, navigation, and other sessions. Stable section keys preserve choices when matchup filters change the heading. New sections default to collapsed. Browser storage failures leave the native keyboard-accessible disclosures usable. Status, filters, progress, and errors remain visible.

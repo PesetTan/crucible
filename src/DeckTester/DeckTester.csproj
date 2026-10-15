@@ -7,6 +7,10 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="*.cs" />
+    <Compile Include="Program.cs;RemoteUiBackend.cs;EngineSetup.cs" />
+    <ProjectReference Include="../Crucible.Core/Crucible.Core.csproj" />
+    <Content Update="notes/editorial.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="branding.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="naming/nouns.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="naming/pilots.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

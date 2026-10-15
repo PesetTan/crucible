@@ -78,7 +78,7 @@ public final class ReanimatorCopyManaChecks {
     public static void main(String[] args) {
         System.setProperty("java.awt.headless","true");GuiBase.setInterface(new GuiDesktop());FModel.initialize(null,null);
         ForgeBridge.output=new PrintStream(new ByteArrayOutputStream());ForgeBridge.attemptId="copy-mana-fixture";
-        for(String profile:supportsUnified()?List.of("reanimator-terror-v10","reanimator-v011"):List.of("reanimator-terror-v10"))
+        for(String profile:supportsUnified()?List.of("reanimator-terror-v10","reanimator-v011","reanimator-v012"):List.of("reanimator-terror-v10"))
         for(String target:List.of("Wistfulness","Deceit")) {
             check(choose(profile,target,"UBCG",true,true,"Plains",false).equals("Formidable Speaker"),"Inactive copied entry effect loses to actual value");
             check(choose(profile,target,"UUBG",true,true,"Plains",false).equals(target),"Two actual blue mana activates reviewed entry effect");

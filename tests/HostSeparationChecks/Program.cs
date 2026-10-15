@@ -9,7 +9,8 @@ var cap=new Capabilities(true,"Forge","engine","adapter","java",[],[]);
 var state=new UiSnapshot(1,[],cap,[run],new(){["run"]=[]},[new(run,0,0,0,1,1,0)],null,[],[],[],[new(config,[key])],[new(run,0,0,0,1,1,0)],"run",[],new(4,1000000000));
 var expectedSummary=Metrics.Summarize(run,[]);
 var historyState=new HistorySnapshot(1,[],cap,[new(new(run,0,0,0,1,1,0),[],[])]);
-var historyRequests=0;var snapshotRequests=0;string? requestedSnapshotTag=null;
+var historyRequests=0;var snapshotRequests=0;string? requestedSnapshotTag=null;string? requestedHistoryTag=null;
+var resourceRequests=0;var legacyResources=false;
 var workshopState=new WorkshopSnapshot(1,[],[run],[new(run,0,0,0,1,1,0)],new(1,2,10),new(){[1]=3},new(4,1000000000));
 var workshopRequests=0;
 var legacyWorkshop=false;
@@ -32,7 +33,13 @@ using var http=new HttpClient(new FakeHandler(request=>{
         var reply=Reply(libraryState);reply.Headers.ETag=System.Net.Http.Headers.EntityTagHeaderValue.Parse(tag);return reply;
     }
     if(path.EndsWith("workshop-state")){workshopRequests++;if(down)return new(HttpStatusCode.ServiceUnavailable);if(legacyWorkshop)return new(HttpStatusCode.NotFound);return Reply(workshopState);}
-    if(path.EndsWith("run-history")){historyRequests++;if(down)return new(HttpStatusCode.ServiceUnavailable);return Reply(historyState);}
+    if(path.EndsWith("resources")){resourceRequests++;if(down)return new(HttpStatusCode.ServiceUnavailable);return legacyResources?new(HttpStatusCode.NotFound):Reply(new ResourceSnapshot(8,2000000000));}
+    if(path.EndsWith("run-history")){
+        historyRequests++;if(down)return new(HttpStatusCode.ServiceUnavailable);
+        requestedHistoryTag=request.Headers.IfNoneMatch.ToString();var tag="\""+DeckImporter.Hash(Json.Encode(historyState))+"\"";
+        if(requestedHistoryTag==tag)return new(HttpStatusCode.NotModified);
+        var reply=Reply(historyState);reply.Headers.ETag=System.Net.Http.Headers.EntityTagHeaderValue.Parse(tag);return reply;
+    }
     if(path.EndsWith("ui-state")||path.EndsWith("/state")){
         if(legacySession&&path.EndsWith("/state"))return new(HttpStatusCode.NotFound);
         snapshotRequests++;requestedSnapshotTag=request.Headers.IfNoneMatch.ToString();
@@ -88,6 +95,8 @@ using(var cancelledWorkshop=new CancellationTokenSource()){
     try{await remote.WorkshopState(cancelledWorkshop.Token);throw new Exception("Cancelled Workshop request was not stopped.");}catch(OperationCanceledException){}
 }
 Check((await remote.History())!.Sessions.Single().Progress.Running==1&&historyRequests==1&&snapshotRequests==0&&tokens==0,"History must load in one read-only request without the setup snapshot.");
+var originalHistory=await remote.History();
+Check(ReferenceEquals(originalHistory,await remote.History())&&!string.IsNullOrEmpty(requestedHistoryTag),"Unchanged history must retain the prepared view after conditional revalidation.");
 down=true;
 Check((await remote.History())!.Sessions.Single().Progress.Run.Id==run.Id&&remote.ConnectionError is not null,"History must retain its last snapshot through an outage.");
 down=false;historyState=historyState with{Sessions=[new(new(run with{Status="completed"},2,0,0,0,0,0),[new("A","B",2,1,1,0)],[])]};
@@ -118,6 +127,16 @@ state=state with{RunId="other",Runs=[run with{Id="other"}]};await remote.Refresh
 Check(string.IsNullOrEmpty(requestedSnapshotTag)&&remote.Run("other").Id=="other","Navigating to another session must not send the previous session's tag.");
 state=state with{RunId="run",Runs=[run with{Status="completed"}]};await remote.Refresh("run");
 Check(remote.ConnectionError is null&&remote.Run("run").Status=="completed","The UI must recover when the service returns.");
+state=state with{RunId=null};await remote.Refresh();var originalRuns=remote.Runs();await remote.Refresh();
+Check(ReferenceEquals(originalRuns,remote.Runs())&&requestedSnapshotTag==state.ETag(),"Idle setup refreshes must also revalidate conditionally and retain their prepared data.");
+Check((await remote.Sample()).AvailableMemoryBytes==2000000000&&resourceRequests==1,"Capacity must be sampled independently of the cached setup snapshot.");
+legacyResources=true;
+Check((await remote.Sample()).AvailableMemoryBytes==state.Resources.AvailableMemoryBytes,"Older services must retain snapshot capacity as a fallback.");
+down=true;Check((await remote.Sample()).AvailableMemoryBytes is null,"A failed live capacity check must not report stale headroom as current.");down=false;
+using(var cancelledResources=new CancellationTokenSource()){
+    cancelledResources.Cancel();
+    try{await remote.Sample(cancelledResources.Token);throw new Exception("Cancelled resources request was not stopped.");}catch(OperationCanceledException){}
+}
 await remote.Cancel("run");await remote.Resume("run");
 Check(tokens==2&&mutations==2,"Service restarts must not leave mutations with an old token.");
 Check(await remote.Create(new(["A","B"]),"request-key",true)=="new-run"&&createQuery=="?requireIdle=true","The UI must forward the active-session startup guard.");
@@ -139,6 +158,8 @@ Check(olderService.ConnectionError is null&&olderService.SessionProgress("run").
 Console.WriteLine("Host separation checks passed: API snapshots, identities, outage recovery, fresh credentials, guarded actions, and replay audit.");
 await HistoryChecks.Run();
 await SessionSnapshotChecks.Run();
+await UiReadCacheChecks.Run();
+SerializationCompatibilityChecks.Run();
 static HttpResponseMessage Reply<T>(T value)=>new(HttpStatusCode.OK){Content=JsonContent.Create(value,options:Json.Options)};
 sealed class FakeHandler(Func<HttpRequestMessage,HttpResponseMessage> reply):HttpMessageHandler{
  protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancellation)=>Task.FromResult(reply(request));

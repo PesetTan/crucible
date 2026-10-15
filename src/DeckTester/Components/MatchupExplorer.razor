@@ -1,6 +1,7 @@
-<section class="panel matchup-explorer" aria-label="Matchup explorer">
+<details class="panel matchup-explorer result-section" data-disclosure-key="matchup-explorer" aria-label="Matchup explorer">
+    <summary><div><div class="eyebrow">01 / THE MATCHUPS</div><h2>Who Wins Against Whom?</h2></div></summary>
+    <AiNote Scope="chart" Subject="field-matrix" />
     <div class="section-head">
-        <div><div class="eyebrow">01 / THE MATCHUPS</div><h2>Who Wins Against Whom?</h2></div>
         <div class="matchup-view-switch" role="group" aria-label="Matchup layout">
             <button type="button" aria-pressed="@(!byDeck ? "true" : "false")" @onclick="()=>byDeck=false">Field</button>
             <button type="button" aria-pressed="@(byDeck ? "true" : "false")" @onclick="()=>byDeck=true">By deck</button>
@@ -53,7 +54,7 @@
     }
     <div class="field-legend" aria-label="Win rate legend"><span><i class="rate-low"></i>Below 45%</span><span><i class="rate-even"></i>45–55%</span><span><i class="rate-high"></i>Above 55%</span><span>— No valid games</span></div>
     <details class="field-method"><summary>How to read these results</summary><p>Numbers identify the same decks on both axes, even after sorting. Click a column heading to sort by that opponent. Avg. gives each opponent with results equal weight; the fraction shows coverage. A star marks the highest mean only when every matchup has results. Draws count as nonwins, so reverse cells may total less than 100%. Pending, failed, and paused games are excluded. These are exploratory local simulations.</p></details>
-</section>
+</details>
 @code {
     [Parameter,EditorRequired] public List<DeckManifest> Decks{get;set;}=[];
     [Parameter,EditorRequired] public RunSummary Summary{get;set;}=default!;

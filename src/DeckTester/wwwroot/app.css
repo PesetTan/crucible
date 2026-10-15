@@ -1,12 +1,12 @@
 /* Foundation fallbacks keep the canvas readable if branding.css cannot load. */
 :root {
-    --bg: var(--theme-bg, #faf8f2);
-    --panel: var(--theme-panel, #fffefa);
-    --line: var(--theme-line, #e0d9ca);
-    --muted: var(--theme-muted, #756753);
-    --text: var(--theme-text, #332c22);
-    --accent: var(--theme-accent, #806035);
-    --gold: var(--theme-gold, #906b2e);
+    --bg: var(--theme-bg, #e8e8ee);
+    --panel: var(--theme-panel, #f6f6f9);
+    --line: var(--theme-line, #ceced8);
+    --muted: var(--theme-muted, #656572);
+    --text: var(--theme-text, #27272e);
+    --accent: var(--theme-accent, #76531c);
+    --gold: var(--theme-gold, #8b652d);
     color-scheme: light;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: calc(14px + 1pt);
@@ -370,3 +370,13 @@ h3{line-height:1.4}
 .source-rate-popup .source-rate-number > span { display: inline; font-weight: 400; font-size: .75rem; color: var(--muted); }
 .source-rate-popup .source-rate-row + .source-rate-row { margin-top: 5px; }
 .source-rate-popup .source-rate-note { color: var(--muted); font-size: .72rem; margin-top: 9px; }
+
+/* Results disclosures share one heading treatment and start collapsed. */
+.result-section>summary{display:flex;align-items:center;gap:12px;list-style:none;color:var(--text)}
+.result-section>summary::-webkit-details-marker{display:none}
+.result-section>summary::before{content:"▸";color:var(--accent);font-size:18px;flex:none}
+.result-section[open]>summary::before{content:"▾"}
+.result-section>summary h2{margin:4px 0 0;line-height:1.3}
+.result-section[open]>summary{margin-bottom:20px}
+.saved-pilots>summary>.saved-pilots-heading{margin:0;flex-wrap:wrap;gap:4px 12px}
+.saved-pilots[open]>summary{margin-bottom:8px}

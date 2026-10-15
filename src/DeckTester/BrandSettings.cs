@@ -5,6 +5,8 @@ namespace DeckTester;
 public sealed class BrandSettings(IConfiguration configuration)
 {
     public string Logo => LocalAsset(configuration["Branding:Logo"]);
+    public string LogoBowl => LocalAsset(configuration["Branding:LogoBowl"] ?? "assets/brand/crucible/bowl.svg");
+    public string LogoFlame => LocalAsset(configuration["Branding:LogoFlame"] ?? "assets/brand/crucible/flame.svg");
     public string Icon => LocalAsset(configuration["Branding:Icon"] ?? configuration["Branding:Logo"]);
     public string IconType => Icon.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" : "image/png";
     public (string Name, string Color)[] Palette => Enumerable.Range(0, SimulationLimits.MaximumDecks).Select(i =>

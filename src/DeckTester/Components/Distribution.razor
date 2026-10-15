@@ -1,4 +1,5 @@
 <div class="chart"><div class="chart-title"><div class="chart-heading"><h3>@Title</h3>@if(Deck is not null){<DeckIdentity Deck="Deck" Compact="true" SingleRow="true" />}<MetricInfo Title="@Title" Text="@HelpText" /></div></div>
+    <AiNote Scope="chart" Subject="@Title" />
     @if(Values.Count==0){<p class="muted">No games with this outcome yet.</p>}
     else{
         <p class="muted">@Values.Count games · Typical ending: @UnitSingular @Math.Ceiling(Metrics.Median(Lengths)!.Value).ToString("0",CultureInfo.InvariantCulture) (median)</p>

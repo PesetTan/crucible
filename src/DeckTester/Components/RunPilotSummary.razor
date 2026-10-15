@@ -1,5 +1,5 @@
-<section class="saved-pilots" aria-label="Saved pilots for this session">
-    <div class="saved-pilots-heading"><strong>Deck pilots</strong><span>Recorded for this session</span></div>
+<details class="saved-pilots result-section" data-disclosure-key="deck-pilots" aria-label="Saved pilots for this session">
+    <summary><div class="saved-pilots-heading"><strong>Deck pilots</strong><span>Recorded for this session</span></div></summary>
     <ul class="saved-pilots-list">
         @foreach (var id in Config.DeckIds)
         {
@@ -10,6 +10,7 @@
             </li>
         }
     </ul>
+    @foreach(var profile in (Config.PilotProfiles?.Values??Enumerable.Empty<string>()).Distinct()){<AiNote Scope="pilot" Subject="@profile" />}
     <details class="saved-pilot-details">
         <summary>Saved pilot details</summary>
         <p class="small muted">These are the settings recorded for this session. Changing a pilot or card attributes later does not change this record.</p>
@@ -21,6 +22,7 @@
             }
             <dt>Engine</dt><dd><BuildName Hash="@Config.EngineHash" /> <code>@Config.EngineHash</code></dd>
             <dt>Pilot Bridge</dt><dd><BuildName Hash="@Config.AdapterHash" Bridge="true" /> <code>@Config.AdapterHash</code></dd>
+            <dt>Engagement Protocols</dt><dd>@(Config.ProtocolSet?.Version ?? "Not recorded") @if(Config.ProtocolSet is {} protocols){<code>@protocols.Hash</code>}</dd>
             <dt>Attributes hash</dt><dd><code>@(Config.AttributesHash ?? "Not recorded")</code></dd>
             <dt>Performance Mode</dt><dd>@(Config.PerformanceMode ? "On" : "Off")</dd>
             <dt>Seed / scheme</dt><dd>@Config.RootSeed / @Config.SeedScheme</dd>
@@ -30,16 +32,17 @@
         {
             <p class="small muted">@(Config.EngineHash == active.EngineHash && Config.AdapterHash == active.AdapterHash ? "Engine and adapter match the current build." : "This session used a different engine or adapter build. Its saved results are preserved.")</p>
         }
+        @if(Config.ProtocolSet is {} savedProtocols){<EngagementProtocolList Catalog="savedProtocols" />}
         @if (Config.CardAttributes is {} attributes)
         {
-            <details class="saved-attribute-snapshot"><summary>Card attributes snapshot · @attributes.Count cards</summary><pre>@System.Text.Json.JsonSerializer.Serialize(attributes, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre></details>
+            <details class="saved-attribute-snapshot" data-disclosure-key="attribute-snapshot"><summary>Card attributes snapshot · @attributes.Count cards</summary><pre>@System.Text.Json.JsonSerializer.Serialize(attributes, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre></details>
         }
         else
         {
             <p class="small muted">Card attributes snapshot was not recorded for this session.</p>
         }
     </details>
-</section>
+</details>
 
 @code {
     private static string PilotLabel(string? profile){

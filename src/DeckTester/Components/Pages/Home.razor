@@ -13,6 +13,7 @@
 <div class="eyebrow">THE LOCAL PLAYTESTING DESK</div>
 <h1>Put Your Decks<br /><em>Across the Table.</em></h1>
 <p class="lead">Run complete head-to-head games. Follow every turn.<br />Compare what happens when your deck has an opponent.</p>
+<AiNote Scope="page" Subject="setup" />
 <div class="notice"><strong>Exploratory Mode</strong><span>Forge resolves the games. Its pilots and card interactions still need independent validation. These rates describe the automated pilots, not your Arena win rate.</span></div>
 @if(capabilities is not null&&capabilities.Blockers.Count>0){<div class="error">@foreach(var blocker in capabilities.Blockers){<p>@blocker</p>}</div>}
 @if(HasActiveSession){
@@ -99,7 +100,7 @@
     <div class="config-grid session-options"><label>Games per Matchup<InputNumber @bind-Value="games" min="2" max="1000" step="2" /></label><ParallelGames @bind-Value="Workers" Resources="resources" /></div>
     <details><summary>Advanced Options</summary>
         <div class="config-grid advanced-options">
-            <div class="dropdown-field"><label for="pilot-policy">Pilot policy</label><AppSelect Id="pilot-policy" Label="Pilot policy" Disabled="HasActiveSession" Options="@(new SelectOption[]{new SelectOption(ReanimatorPilots.CurrentSubtypeMode,"Subtype pilots v001 + reanimator-v011"),new SelectOption(ReanimatorPilots.CurrentAggroMode,"aggro-v001 + control-v001 + reanimator-v011 + Forge Default"),new SelectOption(ReanimatorPilots.CurrentControlMode,"control-v001 + reanimator-v011 + Forge Default"),new SelectOption(ReanimatorPilots.Baseline,"Forge Default baseline")})" @bind-Value="PilotMode" /><small>Subtype pilots v001 adds reviewed permanent development for exact library subtypes. The established Aggro/Control/Reanimator policy remains the default. Reanimator takes precedence; all modes are exploratory.</small></div>
+            <div class="dropdown-field"><label for="pilot-policy">Pilot policy</label><AppSelect Id="pilot-policy" Label="Pilot policy" Disabled="HasActiveSession" Options="@(new SelectOption[]{new SelectOption(ReanimatorPilots.EngagementMode,"Standard + Engagement Protocols (Preview)"),new SelectOption(ReanimatorPilots.CurrentSubtypeMode,"Subtype pilots v001 + reanimator-v011"),new SelectOption(ReanimatorPilots.CurrentAggroMode,"aggro-v001 + control-v001 + reanimator-v011 + Forge Default"),new SelectOption(ReanimatorPilots.CurrentControlMode,"control-v001 + reanimator-v011 + Forge Default"),new SelectOption(ReanimatorPilots.Baseline,"Forge Default baseline")})" @bind-Value="PilotMode" /><small>Subtype pilots v001 adds reviewed permanent development for exact library subtypes. The established Aggro/Control/Reanimator policy remains the default. Reanimator takes precedence; all modes are exploratory.</small></div>
             <label>Forge Performance Mode <input type="checkbox" @bind="PerformanceMode" /><small>May run faster by skipping selected Forge checks. Results are recorded and reused separately from normal mode; card behavior needs validation.</small></label>
             <label>Time Limit per Game (Minutes)<InputNumber @bind-Value="TimeoutMinutes" min="0.17" max="30" step="any" /><small>0.17–30 minutes; default 3. Fractions allowed. Stops a stalled attempt. Games can finish sooner; engine startup counts toward this limit.</small></label>
             <label>Root Seed<InputNumber @bind-Value="Seed" /><small>Starting value for game randomness. Completed games for the same matchups and seed are reused. Choose a new seed for fresh games.</small></label>
@@ -181,7 +182,7 @@
     private List<SimulationRun> savedRuns=[];
     private List<ActiveSessionProgress> activeSessions=[];
     private bool HasActiveSession=>activeSessions.Count>0;
-    private RunConfig? SelectionConfig=>capabilities is null?null:new(selected.Order(StringComparer.Ordinal).ToList(),games,workers,timeout,turnLimit,seed,true,capabilities.EngineHash,capabilities.AdapterHash,Pilot:pilotMode,PerformanceMode:performanceMode,PilotProfiles:selected.Order(StringComparer.Ordinal).ToDictionary(id=>id,id=>ReanimatorPilots.Profile(decks.Single(deck=>deck.Id==id),pilotMode))){AttributesHash=capabilities.AttributesHash};
+    private RunConfig? SelectionConfig=>capabilities is null?null:new(selected.Order(StringComparer.Ordinal).ToList(),games,workers,timeout,turnLimit,seed,true,capabilities.EngineHash,capabilities.AdapterHash,Pilot:pilotMode,PerformanceMode:performanceMode,PilotProfiles:selected.Order(StringComparer.Ordinal).ToDictionary(id=>id,id=>ReanimatorPilots.Profile(decks.Single(deck=>deck.Id==id),pilotMode))){AttributesHash=capabilities.AttributesHash,ProtocolSet=pilotMode==ReanimatorPilots.EngagementMode?capabilities.Protocols:null};
     private SimulationRun? ExistingSession=>SelectionConfig is not {} config?null:savedRuns.Where(run=>DeckTester.Store.CompatibleSession(run.Config,config)).OrderByDescending(run=>run.Config.GamesPerPair).FirstOrDefault();
     private HashSet<CachedGameKey> cachedKeys=[];
     private int ScheduledCount=>selected.Count*(selected.Count-1)/2*games;
