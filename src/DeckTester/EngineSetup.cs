@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Formats.Tar;
+using ICSharpCode.SharpZipLib.BZip2;
 using System.Text.Json;
 
 namespace DeckTester;
@@ -25,7 +27,8 @@ public static class EngineSetup
             await DownloadVerified(http,"https://github.com/Card-Forge/forge/releases/download/forge-2.0.15/forge-installer-2.0.15.tar.bz2",archive,ForgeArchiveSha256);
             var staging=Path.Combine(paths.Data,"forge-setup-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(staging);
             try{
-                await Command(Tar(),["-xjf",archive,"-C",staging],paths.Root);
+                if(OperatingSystem.IsWindows())await ExtractForgeArchive(archive,staging);
+                else await Command(Tar(),["-xjf",Path.GetFileName(archive),"-C",Path.GetFileName(staging)],paths.Data);
                 if(!File.Exists(Path.Combine(staging,Path.GetFileName(jar)))||!Directory.Exists(Path.Combine(staging,"res")))
                     throw new InvalidDataException("Forge archive has an unexpected layout.");
                 foreach(var directory in Directory.EnumerateDirectories(staging)){
@@ -65,6 +68,14 @@ public static class EngineSetup
         await File.WriteAllTextAsync(Path.Combine(paths.Data,"engine-installation.json"),Json.Encode(new EngineInstallation(DateTimeOffset.UtcNow,"2.0.15",ForgeEngine.FileHash(jar),paths.JavaHome,ForgeEngine.FileHash(Path.Combine(paths.Assets,"engine","ForgeBridge.java")))));
         Console.WriteLine($"Setup complete. Active bundle: {bundle.Id}. No simulations have been run.");
     }
+    public static async Task ExtractForgeArchive(string archive,string destination)
+    {
+        // Windows tar builds vary in bzip2 support and handling of Unicode arguments.
+        // Managed decompression also keeps the .NET traversal checks around extraction.
+        await using var file=File.OpenRead(archive);
+        using var bzip=new BZip2InputStream(file);
+        await TarFile.ExtractToDirectoryAsync(bzip,destination,overwriteFiles:false);
+    }
     private static string Tar()=>OperatingSystem.IsWindows()?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"tar.exe"):"tar";
     private static string Property(string path)=>string.Concat(path.Select(c=>c switch {
         '\\'=>"\\\\", ':'=>"\\:", '\r'=>"\\r", '\n'=>"\\n", '\t'=>"\\t",
@@ -83,8 +94,12 @@ public static class EngineSetup
     }
     private static async Task Command(string executable,List<string> args,string directory)
     {
-        var info=new ProcessStartInfo(executable){WorkingDirectory=directory,UseShellExecute=false,CreateNoWindow=true};foreach(var arg in args)info.ArgumentList.Add(arg);
+        var info=new ProcessStartInfo(executable){WorkingDirectory=directory,UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};foreach(var arg in args)info.ArgumentList.Add(arg);
         using var process=Process.Start(info)??throw new InvalidOperationException("Unable to launch setup tool.");
-        await process.WaitForExitAsync();if(process.ExitCode!=0)throw new InvalidOperationException($"Setup tool failed: {executable}. Retry setup.");
+        var output=process.StandardOutput.ReadToEndAsync();var errors=process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();var text=await output;var error=await errors;
+        if(!string.IsNullOrWhiteSpace(text))Console.WriteLine(text);
+        if(!string.IsNullOrWhiteSpace(error))Console.Error.WriteLine(error);
+        if(process.ExitCode!=0)throw new InvalidOperationException($"Setup tool failed ({process.ExitCode}): {executable}. {error.Trim()} Retry setup.");
     }
 }

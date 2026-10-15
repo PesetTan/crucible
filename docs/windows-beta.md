@@ -21,7 +21,7 @@ The default program folder is `%LOCALAPPDATA%\Crucible Desktop`. Mutable data li
 | `ui-state` | Presentation state such as build names |
 | `webview` | The Windows window's local browser profile |
 
-The installer includes the WebView2 bootstrapper. Initial engine setup needs an internet connection; it downloads and verifies Forge and Java, compiles the packaged bridge, and publishes an immutable bundle. Windows 11's built-in `System32\tar.exe` extracts the pinned Forge archive; Java ZIP extraction uses .NET. Users do not install .NET, Node, Rust, Python, or Java separately. Once setup completes, normal simulation use is local.
+The installer includes the WebView2 bootstrapper. Initial engine setup needs an internet connection; it downloads and verifies Forge and Java, compiles the packaged bridge, and publishes an immutable bundle. Forge bzip2 decompression is bundled in the native host; .NET extracts its tar entries and the Java ZIP archive. Users do not install .NET, Node, Rust, Python, or Java separately. Once setup completes, normal simulation use is local.
 
 Closing the window exits Crucible. During active or queued work, choose **Keep Open** or **Stop And Exit**. Completed games and replays remain saved; interrupted work requires explicit resume after reopening. The launcher stops only hosts it started. Externally managed compatible hosts remain externally managed. There is no Windows tray app or launch-at-login setting in this beta.
 

@@ -35,9 +35,9 @@ def http(url,method='GET',body=None,headers=None,timeout=15):
         return e.code,value
 
 class Driver:
-    def __init__(self,url,application):
+    def __init__(self,url,application,profile):
         self.url=url
-        code,r=http(url+'/session','POST',{'capabilities':{'alwaysMatch':{'tauri:options':{'application':str(application)}}}},timeout=120)
+        code,r=http(url+'/session','POST',{'capabilities':{'alwaysMatch':{'tauri:options':{'application':str(application),'webviewOptions':{'userDataFolder':str(profile)}}}}},timeout=120)
         assert code==200,r
         self.id=r['value']['sessionId']
         self.call('POST','/timeouts',{'script':20000,'pageLoad':120000,'implicit':0})
@@ -100,6 +100,8 @@ def main():
     if os.name!='nt':p.error('This integration check requires Windows.')
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=True)
     installer=args.installer.resolve();checks=[];driver=None;web=None
+    def record(message):
+        checks.append(message);print('Passed: '+message,flush=True)
     with tempfile.TemporaryDirectory(prefix='Crucible Windows Ω ') as temporary:
         base=Path(temporary);install=base/'Installed App Ω';state=base/'Saved Data Ω'
         state.mkdir();ui_port,backend_port=port(),port();assert ui_port!=backend_port
@@ -117,7 +119,7 @@ def main():
             exes=[x for x in install.glob('*.exe') if not x.name.lower().startswith('uninstall')]
             assert len(exes)==1,{'expectedInstallDirectory':str(install),'executables':exes,'files':list(install.glob('**/*'))[:25]}
             return exes[0]
-        executable=install_app();checks.append('silent per-user install in a Unicode/spaced directory')
+        executable=install_app();record('silent per-user install in a Unicode/spaced directory')
         native=Native()
         class Foreign(BaseHTTPRequestHandler):
             def log_message(self,*args):pass
@@ -132,14 +134,14 @@ def main():
             assert not (state/'data/engine-bundles/active.json').exists()
         finally:
             collision.terminate();collision.wait(timeout=10);foreign.shutdown();foreign.server_close()
-        checks.append('occupied backend port remains untouched and startup error is visible')
+        record('occupied backend port remains untouched and startup error is visible')
         webdriver_port,native_port=port(),port()
         driver_log=(output/'webdriver.log').open('wb')
         driver=subprocess.Popen([shutil.which('tauri-driver'),'--port',str(webdriver_port),'--native-port',str(native_port),'--native-driver',shutil.which('msedgedriver')],env=env,stdout=driver_log,stderr=subprocess.STDOUT)
         url=f'http://127.0.0.1:{webdriver_port}'
         wait(lambda:http(url+'/status')[0]==200)
         def launch():
-            result=Driver(url,executable)
+            result=Driver(url,executable,state/'webview')
             wait(result.main,1200)
             wait(lambda:'Choose the Decks' in result.text(),60)
             return result
@@ -156,18 +158,18 @@ def main():
             return value
         succeeded=False
         try:
-            web=launch();web.shot(output/'first-launch.png');checks.append('first-launch setup with real Forge and local Java; no SDK/runtime tools on PATH')
+            web=launch();web.shot(output/'first-launch.png');record('first-launch setup with real Forge and local Java; no SDK/runtime tools on PATH')
             for origin in [ui,backend]:
                 h=health(origin);assert h['ready'] and h['runtimeMode']=='native-aot' and not h['reflectionJsonEnabled'],h
                 token=http(origin+'/api/v1/session')[1]['instanceToken']
                 assert http(origin+'/api/v1/host/shutdown','POST',headers={'X-Instance-Token':token,'X-Crucible-Owner':'wrong'})[0]==403
                 assert http(origin+'/api/v1/host/shutdown','POST')[0]==403
-            checks.append('both native hosts and launcher-only shutdown authentication')
+            record('both native hosts and launcher-only shutdown authentication')
             before=[health(origin)['instanceId'] for origin in [ui,backend]]
             duplicate=subprocess.run([str(executable)],env=env,timeout=20)
             assert duplicate.returncode==0
             assert [health(origin)['instanceId'] for origin in [ui,backend]]==before
-            checks.append('duplicate desktop launch adopts no new hosts')
+            record('duplicate desktop launch adopts no new hosts')
             library=api('/api/v1/library-state')
             assert library['decks'] and all(d['manifest']['sourceType']=='public' for d in library['decks'])
             decks=[d['manifest'] for d in library['decks'] if d['coverage']['status']!='blocked']
@@ -180,7 +182,7 @@ def main():
             web.value('Deck name','Windows Beta Saved Deck Ω')
             wait(lambda:web.button('Save to Library'))
             wait(lambda:'Saved to Deck Library.' in web.text());web.shot(output/'workshop.png')
-            checks.append('Workshop edits and saves a real public deck')
+            record('Workshop edits and saves a real public deck')
             web.go('/')
             wait(lambda:'Choose the Decks' in web.text())
             assert web.js("document.querySelectorAll('details').forEach(d=>d.open=true);return true")
@@ -198,7 +200,7 @@ def main():
             web.go(f'/runs/{run_id}/games/{games[0]["id"]}')
             wait(lambda:'Replay' in web.text());web.shot(output/'replay.png')
             assert api(f'/api/v1/runs/{run_id}/games/{games[0]["id"]}/replay?audit=true')
-            checks.append('two complete real Forge games, exact signed 64-bit seed, results, and replay')
+            record('two complete real Forge games, exact signed 64-bit seed, results, and replay')
             # Create enough new work to test native confirmation and explicit recovery.
             request=dict(deckIds=[d['id'] for d in decks[:2]],gamesPerPair=20,workers=2,timeoutSeconds=180,turnLimit=150,rootSeed='9223372036854775806',diagnostic=True,staggerStarts=True,startupSpacingSeconds=1,pilotMode=finished['config']['pilot'])
             interrupted=api('/api/v1/runs','POST',request)['id']
@@ -218,20 +220,20 @@ def main():
             api('/api/v1/runs/'+interrupted+'/cancel','POST')
             wait(lambda:health(backend)['activeRuns']==0)
             native.close();wait(lambda:down(ui) and down(backend),45);web.dispose();web=None
-            checks.append('Keep Open / Stop And Exit, graceful owned-host shutdown, saved results, explicit resume')
+            record('Keep Open / Stop And Exit, graceful owned-host shutdown, saved results, explicit resume')
             catalog=state/'catalog.sqlite';catalog_hash=hashlib.sha256(catalog.read_bytes()).hexdigest()
             replay_hashes={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
             assert replay_hashes
             sentinel=state/'keep-on-uninstall.txt';sentinel.write_text('user data')
             executable=install_app()
             assert hashlib.sha256(catalog.read_bytes()).hexdigest()==catalog_hash and sentinel.read_text()=='user data'
-            checks.append('silent same-version upgrade preserves user catalog and state')
+            record('silent same-version upgrade preserves user catalog and state')
             uninstallers=list(install.glob('*uninstall*.exe'));assert len(uninstallers)==1,uninstallers
             assert subprocess.run([str(uninstallers[0]),'/S'],timeout=120).returncode==0
             wait(lambda:not executable.exists())
             assert sentinel.read_text()=='user data' and hashlib.sha256(catalog.read_bytes()).hexdigest()==catalog_hash
             assert replay_hashes=={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
-            checks.append('uninstall retains catalog, simulation database, and replay bytes')
+            record('uninstall retains catalog, simulation database, and replay bytes')
             (output/'summary.json').write_text(json.dumps({'checks':checks,'target':'Windows x64 hosted runner','humanWindows11Validation':False},indent=2)+'\n')
             succeeded=True
             print('Windows installed desktop checks passed: '+', '.join(checks))
