@@ -4,6 +4,20 @@ Crucible is a local **Standard Bo1 deck-testing workspace**. It schedules head-t
 
 The .NET project is [`src/DeckTester/DeckTester.csproj`](src/DeckTester/DeckTester.csproj). The public repository is [PesetTan/crucible](https://github.com/PesetTan/crucible), and the local workspace is `projects/crucible`. Build the application through `Crucible.slnx` or its .NET project.
 
+## Screenshots
+
+**Matchup explorer** — Compare head-to-head results across the field. The rates shown describe local Forge pilot games; incomplete matchups remain visible.
+
+![Crucible in dark theme showing the ten-deck matchup matrix, per-opponent win rates, and partial results](docs/matchup-explorer-field.jpg)
+
+**Deck Workshop** — Edit card quantities, save an exact deck version, and configure a matchup rerun.
+
+![Crucible Deck Workshop in dark theme with a grouped decklist and matchup rerun controls](docs/deck-workshop-compact.png)
+
+**Forge Pilots** — Browse automated pilot profiles and preview their deck assignments.
+
+![Crucible Forge Pilots in light theme showing searchable pilot profiles and assigned deck versions](docs/forge-pilots-workspace.jpg)
+
 ## Start
 
 You need the .NET 10 SDK, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. The database, downloaded engine, Java runtime, results, and replays are not in Git.
