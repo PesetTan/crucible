@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { pilotLabel } from "./pilot-label.ts";
   import type { Run, Catalog, Deck, Capability } from "./types.ts";
   import { api } from "./api.ts";
   import DeckIdentity from "./DeckIdentity.svelte";
@@ -42,7 +43,7 @@
         <DeckIdentity deck={decks.find((d) => d.id === id)} {catalog} compact />
       </dt>
       <dd>
-        {catalog?.pilotNames[run.config.pilotProfiles?.[id] ?? ""] ?? ""}
+        {pilotLabel(run.config.pilotProfiles?.[id], catalog)}
         <code>{run.config.pilotProfiles?.[id] ?? "No saved assignment"}</code>
       </dd>{/each}
     <dt>Engine</dt>

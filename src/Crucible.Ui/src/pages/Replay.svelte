@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { pilotLabel } from "../lib/pilot-label.ts";
   import { onMount, onDestroy, untrack } from "svelte";
   import { api, loadSaved, save } from "../lib/api.ts";
   import type {
@@ -215,8 +216,7 @@
       ><span>{current.triggerSource} · {current.triggerText}</span>
     </div>{/if}{#if current.kind === "pilot_decision"}<div class="notice">
       <strong
-        >Pilot decision · {catalog?.pilotNames[current.pilotProfile ?? ""] ??
-          current.pilotProfile}</strong
+        >{pilotLabel(current.pilotProfile, catalog)} · Decision</strong
       ><span>{current.decision}: {current.selected}<br />{current.reason}</span>
       <details>
         <summary>Public evidence{audit ? " and legal options" : ""}</summary>

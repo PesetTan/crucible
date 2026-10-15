@@ -122,6 +122,8 @@ Add service contracts: `GET /api/v1/cards/search?q=...` (bounded catalog results
 
 ### Consistent deck labels
 
+Within each setup group, order decks alphabetically by the canonical mana/color identity name, with full deck label and exact ID as tie-breakers. Setup deck tiles toggle selection directly, with no selection checkbox and with an accessible pressed state. Only the group title toggles its disclosure; selection, polling, and preview actions preserve group open state. All displayed pilot names begin with `Pilot: `. See [visual design and Deck Lists](11-visual-design-and-deck-lists.md) for interaction and labeling requirements.
+
 Use the shared `DeckIdentity` component throughout deck selection, library, workshop, history, results, charts, logs, and replay. Display colors (guild/shard/wedge names, mono-color, or colorless) and subtype; show the persistent variant friendly name beneath in smaller text. Preserve source names and exact IDs in stored manifests. The component wraps within its available width, with a compact mode for dense tables, legends, and actions. Deck selectors use the shared `DeckChoiceLabel` renderer and presentation helper; accessibility text uses `DeckDisplay.Text`. Missing classifications remain explicit; older named workshop copies can use their existing strategy mapping.
 
 Deck dropdowns group choices alphabetically by color name (such as Abzan, Dimir, and Red), with subtype and friendly variant text retained. Use this same grouping and text-only choice renderer for library, workshop, matchup, baseline, and log selectors; do not repeat mana icons inside selector choices or the selected value.

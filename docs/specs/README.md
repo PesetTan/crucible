@@ -18,6 +18,7 @@ These specifications implement the scope of the [dated simulator plan](../plans/
 | [08 — Mana incident logging](08-mana-incident-logging.md) | Per-player mana-starved/mana-flooded detection, evidence, and filters |
 | [09 — Mulligan tracking](09-mulligan-tracking.md) | Each synthetic player's mulligans before keep and kept hand size |
 | [10 — Expanded deck library](10-expanded-deck-library.md) | Historical library expansion and the current ten-deck run cap |
+| [11 — Deck Tester selection and pilot labels](11-visual-design-and-deck-lists.md) | Direct tile selection, independent group disclosures, color-name ordering, and Pilot-prefixed names |
 
 The original implementation order was: capability investigation → data manifests → rules and pilot fixtures → audited small batch → interface and full batch. The interface may be developed with clearly labeled fixtures, but fixture data must never appear as simulated results.
 

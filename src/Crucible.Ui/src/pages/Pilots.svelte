@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { pilotLabel as formatPilotLabel } from "../lib/pilot-label.ts";
   import { onMount } from "svelte";
   import { api } from "../lib/api.ts";
   import { date, deckLabel, pilotRates, active } from "../lib/data.ts";
@@ -56,8 +57,7 @@
     sourceError = $state("");
   let rates = $derived(pilotRates(history?.sessions ?? []));
   let currentMode = $derived(mode || catalog?.defaultPilotMode || "");
-  const pilotLabel = (profile: string) =>
-    catalog?.pilotLabels[profile] ?? catalog?.pilotNames[profile] ?? profile;
+  const pilotLabel = (profile: string) => formatPilotLabel(profile, catalog, true);
   let groups = $derived(
     [...new Set(catalog?.decks.map((d) => d.profiles[currentMode]) ?? [])]
       .filter(

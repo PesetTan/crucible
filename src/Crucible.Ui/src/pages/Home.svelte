@@ -12,6 +12,7 @@
   import DeckIdentity from "../lib/DeckIdentity.svelte";
   import AppSelect from "../lib/AppSelect.svelte";
   import AiNote from "../lib/AiNote.svelte";
+  import { pilotLabel } from "../lib/pilot-label.ts";
   import CardList from "../lib/CardList.svelte";
   let {
     catalog,
@@ -29,6 +30,7 @@
     loading = $state(true),
     estimate = $state<Estimate>(),
     preview = $state("");
+  let expandedGroups = $state<Record<string, boolean>>({});
   const saved = loadSaved("home", {
     selected: [] as string[],
     games: 200,
@@ -80,19 +82,6 @@
     performanceMode: performance,
     pilotMode: pilot || catalog?.defaultPilotMode || "",
   });
-  let groups = $derived([
-    ...new Set(
-      snapshot?.decks.map((d) =>
-        d.manifest.sourceType === "custom"
-          ? "Custom Decks"
-          : d.manifest.sourceType === "personal"
-            ? "Your Deck"
-            : d.manifest.archetypeTier
-              ? "Tier " + d.manifest.archetypeTier
-              : "Unrated",
-      ) ?? [],
-    ),
-  ]);
   const group = (source: string, tier?: string) =>
     source === "custom"
       ? "Custom Decks"
@@ -101,6 +90,35 @@
         : tier
           ? "Tier " + tier
           : "Unrated";
+  const groupOrder = new Map(
+    ["Tier A", "Tier B", "Tier C", "Your Deck", "Custom Decks", "Unrated"].map(
+      (name, index) => [name, index],
+    ),
+  );
+  let groups = $derived(
+    [
+      ...new Set(
+        snapshot?.decks.map((d) =>
+          group(d.manifest.sourceType, d.manifest.archetypeTier),
+        ) ?? [],
+      ),
+    ].sort(
+      (a, b) =>
+        (groupOrder.get(a) ?? Infinity) - (groupOrder.get(b) ?? Infinity) ||
+        a.localeCompare(b),
+    ),
+  );
+  let orderedDecks = $derived(
+    [...(snapshot?.decks ?? [])].sort((a, b) => {
+      const first = catalog?.decks.find((d) => d.id === a.manifest.id);
+      const second = catalog?.decks.find((d) => d.id === b.manifest.id);
+      return (first?.colors ?? "Unknown colors").localeCompare(
+        second?.colors ?? "Unknown colors", undefined, { sensitivity: "base" },
+      ) || deckLabel(a.manifest, catalog).localeCompare(
+        deckLabel(b.manifest, catalog), undefined, { sensitivity: "base" },
+      ) || a.manifest.id.localeCompare(b.manifest.id);
+    }),
+  );
   $effect(() =>
     save("home", {
       selected,
@@ -154,6 +172,13 @@
         )
         .slice(0, catalog?.maximumDecks ?? 10);
       if (filtered.join("|") !== selected.join("|")) selected = filtered;
+      for (const row of snapshot.decks) {
+        const name = group(row.manifest.sourceType, row.manifest.archetypeTier);
+        if (!(name in expandedGroups))
+          expandedGroups[name] = snapshot.decks.some((d) =>
+            selected.includes(d.manifest.id) &&
+            group(d.manifest.sourceType, d.manifest.archetypeTier) === name);
+      }
       error = "";
     } catch (e) {
       error = (e as Error).message;
@@ -166,7 +191,7 @@
     return poll(load);
   });
   function toggle(id: string) {
-    if (locked) return;
+    if (locked || snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status === "blocked") return;
     if (selected.includes(id)) selected = selected.filter((d) => d !== id);
     else if (selected.length < (catalog?.maximumDecks ?? 10))
       selected = [...selected, id];
@@ -240,6 +265,7 @@
         (selected.length - 1)) /
         2} matchups.
     </p>
+    <p class="small muted">Select a deck tile to add or remove it. Use the group title to expand or collapse its decks.</p>
     <div class="chart-palette">
       {#each ["Mint", "Gold", "Sky Blue", "Coral", "Lavender", "Orange", "Rose", "Lime", "Cyan", "Stone"] as color, i}<span
           ><i style:background={"var(--theme-chart-" + (i + 1) + ")"}
@@ -251,11 +277,7 @@
       </p>{/if}
     {#each groups as name}<details
         class="deck-tier-group"
-        open={snapshot?.decks.some(
-          (d) =>
-            selected.includes(d.manifest.id) &&
-            group(d.manifest.sourceType, d.manifest.archetypeTier) === name,
-        )}
+        bind:open={expandedGroups[name]}
       >
         <summary
           >{name}<span class="muted"
@@ -266,22 +288,22 @@
           ></summary
         >
         <div class="deck-grid">
-          {#each snapshot?.decks.filter((d) => group(d.manifest.sourceType, d.manifest.archetypeTier) === name) ?? [] as row (row.manifest.id)}{@const deck =
+          {#each orderedDecks.filter((d) => group(d.manifest.sourceType, d.manifest.archetypeTier) === name) as row (row.manifest.id)}{@const deck =
               row.manifest}
             <article
               class="deck-card"
               class:selected={selected.includes(deck.id)}
               class:blocked={row.coverage.status === "blocked"}
             >
-              <label class="deck-card-choice"
-                ><input
-                  type="checkbox"
-                  checked={selected.includes(deck.id)}
+              <button class="deck-card-choice"
+                  type="button"
+                  aria-label={deckLabel(deck, catalog)}
+                  aria-pressed={selected.includes(deck.id)}
                   disabled={row.coverage.status === "blocked" ||
                     (!selected.includes(deck.id) &&
                       selected.length >= (catalog?.maximumDecks ?? 10))}
-                  onchange={() => toggle(deck.id)}
-                /><DeckIdentity {deck} {catalog} /></label
+                  onclick={() => toggle(deck.id)}
+                ><DeckIdentity {deck} {catalog} /><span class="deck-selection-state">{selected.includes(deck.id) ? "Selected" : "Select deck"}</span></button
               >
               <p class="small muted">
                 {deck.creatureCount} creatures · {deck.landCount} lands{deck.archetypeTier
@@ -296,18 +318,18 @@
                 <span class="small"
                   >{row.coverage.status === "blocked"
                     ? "Missing card support"
-                    : (catalog?.pilotNames[
-                        catalog.decks.find((d) => d.id === deck.id)?.profiles[
+                    : pilotLabel(catalog?.decks.find((d) => d.id === deck.id)?.profiles[
                           pilot || catalog.defaultPilotMode
-                        ] ?? ""
-                      ] ?? "Forge Default")}</span
+                        ] ?? "forge-default", catalog)}</span
                 ><button
                   type="button"
+                  aria-expanded={preview === deck.id}
+                  aria-controls={"deck-list-" + deck.id}
                   onclick={() => (preview = preview === deck.id ? "" : deck.id)}
-                  >List</button
+                  >Deck List</button
                 >
               </div>
-              {#if preview === deck.id}<CardList cards={deck.cards} />{/if}
+              {#if preview === deck.id}<div class="deck-preview" id={"deck-list-" + deck.id}><CardList cards={deck.cards} /></div>{/if}
             </article>{/each}
         </div>
       </details>{/each}
