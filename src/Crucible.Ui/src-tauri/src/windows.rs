@@ -564,9 +564,11 @@ pub fn run() {
                 .map(PathBuf::from)
                 .unwrap_or(app.path().local_data_dir()?.join("Crucible"));
             fs::create_dir_all(&root)?;
-            let root = fs::canonicalize(root)?;
+            // Keep paths usable by Java and Windows archive tools, which do not all
+            // accept the verbatim prefix returned by std::fs::canonicalize.
+            let root = dunce::canonicalize(root)?;
             let webview_data=root.join("webview");
-            let install=fs::canonicalize(resources.parent().ok_or("Installation folder is unavailable.")?)?;
+            let install=dunce::canonicalize(resources.parent().ok_or("Installation folder is unavailable.")?)?;
             if overlaps(&root,&install) {return Err("Keep Crucible's user-data folder separate from its program folder. Choose a different installation folder or MTG_PROJECT_ROOT.".into());}
             app.manage(Lifecycle {
                 session: Mutex::new(Session {
