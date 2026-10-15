@@ -71,7 +71,7 @@ public sealed class Store
         cmd.Parameters.Clear();
         cmd.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS decks_friendly_name ON decks(friendly_name)";
         cmd.ExecuteNonQuery();
-        var tierPath = Path.Combine(paths.Root, "docs", "archetype-tiers-2026-10-11.json");
+        var tierPath = Path.Combine(paths.Assets, "docs", "archetype-tiers-2026-10-11.json");
         if (File.Exists(tierPath)) {
             using var snapshot = System.Text.Json.JsonDocument.Parse(File.ReadAllText(tierPath));
             var root = snapshot.RootElement;

@@ -47,6 +47,10 @@ dotnet run --project tests/WorkshopChecks/WorkshopChecks.csproj
 
 UI changes should also be checked in the running app at desktop and 390px: verify the serving build, controls, wrapping, overflow, and loading/empty/error states. A source diff or successful build does not establish rendered behavior. Existing screenshots in `docs/screenshots/` show the matchup explorer, Workshop, and protocol inspection; refresh them when those surfaces change.
 
+## Windows beta
+
+See [Windows desktop beta](windows-beta.md) for PowerShell builds, starter-catalog provenance, isolated installation checks, and the Windows CI release gate. `tests/WindowsBetaChecks` verifies installed-path behavior and interrupted downloads on Mac and Windows; `tests/ForgeWorkerChecks` now uses a compiled portable transport fixture.
+
 ## Data and evidence
 
 `data/`, `vendor/`, compiled bridge classes, published apps, and local UI state are ignored. A fresh clone needs its own catalog and engine setup. Imports read the source catalog; explicit card-attribute tools can append annotations to it. Run fixtures against disposable databases rather than editing historical payloads. Preserve exact deck IDs, seeds, profiles, attributes, protocol/optimizer identities, and engine/adapter hashes in comparisons.

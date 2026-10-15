@@ -28,6 +28,7 @@ namespace DeckTester;
 [JsonSerializable(typeof(Dictionary<string,object>))]
 [JsonSerializable(typeof(Dictionary<string,string>))]
 [JsonSerializable(typeof(EmptyRequest))]
+[JsonSerializable(typeof(EngineInstallation))]
 [JsonSerializable(typeof(EngineBundle))]
 [JsonSerializable(typeof(EngineBundleManager.ActivePointer))]
 [JsonSerializable(typeof(EngineBundleManager.BundleManifest))]

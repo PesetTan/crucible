@@ -11,7 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Shared sources retain their existing paths while UI and service consume one assembly. -->
-    <Compile Include="../DeckTester/*.cs" Exclude="../DeckTester/Program.cs;../DeckTester/RemoteUiBackend.cs;../DeckTester/EngineSetup.cs" />
+    <Compile Include="../DeckTester/*.cs" Exclude="../DeckTester/Program.cs;../DeckTester/RemoteUiBackend.cs" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>

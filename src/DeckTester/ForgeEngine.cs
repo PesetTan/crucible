@@ -8,7 +8,7 @@ namespace DeckTester;
 
 public sealed class ForgeEngine(AppPaths paths, Store store, CardAttributes? attributes = null) : IAsyncDisposable
 {
-    private readonly EngineBundleManager bundles = new(paths.Root);
+    private readonly EngineBundleManager bundles = new(paths.Root,paths.Assets);
     private readonly ConcurrentDictionary<string, ForgeWorkerPool> workerPools = new();
     public async Task ReleaseWorkers(string runId)
     {

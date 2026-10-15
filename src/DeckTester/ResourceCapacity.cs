@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 
 namespace DeckTester;
 
@@ -48,6 +49,11 @@ public sealed class ResourceCapacity
                     var match = Regex.Match(output, @"(?m)^MemAvailable:\s+(\d+)\s+kB");
                     if (match.Success && long.TryParse(match.Groups[1].Value, out var kb)) available = checked(kb * 1024);
                 }
+                else if (OperatingSystem.IsWindows())
+                {
+                    var memory=new MemoryStatus { Length=(uint)Marshal.SizeOf<MemoryStatus>() };
+                    if(GlobalMemoryStatusEx(ref memory))available=checked((long)memory.AvailablePhysical);
+                }
             }
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested) { }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException or OverflowException) { }
@@ -58,6 +64,16 @@ public sealed class ResourceCapacity
         }
         finally { gate.Release(); }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MemoryStatus
+    {
+        public uint Length,Load;
+        public ulong TotalPhysical,AvailablePhysical,TotalPageFile,AvailablePageFile,TotalVirtual,AvailableVirtual,AvailableExtendedVirtual;
+    }
+    [DllImport("kernel32.dll",SetLastError=true)]
+    [return:MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
 
     public static long? MacAvailableMemory(string output)
     {

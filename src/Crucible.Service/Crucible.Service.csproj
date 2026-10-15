@@ -14,20 +14,20 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <CrucibleNativeRuntimeVersion>10.0.11</CrucibleNativeRuntimeVersion>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != ''">
+  <PropertyGroup Condition="'$(PublishAot)' == 'true' and $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('osx-'))">
     <!-- Use one pinned Microsoft runtime pack rather than platform-specific SDK rebuilds. -->
     <PublishAotUsingRuntimePack>false</PublishAotUsingRuntimePack>
     <IlcFrameworkPath>$(NuGetPackageRoot)microsoft.netcore.app.runtime.nativeaot.$(RuntimeIdentifier)/$(CrucibleNativeRuntimeVersion)/runtimes/$(RuntimeIdentifier)/lib/net10.0/</IlcFrameworkPath>
     <IlcFrameworkNativePath>$(NuGetPackageRoot)microsoft.netcore.app.runtime.nativeaot.$(RuntimeIdentifier)/$(CrucibleNativeRuntimeVersion)/runtimes/$(RuntimeIdentifier)/native/</IlcFrameworkNativePath>
     <IlcSdkPath>$(IlcFrameworkNativePath)</IlcSdkPath>
   </PropertyGroup>
-  <ItemGroup Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != ''">
+  <ItemGroup Condition="'$(PublishAot)' == 'true' and $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('osx-'))">
     <PackageDownload Include="Microsoft.NETCore.App.Runtime.NativeAOT.$(RuntimeIdentifier)" Version="[$(CrucibleNativeRuntimeVersion)]" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Crucible.Core/Crucible.Core.csproj" />
     <Content Include="../DeckTester/naming/nouns.txt" Link="naming/nouns.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../DeckTester/naming/pilots.json" Link="naming/pilots.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../DeckTester/notes/editorial.json" Link="notes/editorial.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../DeckTester/notes/editorial.json" Link="notes/editorial.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="!$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))" />
   </ItemGroup>
 </Project>

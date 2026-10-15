@@ -76,7 +76,7 @@ internal sealed class ForgeWorker : IAsyncDisposable
         Persistent = persistent;
         var info = new ProcessStartInfo(paths.Java) {
             WorkingDirectory = bundle.Directory, RedirectStandardInput = true,
-            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
+            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
         };
         foreach (var arg in new[] { "-Xmx1200m", "-Djava.awt.headless=true", "-Duser.home=" + Path.Combine(paths.Data, "engine-home"),
             "-cp", bundle.Bridge + Path.PathSeparator + bundle.Jar, "ForgeBridge" }) info.ArgumentList.Add(arg);

@@ -6,3 +6,5 @@
 - **Microsoft.Data.Sqlite and SQLitePCLRaw** — NuGet dependencies pinned in the C# project and lockfile. Their distributed package license notices apply. SQLite is the underlying local database engine.
 
 No card artwork is required by the app. Source account logs and the user's collection are not distributed. Local application startup does not call Forge's desktop `Main` telemetry initialization; the interop shim initializes the game model directly.
+
+The Windows beta includes a clean, dated card-metadata/public-deck starter catalog (see `resources/starter/manifest.json`) and the GPL-3.0-or-later bridge source. It downloads the unmodified pinned Forge release and a checksum-verified Temurin JDK at setup, retaining their notices. Microsoft Edge WebView2 is an external runtime installed through Microsoft's bootstrapper; Windows-only dialogs and process containment use Tauri plugins and Windows APIs.

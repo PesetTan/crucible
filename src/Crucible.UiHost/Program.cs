@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Crucible.UiHost;
 using DeckTester;
 
+HostControl.WaitForLauncher();
 if (args.Contains("--check-runtime", StringComparer.Ordinal)) { Console.WriteLine(Json.Encode(new CreatedRun(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? "jit" : "native-aot"))); return; }
 Run(args).GetAwaiter().GetResult();
 static async Task Run(string[] args)
@@ -42,6 +43,7 @@ static async Task Run(string[] args)
         await next();
     });
     HostHealth.Map(app, "ui");
+    HostControl.Map(app);
     app.MapGet("/api/v1/session", () => Results.Json(new InstanceSession(token), Json.Info<InstanceSession>()));
     app.MapGet("/branding.css", (BrandSettings brand) => Results.Text(brand.StyleSheet(), "text/css"));
     app.MapGet("/api/v1/presentation/catalog", async (BackendProxy proxy, HttpContext c) => Results.Json(Presentation.Catalog(await proxy.Read<LibrarySnapshot>("/api/v1/library-state", c.RequestAborted)), UiJsonContext.Default.UiCatalog));

@@ -1,18 +1,28 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#[cfg(not(windows))]
 use serde_json::Value;
+use std::env;
+#[cfg(not(windows))]
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
+#[cfg(not(windows))]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
+#[cfg(not(windows))]
 use tauri_plugin_opener::OpenerExt;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+fn main(){windows::run();}
 
 fn port(name: &str, default: u16) -> Result<u16, String> {
     env::var(name)
@@ -27,6 +37,7 @@ fn port(name: &str, default: u16) -> Result<u16, String> {
             }
         })
 }
+#[cfg(not(windows))]
 fn probe(
     client: &reqwest::blocking::Client,
     port: u16,
@@ -62,6 +73,7 @@ fn probe(
     }
     Ok(Some(h))
 }
+#[cfg(not(windows))]
 fn ensure(
     client: &reqwest::blocking::Client,
     port: u16,
@@ -155,6 +167,7 @@ fn ensure(
         logs.display()
     ))
 }
+#[cfg(not(windows))]
 fn root(resources: &Path) -> Result<PathBuf, String> {
     let candidate = env::var_os("MTG_PROJECT_ROOT")
         .map(PathBuf::from)
@@ -171,6 +184,7 @@ fn root(resources: &Path) -> Result<PathBuf, String> {
     }
     Ok(root)
 }
+#[cfg(not(windows))]
 fn main() {
     let diagnostics = env::args().any(|a| a == "--check-runtime");
     if diagnostics {
