@@ -81,7 +81,7 @@ public sealed class EngineBundleManager(string root, string? assets = null)
             throw new InvalidOperationException("Forge jar, Java compiler, or card resources are missing; run setup first.");
         Directory.CreateDirectory(Build);
         var process = new ProcessStartInfo(javac) { WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true };
-        foreach (var arg in new[] { "-cp", jar, "-d", Build, Path.Combine(assets??root, "engine", "ForgeBridge.java") }) process.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "-encoding", "UTF-8", "-cp", jar, "-d", Build, Path.Combine(assets??root, "engine", "ForgeBridge.java") }) process.ArgumentList.Add(arg);
         using (var compiler = Process.Start(process) ?? throw new InvalidOperationException("Could not start javac.")) {
             await compiler.WaitForExitAsync();
             if (compiler.ExitCode != 0) throw new InvalidOperationException("Forge bridge compilation failed; active bundle was not changed.");
@@ -89,7 +89,7 @@ public sealed class EngineBundleManager(string root, string? assets = null)
         var catalogProcess=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(javac)!,OperatingSystem.IsWindows()?"java.exe":"java")) {
             WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true,CreateNoWindow=true
         };
-        foreach(var arg in new[]{"-cp",Build+Path.PathSeparator+jar,"ForgeBridge","--protocol-catalog"})catalogProcess.ArgumentList.Add(arg);
+        foreach(var arg in new[]{"-Dfile.encoding=UTF-8","-Dsun.stdout.encoding=UTF-8","-Dsun.stderr.encoding=UTF-8","-cp",Build+Path.PathSeparator+jar,"ForgeBridge","--protocol-catalog"})catalogProcess.ArgumentList.Add(arg);
         string protocolCatalog;
         using(var exporter=Process.Start(catalogProcess)??throw new InvalidOperationException("Could not export protocols.")){
             protocolCatalog=await exporter.StandardOutput.ReadToEndAsync();await exporter.WaitForExitAsync();

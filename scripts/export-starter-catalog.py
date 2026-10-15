@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a NEW allowlisted database. Never copy/delete tables from the account database."""
 import argparse, gzip, hashlib, json, sqlite3, tempfile
+from contextlib import closing
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,11 +16,11 @@ SCHEMA = {
 SNAPSHOTS = ['standard-bo1-bronze-platinum-2026-10-11', 'standard-bo1-tier-representatives-2026-10-11']
 
 def verify(path):
-    with sqlite3.connect(path.as_uri()+'?mode=ro',uri=True) as db:
+    with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as db:
         assert {r[0] for r in db.execute("SELECT name FROM sqlite_schema WHERE type='table'")} == set(SCHEMA)
         for table, definition in SCHEMA.items():
             # Compare against a schema we own, never a schema read from the private source.
-            with sqlite3.connect(':memory:') as expected:
+            with closing(sqlite3.connect(':memory:')) as expected:
                 expected.execute(f'CREATE TABLE {table}({definition})')
                 assert list(db.execute(f'PRAGMA table_info({table})')) == list(expected.execute(f'PRAGMA table_info({table})'))
         assert db.execute('SELECT count(*) FROM decks').fetchone()[0] == 0
@@ -44,9 +45,9 @@ def main():
             assert verify(target)==manifest['rows']
         print('Starter catalog checksum, schema, public rows, and privacy checks passed.');return
     if args.source is None:p.error('--source is required when exporting')
-    with sqlite3.connect(args.source.resolve().as_uri()+'?mode=ro',uri=True) as source, tempfile.TemporaryDirectory() as tmp:
+    with closing(sqlite3.connect(args.source.resolve().as_uri()+'?mode=ro',uri=True)) as source, tempfile.TemporaryDirectory() as tmp:
         target=Path(tmp)/'catalog.sqlite'
-        with sqlite3.connect(target) as db:
+        with closing(sqlite3.connect(target)) as db, db:
             for table,definition in SCHEMA.items():
                 db.execute(f'CREATE TABLE {table}({definition})')
                 if table in ('decks','deck_cards'):continue

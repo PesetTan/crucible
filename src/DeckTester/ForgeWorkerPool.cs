@@ -78,7 +78,7 @@ internal sealed class ForgeWorker : IAsyncDisposable
             WorkingDirectory = bundle.Directory, RedirectStandardInput = true,
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
         };
-        foreach (var arg in new[] { "-Xmx1200m", "-Djava.awt.headless=true", "-Duser.home=" + Path.Combine(paths.Data, "engine-home"),
+        foreach (var arg in new[] { "-Xmx1200m", "-Djava.awt.headless=true", "-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8", "-Duser.home=" + Path.Combine(paths.Data, "engine-home"),
             "-cp", bundle.Bridge + Path.PathSeparator + bundle.Jar, "ForgeBridge" }) info.ArgumentList.Add(arg);
         if (persistent) info.ArgumentList.Add("--worker");
         Process = new Process { StartInfo = info };

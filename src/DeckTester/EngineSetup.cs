@@ -66,7 +66,10 @@ public static class EngineSetup
         Console.WriteLine($"Setup complete. Active bundle: {bundle.Id}. No simulations have been run.");
     }
     private static string Tar()=>OperatingSystem.IsWindows()?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"tar.exe"):"tar";
-    private static string Property(string path)=>path.Replace("\\","\\\\",StringComparison.Ordinal).Replace(":","\\:",StringComparison.Ordinal);
+    private static string Property(string path)=>string.Concat(path.Select(c=>c switch {
+        '\\'=>"\\\\", ':'=>"\\:", '\r'=>"\\r", '\n'=>"\\n", '\t'=>"\\t",
+        > '\u007e'=>"\\u"+((int)c).ToString("x4",System.Globalization.CultureInfo.InvariantCulture), _=>c.ToString()
+    }));
     public static async Task DownloadVerified(HttpClient http,string url,string destination,string expected)
     {
         if(expected.Length!=64||!expected.All(Uri.IsHexDigit))throw new InvalidDataException("A SHA-256 checksum is required for setup downloads.");
