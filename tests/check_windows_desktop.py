@@ -37,9 +37,9 @@ def http(url,method='GET',body=None,headers=None,timeout=15):
 class StartupFailure(Exception):pass
 
 class Driver:
-    def __init__(self,url,application,profile):
+    def __init__(self,url,debugger):
         self.url=url
-        code,r=http(url+'/session','POST',{'capabilities':{'alwaysMatch':{'browserName':'webview2','ms:edgeChromium':True,'ms:edgeOptions':{'binary':str(application),'webviewOptions':{'userDataFolder':str(profile)}}}}},timeout=120)
+        code,r=http(url+'/session','POST',{'capabilities':{'alwaysMatch':{'browserName':'webview2','ms:edgeChromium':True,'ms:edgeOptions':{'debuggerAddress':debugger}}}},timeout=120)
         assert code==200,r
         self.id=r['value']['sessionId']
         self.call('POST','/timeouts',{'script':20000,'pageLoad':120000,'implicit':0})
@@ -140,7 +140,8 @@ def main():
         finally:
             collision.terminate();collision.wait(timeout=10);foreign.shutdown();foreign.server_close()
         record('occupied backend port remains untouched and startup error is visible')
-        webdriver_port=port()
+        webdriver_port,debug_port=port(),port()
+        app_processes=[]
         driver_log=(output/'webdriver.log').open('wb')
         driver=subprocess.Popen([shutil.which('msedgedriver'),f'--port={webdriver_port}','--verbose',f'--log-path={output / "edgedriver.log"}'],env=dict(env,TAURI_WEBVIEW_AUTOMATION='true'),stdout=driver_log,stderr=subprocess.STDOUT)
         url=f'http://127.0.0.1:{webdriver_port}'
@@ -148,13 +149,20 @@ def main():
         def capture_desktop(name):
             capture=Path(__file__).with_name('capture_windows_desktop.ps1')
             try:
-                subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-NonInteractive','-File',str(capture),'-OutputPath',str(output/name)],timeout=20,capture_output=True)
+                subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-NonInteractive','-File',str(capture),'-OutputPath',str(output/name),'-ProcessOutputPath',str(output/(Path(name).stem+'-processes.json'))],timeout=20,capture_output=True)
             except (OSError,subprocess.TimeoutExpired):pass
         def launch():
             # Capture while InitSession is pending; EdgeDriver kills the app on timeout.
+            child=subprocess.Popen([str(executable)],env=dict(env,TAURI_WEBVIEW_AUTOMATION='true',WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f'--remote-debugging-port={debug_port} --remote-debugging-address=127.0.0.1'))
+            app_processes.append(child)
             startup_capture=threading.Timer(10,lambda:capture_desktop('desktop-startup.png'))
             startup_capture.start()
-            try:result=Driver(url,executable,state/'webview')
+            try:
+                def debugger_ready():
+                    if child.poll() is not None:raise StartupFailure(f'Desktop app exited: {child.returncode}')
+                    return http(f'http://127.0.0.1:{debug_port}/json/list',timeout=1)[1]
+                wait(debugger_ready,60)
+                result=Driver(url,f'127.0.0.1:{debug_port}')
             finally:startup_capture.cancel()
             print('WebDriver connected; waiting for engine setup and the main app.',flush=True)
             def ready():
@@ -274,6 +282,10 @@ def main():
             if driver:
                 subprocess.run(['taskkill','/PID',str(driver.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
                 driver.wait(timeout=20)
+            for app_process in app_processes:
+                if app_process.poll() is None:
+                    subprocess.run(['taskkill','/PID',str(app_process.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                    app_process.wait(timeout=20)
             driver_log.close()
             logs=state/'data/desktop/logs'
             if logs.exists():shutil.copytree(logs,output/'app-logs',dirs_exist_ok=True)
