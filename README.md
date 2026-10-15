@@ -6,17 +6,17 @@ The .NET project is [`src/DeckTester/DeckTester.csproj`](src/DeckTester/DeckTest
 
 ## Screenshots
 
-**Matchup explorer** — Compare head-to-head results across the field. The rates shown describe local Forge pilot games; incomplete matchups remain visible.
+**Matchup explorer** — Compare head-to-head results across a ten-deck field, including per-deck averages. The rates shown describe local Forge pilot games.
 
-![Crucible in dark theme showing the ten-deck matchup matrix, per-opponent win rates, and partial results](docs/matchup-explorer-field.jpg)
+![Crucible in dark theme showing a completed ten-deck field, head-to-head win rates, and per-deck averages](docs/screenshots/matchup-explorer.jpg)
 
-**Deck Workshop** — Edit card quantities, save an exact deck version, and configure a matchup rerun.
+**Deck Workshop** — Edit card quantities, preview assigned pilots, and configure a matchup rerun.
 
-![Crucible Deck Workshop in dark theme with a grouped decklist and matchup rerun controls](docs/deck-workshop-compact.png)
+![Crucible Deck Workshop in dark theme with a grouped Reanimator decklist, assigned pilots, and matchup rerun controls](docs/screenshots/deck-workshop.jpg)
 
-**Forge Pilots** — Browse automated pilot profiles and preview their deck assignments.
+**Forge Pilots** — Browse pilot profiles and inspect Reanimator's opt-in Engagement Protocols, driven by public opponent observations.
 
-![Crucible Forge Pilots in light theme showing searchable pilot profiles and assigned deck versions](docs/forge-pilots-workspace.jpg)
+![Crucible Forge Pilots in dark theme showing Reanimator v012 and its five Engagement Protocols](docs/screenshots/engagement-protocols.jpg)
 
 ## Start
 
