@@ -35,6 +35,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/Crucible.Ui/src-tauri
+          cache-on-failure: true
       - name: Check starter, frontend, backend, and worker lifecycle
         run: |
           python scripts/export-starter-catalog.py --verify
@@ -49,7 +50,7 @@ jobs:
         run: ./scripts/build-windows.ps1
       - name: Test native desktop ownership primitives
         working-directory: src/Crucible.Ui/src-tauri
-        run: cargo test --locked
+        run: cargo test --release --target x86_64-pc-windows-msvc --locked
       - name: Check native UI gateway
         run: python tests/check_ui_host.py --runtime src/Crucible.Ui/src-tauri/resources/ui --output dist/windows/ui-host
       - name: Install Windows desktop WebDriver

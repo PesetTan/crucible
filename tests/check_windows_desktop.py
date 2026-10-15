@@ -110,10 +110,12 @@ def main():
         # Runtime proof: only Windows system utilities are on the app's PATH.
         env['PATH']=str(Path(os.environ['SystemRoot'])/'System32')+os.pathsep+os.environ['SystemRoot']
         def install_app():
-            result=subprocess.run([str(installer),'/S',f'/D={install}'],timeout=180,capture_output=True)
+            # NSIS requires /D last and unquoted, even when the path contains spaces.
+            # A Python argument list quotes the whole /D=... argument and NSIS ignores it.
+            result=subprocess.run(f'"{installer}" /S /D={install}',timeout=180,capture_output=True)
             assert result.returncode==0,result.stderr.decode(errors='replace')
             exes=[x for x in install.glob('*.exe') if not x.name.lower().startswith('uninstall')]
-            assert len(exes)==1,exes
+            assert len(exes)==1,{'expectedInstallDirectory':str(install),'executables':exes,'files':list(install.glob('**/*'))[:25]}
             return exes[0]
         executable=install_app();checks.append('silent per-user install in a Unicode/spaced directory')
         native=Native()
