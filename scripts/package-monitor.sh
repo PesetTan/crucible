@@ -13,7 +13,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/runtime"
 swift build --package-path "$project_root/macos/CrucibleMonitor" --scratch-path "$build_root" --configuration release --product CrucibleMonitor --disable-sandbox
 bin_path="$(swift build --package-path "$project_root/macos/CrucibleMonitor" --scratch-path "$build_root" --configuration release --show-bin-path --disable-sandbox)"
 cp "$bin_path/CrucibleMonitor" "$app/Contents/MacOS/CrucibleMonitor"
-"$dotnet_bin" publish "$project_root/src/DeckTester/DeckTester.csproj" --configuration Release --output "$app/Contents/Resources/runtime" --nologo -p:UseAppHost=false
+MTG_DOTNET="$dotnet_bin" "$project_root/scripts/publish-ui.sh" "$app/Contents/Resources/runtime"
 case "$(uname -m)" in
     arm64) service_rid=osx-arm64 ;;
     x86_64) service_rid=osx-x64 ;;

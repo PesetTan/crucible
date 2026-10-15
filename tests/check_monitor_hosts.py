@@ -77,9 +77,10 @@ def main():
                        MTG_UI_STATE_ROOT=str(root / "persistent-ui-state"),
                        MTG_BACKEND_URL=f"http://127.0.0.1:{backend_port}/", ASPNETCORE_ENVIRONMENT="Production")
             env.pop("MTG_LAN_ADDRESS", None)
-            executable = runtime_folder / "CrucibleBackend"
-            assembly = "CrucibleBackend.dll" if mode == "service" and (runtime_folder / "CrucibleBackend.dll").is_file() else "DeckTester.dll"
-            command = [str(executable)] if mode == "service" and executable.is_file() else [args.dotnet, str(runtime_folder / assembly)]
+            host_name = "CrucibleBackend" if mode == "service" else "CrucibleUi"
+            executable = runtime_folder / host_name
+            assembly = host_name + ".dll" if (runtime_folder / (host_name + ".dll")).is_file() else "DeckTester.dll"
+            command = [str(executable)] if executable.is_file() else [args.dotnet, str(runtime_folder / assembly)]
             process = subprocess.Popen(command, cwd=runtime_folder,
                                        env=env, stdout=log, stderr=subprocess.STDOUT)
             log.close()
@@ -100,6 +101,10 @@ def main():
             ui = start("ui", ui_port)
             ui_health = ready(ui_port, ui)
             assert ui_health["role"] == "ui" and ui_health["database"] == "not-applicable"
+            native_ui = (runtime / "CrucibleUi").is_file()
+            if native_ui:
+                status, names = get(ui_port, "/api/v1/presentation/build-names?engine=abc123&bridge=def456")
+                assert status == 200 and json.loads(names)["engine"]
             # A duplicate backend must fail without taking the existing listener or lock.
             duplicate = start("service", unused_port())
             assert duplicate.wait(timeout=15) != 0
@@ -140,7 +145,11 @@ def main():
             status, payload = get(backend_port, "/api/v1/runs/interrupted-fixture")
             run = json.loads(payload)
             assert status == 200 and run["status"] == "cancelled" and "resume explicitly" in run["error"]
-            assert (root / "persistent-ui-state/protection-keys").is_dir()
+            if native_ui:
+                assert (root / "persistent-ui-state/build-names.json").is_file()
+                assert get(ui_port, "/api/v1/presentation/build-names?engine=abc123&bridge=def456")[1] == names
+            else:
+                assert (root / "persistent-ui-state/protection-keys").is_dir()
             assert not (root / "data/engine-bundles").exists()
             print("Published-host checks passed: role identity, bounded DB health, duplicate-service lock, frontend isolation, outage recovery, persistent UI state, explicit simulation resume.")
         except BaseException:

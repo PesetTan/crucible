@@ -2,9 +2,26 @@
 
 Crucible is a local **Standard Bo1 deck-testing workspace**. It schedules head-to-head games between exact decklists, then organizes matchup results, turn logs, and replays. **Forge** is the rules engine and automated pilot; Crucible does not simulate Magic rules itself. Results describe Forge pilot games, not expected Arena win rates.
 
-The [solution](Crucible.slnx) contains the Blazor interface (`DeckTester`), shared backend (`Crucible.Core`), and standalone backend host (`Crucible.Service`). On macOS, Crucible Monitor manages a native backend and the .NET interface. Forge games run in Java workers. See the [documentation index](docs/README.md) for operating and development guides.
+The interface is Svelte + TypeScript (`Crucible.Ui`), served by a small Native AOT host (`Crucible.UiHost`) and available in a Tauri desktop window or a self-hosted browser. The [solution](Crucible.slnx) also contains the shared backend (`Crucible.Core`), standalone backend host (`Crucible.Service`), and retained Blazor implementation (`DeckTester`) for rollback. Forge games run in Java workers. See [desktop and UI setup](docs/svelte-desktop.md) and the [documentation index](docs/README.md).
+
+## Supported operating systems
+
+**macOS on Apple Silicon is the currently supported and verified host platform.** The desktop app requires macOS 13 or later. Platform status refers to the current Svelte/Tauri and Native AOT implementation:
+
+| Host platform | Current status |
+| --- | --- |
+| **macOS 13+ · Apple Silicon (arm64)** | Supported. Native desktop, self-hosted browser UI, simulation backend, and Crucible Monitor have been built and tested locally. |
+| **macOS 13+ · Intel (x64)** | Source-build target exists, but has not been validated on an Intel Mac. |
+| **Linux · x64 / arm64** | Experimental self-hosting. Automatic Forge/Java setup supports Linux; the current UI/backend combination and desktop packaging have not been validated there. |
+| **Windows** | Not yet supported. Some platform-specific source paths exist, but automatic engine setup, desktop packaging, and end-to-end operation are not validated. |
+
+Phones, tablets, and other computers can use the self-hosted browser UI over a private network; simulations run on the host computer. There is no native iOS/iPadOS or Android app. Crucible Monitor is macOS-only. Current desktop packaging produces a local macOS build; Windows and Linux desktop releases are not provided. See [build prerequisites and platform limits](docs/svelte-desktop.md#build-and-run).
 
 ## Screenshots
+
+**Native desktop** — The Svelte/Tauri interface keeps Crucible's graphite, gold, and silver theme and measured pilot evidence.
+
+![Crucible's native desktop window with the compact Forge Pilots layout, two-tone logo, and recorded win rates](docs/screenshots/svelte-pilots.png)
 
 **Matchup explorer** — Compare head-to-head results across a ten-deck field, including per-deck averages. The rates shown describe local Forge pilot games.
 
@@ -20,7 +37,7 @@ The [solution](Crucible.slnx) contains the Blazor interface (`DeckTester`), shar
 
 ## Start
 
-You need the .NET 10 SDK selected by [`global.json`](global.json), `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS and Linux and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A clone alone does not include the local card catalog or account data.
+You need the .NET 10 SDK selected by [`global.json`](global.json), Node 22.12+ for building the interface, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS and Linux and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A clone alone does not include the local card catalog or account data.
 
 From the repository root, run setup once, then start the service:
 
@@ -40,7 +57,7 @@ Open [Crucible](http://127.0.0.1:5077). The service listens on `127.0.0.1:5079`;
 
 On macOS, [Crucible Monitor](docs/crucible-monitor.md) provides a native menu bar app that starts both hosts, reports health, requests recovery approval, and opens at login. Build it with `./scripts/package-monitor.sh`, then install the generated app in your Applications folder using the linked instructions.
 
-The monitor runs the backend as a [native .NET AOT executable](docs/native-backend.md), while retaining the Blazor UI and Forge JVM workers. In the recorded local comparison, backend resident memory after API reads fell from 199.6 to 127.9 MiB (36%). Shell launch scripts use JIT development builds. Use one launch method at a time; the service ownership lock prevents two backends from sharing the same data directory.
+The monitor runs both hosts as native .NET AOT executables. The [Tauri desktop app](docs/svelte-desktop.md) uses the system WebView, adopts verified native hosts, and can start bundled hosts when absent. Node and Rust are build tools only. Forge JVM workers still perform simulations. Shell launch scripts use JIT development hosts. Use one service owner at a time; the service ownership lock prevents two backends from sharing the same data directory.
 
 To hot-swap Forge card resources, the jar, or the pilot bridge after editing them, run `./scripts/activate-forge.sh`. It compiles the bridge, copies the engine into an immutable bundle under `data/engine-bundles/`, verifies its hashes, and atomically selects it for new sessions. If more than one `forge-gui-desktop-*-jar-with-dependencies.jar` is in `vendor/`, set `MTG_FORGE_JAR` to the one to activate. Crucible and its simulation service stay running. Each session keeps its original bundle, including after pause and resume; games already in progress finish with that bundle. Old bundles remain on disk so older sessions can resume. A change to Crucible's .NET code still requires restarting its relevant host.
 
@@ -71,7 +88,7 @@ Forge Performance Mode skips selected rules checks inside Forge. Its effect on t
 
 ## Data and checks
 
-`data/simulator.sqlite` stores deck manifests, sessions, attempts, results, and editorial notes; `data/replays/` stores game evidence. Both are excluded from Git. Simulation data goes through the service API; the UI has a separate local store for editorial notes and reads saved pilot scorecards. It does not schedule games or run Forge. Summary and replay exports remain service-only API operations. See [host separation](docs/host-separation.md) and [third-party notices](THIRD_PARTY.md).
+`data/simulator.sqlite` stores deck manifests, sessions, attempts, results, and editorial notes; `data/replays/` stores game evidence. Both are excluded from Git. Simulation data and notes go through the service API; the frontend reads saved pilot scorecards and persists display aliases separately. It does not schedule games or run Forge. The backend generates summary and replay exports, available through the UI proxy. See [host separation](docs/host-separation.md) and [third-party notices](THIRD_PARTY.md).
 
 Run focused checks from the repository root:
 

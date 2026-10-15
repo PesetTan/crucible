@@ -1,6 +1,6 @@
 # Native backend
 
-Crucible's backend remains C# and publishes to a native macOS executable using .NET Native AOT. The Blazor frontend still runs on .NET, and Forge rules execution remains in Java workers. Native compilation reduces coordinator memory and startup costs; simulation CPU use still depends on worker count and game complexity.
+Crucible's backend remains C# and publishes to a native macOS executable using .NET Native AOT. The [Svelte frontend](svelte-desktop.md) also has a small native host; Forge rules execution remains in Java workers. Native compilation reduces coordinator memory and startup costs; simulation CPU use still depends on worker count and game complexity. The JIT/Blazor measurements below describe the earlier backend migration.
 
 ## Projects and compatibility
 

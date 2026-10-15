@@ -7,6 +7,7 @@ For setup and screenshots, start with the [project README](../README.md). [Imple
 | [Crucible Monitor](crucible-monitor.md) | macOS installation, login startup, health, ownership, recovery, builds, and rollback |
 | [Host separation](host-separation.md) | Service/UI launch commands, ports, focused API reads, outages, and immutable engine activation |
 | [Native backend](native-backend.md) | Native AOT publishing, runtime compatibility, and the recorded JIT comparison |
+| [Svelte UI and desktop](svelte-desktop.md) | Native UI hosting, Tauri packaging, self-hosting, resource evidence, and rollback |
 | [Development and checks](development.md) | Project layout, verification entry points, and working with local data |
 | [Engagement Protocols](engagement-protocols.md) | Reanimator's opt-in public-observation rules and inspection |
 | [Subtype pilots](subtype-pilots.md) | Current opt-in assignments, bounded development behavior, and historical comparison |

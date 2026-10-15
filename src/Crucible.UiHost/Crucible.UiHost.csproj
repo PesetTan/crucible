@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><AssemblyName>CrucibleUi</AssemblyName>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PublishAot>true</PublishAot><JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <ServerGarbageCollection>false</ServerGarbageCollection><InvariantGlobalization>false</InvariantGlobalization>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><CrucibleNativeRuntimeVersion>10.0.11</CrucibleNativeRuntimeVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <PublishAotUsingRuntimePack>false</PublishAotUsingRuntimePack>
+    <IlcFrameworkPath>$(NuGetPackageRoot)microsoft.netcore.app.runtime.nativeaot.$(RuntimeIdentifier)/$(CrucibleNativeRuntimeVersion)/runtimes/$(RuntimeIdentifier)/lib/net10.0/</IlcFrameworkPath>
+    <IlcFrameworkNativePath>$(NuGetPackageRoot)microsoft.netcore.app.runtime.nativeaot.$(RuntimeIdentifier)/$(CrucibleNativeRuntimeVersion)/runtimes/$(RuntimeIdentifier)/native/</IlcFrameworkNativePath>
+    <IlcSdkPath>$(IlcFrameworkNativePath)</IlcSdkPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <PackageDownload Include="Microsoft.NETCore.App.Runtime.NativeAOT.$(RuntimeIdentifier)" Version="[$(CrucibleNativeRuntimeVersion)]" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Crucible.Core/Crucible.Core.csproj" />
+    <Content Include="../DeckTester/naming/nouns.txt" Link="naming/nouns.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../DeckTester/naming/pilots.json" Link="naming/pilots.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../DeckTester/branding.json" Link="branding.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Crucible.Ui/dist/**/*" Link="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

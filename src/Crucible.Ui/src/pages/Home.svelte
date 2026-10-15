@@ -1,0 +1,452 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { api, poll, loadSaved, save, idempotencyKey } from "../lib/api.ts";
+  import { active, deckLabel, duration, label } from "../lib/data.ts";
+  import type {
+    Catalog,
+    Snapshot,
+    Resource,
+    RunRequest,
+    Estimate,
+  } from "../lib/types.ts";
+  import DeckIdentity from "../lib/DeckIdentity.svelte";
+  import AppSelect from "../lib/AppSelect.svelte";
+  import AiNote from "../lib/AiNote.svelte";
+  import CardList from "../lib/CardList.svelte";
+  let {
+    catalog,
+    navigate,
+    refreshCatalog,
+  }: {
+    catalog: Catalog | undefined;
+    navigate: (path: string) => void;
+    refreshCatalog: () => Promise<void>;
+  } = $props();
+  let snapshot = $state<Snapshot>(),
+    resources = $state<Resource>(),
+    error = $state(""),
+    busy = $state(false),
+    loading = $state(true),
+    estimate = $state<Estimate>(),
+    preview = $state("");
+  const saved = loadSaved("home", {
+    selected: [] as string[],
+    games: 200,
+    workers: 2,
+    timeout: 180,
+    turnLimit: 150,
+    seed: "42",
+    performance: false,
+    pilot: "",
+  });
+  let selected = $state<string[]>(saved.selected),
+    games = $state(saved.games),
+    workers = $state(saved.workers),
+    timeout = $state(saved.timeout),
+    turnLimit = $state(saved.turnLimit),
+    seed = $state(saved.seed),
+    performance = $state(saved.performance),
+    pilot = $state(saved.pilot);
+  let locked = $derived(
+    snapshot?.activeSessions.some((p) => active(p.run)) ?? false,
+  );
+  let total = $derived(((selected.length * (selected.length - 1)) / 2) * games);
+  let validSettings = $derived(
+    games >= 2 &&
+      games <= 1000 &&
+      games % 2 === 0 &&
+      workers >= 1 &&
+      workers <= 4 &&
+      timeout >= 10 &&
+      timeout <= 1800 &&
+      turnLimit >= 10 &&
+      turnLimit <= 1000 &&
+      /^-?\d+$/.test(seed) &&
+      BigInt(seed) >= -9223372036854775808n &&
+      BigInt(seed) <= 9223372036854775807n,
+  );
+  let request = $derived<RunRequest>({
+    deckIds: selected,
+    gamesPerPair: games,
+    workers,
+    timeoutSeconds: Math.round(timeout),
+    turnLimit,
+    rootSeed: seed,
+    diagnostic: true,
+    staggerStarts: workers > 1,
+    estimatedGameSeconds: 15,
+    startLeadSeconds: 5,
+    startupSpacingSeconds: 1,
+    performanceMode: performance,
+    pilotMode: pilot || catalog?.defaultPilotMode || "",
+  });
+  let groups = $derived([
+    ...new Set(
+      snapshot?.decks.map((d) =>
+        d.manifest.sourceType === "custom"
+          ? "Custom Decks"
+          : d.manifest.sourceType === "personal"
+            ? "Your Deck"
+            : d.manifest.archetypeTier
+              ? "Tier " + d.manifest.archetypeTier
+              : "Unrated",
+      ) ?? [],
+    ),
+  ]);
+  const group = (source: string, tier?: string) =>
+    source === "custom"
+      ? "Custom Decks"
+      : source === "personal"
+        ? "Your Deck"
+        : tier
+          ? "Tier " + tier
+          : "Unrated";
+  $effect(() =>
+    save("home", {
+      selected,
+      games,
+      workers,
+      timeout,
+      turnLimit,
+      seed,
+      performance,
+      pilot,
+    }),
+  );
+  $effect(() => {
+    const payload = request;
+    estimate = undefined;
+    if (
+      payload.deckIds.length < 2 ||
+      !validSettings ||
+      locked ||
+      !payload.pilotMode
+    )
+      return;
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () =>
+        void api<Estimate>("/api/v1/presentation/estimate", {
+          method: "POST",
+          body: payload,
+          signal: controller.signal,
+        })
+          .then((v) => (estimate = v))
+          .catch((e) => {
+            if (e.name !== "AbortError") error = e.message;
+          }),
+      450,
+    );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  });
+  async function load() {
+    try {
+      snapshot = await api<Snapshot>("/api/v1/ui-state");
+      resources = await api<Resource>("/api/v1/resources");
+      const filtered = selected
+        .filter((id) =>
+          snapshot?.decks.some(
+            (d) => d.manifest.id === id && d.coverage.status !== "blocked",
+          ),
+        )
+        .slice(0, catalog?.maximumDecks ?? 10);
+      if (filtered.join("|") !== selected.join("|")) selected = filtered;
+      error = "";
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      loading = false;
+    }
+  }
+  onMount(() => {
+    void load();
+    return poll(load);
+  });
+  function toggle(id: string) {
+    if (locked) return;
+    if (selected.includes(id)) selected = selected.filter((d) => d !== id);
+    else if (selected.length < (catalog?.maximumDecks ?? 10))
+      selected = [...selected, id];
+  }
+  async function start() {
+    if (busy || locked) return;
+    busy = true;
+    error = "";
+    try {
+      const result = await api<{ id: string }>(
+        "/api/v1/runs?requireIdle=true",
+        { method: "POST", body: request, key: idempotencyKey() },
+      );
+      navigate("/runs/" + result.id);
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      busy = false;
+    }
+  }
+</script>
+
+<svelte:head><title>Crucible — Standard Deck Testing</title></svelte:head>
+<div class="eyebrow">THE LOCAL PLAYTESTING DESK</div>
+<h1>Put Your Decks<br /><em>Across the Table.</em></h1>
+<p class="lead">
+  Run complete head-to-head games. Follow every turn.<br />Compare what happens
+  when your deck has an opponent.
+</p>
+<AiNote subject="setup" />
+<div class="notice">
+  <strong>Exploratory Mode</strong><span
+    >Forge resolves the games. These rates describe the automated pilots, not
+    your Arena win rate.</span
+  >
+</div>
+{#if error}<div class="error" role="alert">
+    {error}<button onclick={load}>Reconnect</button>
+  </div>{/if}{#if loading}<p role="status">Loading your local decks…</p>{/if}
+{#each snapshot?.capabilities.blockers ?? [] as blocker}<p class="error">
+    {blocker}
+  </p>{/each}
+{#if locked}<section class="panel active-session-status">
+    <h2>Session In Progress</h2>
+    <p>Setup is locked while the current session finishes or pauses.</p>
+    {#each snapshot?.activeSessions ?? [] as p}<h3>
+        {label(p.run.status)} · {p.completed} / {p.run.total} completed
+      </h3>
+      <progress max={p.run.total} value={p.processed}></progress>
+      <p>
+        {p.running} running · {p.pending} waiting · {p.failed} failed · {p.cancelled}
+        paused
+      </p>
+      <a class="button primary" href={"/runs/" + p.run.id}
+        >View Active Session →</a
+      >{/each}
+  </section>{/if}
+<fieldset class="setup-controls" disabled={locked}>
+  <section class="panel">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">01 / THE FIELD</div>
+        <h2>Choose the Decks for a Round Robin</h2>
+      </div>
+      <span
+        >{selected.length} / {catalog?.maximumDecks ?? 10} decks selected</span
+      >
+    </div>
+    <p class="small muted">
+      Every selected deck plays every other selected deck. {(selected.length *
+        (selected.length - 1)) /
+        2} matchups.
+    </p>
+    <div class="chart-palette">
+      {#each ["Mint", "Gold", "Sky Blue", "Coral", "Lavender", "Orange", "Rose", "Lime", "Cyan", "Stone"] as color, i}<span
+          ><i style:background={"var(--theme-chart-" + (i + 1) + ")"}
+          ></i>{color}</span
+        >{/each}
+    </div>
+    {#if selected.length === (catalog?.maximumDecks ?? 10)}<p role="status">
+        Deselect a deck to choose another.
+      </p>{/if}
+    {#each groups as name}<details
+        class="deck-tier-group"
+        open={snapshot?.decks.some(
+          (d) =>
+            selected.includes(d.manifest.id) &&
+            group(d.manifest.sourceType, d.manifest.archetypeTier) === name,
+        )}
+      >
+        <summary
+          >{name}<span class="muted"
+            >{snapshot?.decks.filter(
+              (d) =>
+                group(d.manifest.sourceType, d.manifest.archetypeTier) === name,
+            ).length} decks</span
+          ></summary
+        >
+        <div class="deck-grid">
+          {#each snapshot?.decks.filter((d) => group(d.manifest.sourceType, d.manifest.archetypeTier) === name) ?? [] as row (row.manifest.id)}{@const deck =
+              row.manifest}
+            <article
+              class="deck-card"
+              class:selected={selected.includes(deck.id)}
+              class:blocked={row.coverage.status === "blocked"}
+            >
+              <label class="deck-card-choice"
+                ><input
+                  type="checkbox"
+                  checked={selected.includes(deck.id)}
+                  disabled={row.coverage.status === "blocked" ||
+                    (!selected.includes(deck.id) &&
+                      selected.length >= (catalog?.maximumDecks ?? 10))}
+                  onchange={() => toggle(deck.id)}
+                /><DeckIdentity {deck} {catalog} /></label
+              >
+              <p class="small muted">
+                {deck.creatureCount} creatures · {deck.landCount} lands{deck.archetypeTier
+                  ? " · Tier " + deck.archetypeTier
+                  : ""}
+              </p>
+              {#if deck.publishedWinRatePercent != null}<p class="small">
+                  Published: {deck.publishedWinRatePercent}% · {deck.publishedMatchesDisplayed ??
+                    "Unknown sample"} matches
+                </p>{/if}
+              <div class="deck-bottom">
+                <span class="small"
+                  >{row.coverage.status === "blocked"
+                    ? "Missing card support"
+                    : (catalog?.pilotNames[
+                        catalog.decks.find((d) => d.id === deck.id)?.profiles[
+                          pilot || catalog.defaultPilotMode
+                        ] ?? ""
+                      ] ?? "Forge Default")}</span
+                ><button
+                  type="button"
+                  onclick={() => (preview = preview === deck.id ? "" : deck.id)}
+                  >List</button
+                >
+              </div>
+              {#if preview === deck.id}<CardList cards={deck.cards} />{/if}
+            </article>{/each}
+        </div>
+      </details>{/each}
+  </section>
+  <section class="panel">
+    <div class="eyebrow">02 / THE SESSION</div>
+    <h2>Set Up the Run</h2>
+    <p class="small muted">
+      {snapshot?.capabilities.engine ?? "Forge"} · Even play / draw split
+    </p>
+    <div class="config-grid">
+      <label
+        >Games per Matchup<input
+          type="number"
+          bind:value={games}
+          min="2"
+          max="1000"
+          step="2"
+        /></label
+      >
+      <div>
+        <label for="parallel-games">Parallel Games</label><AppSelect
+          id="parallel-games"
+          label="Parallel Games"
+          value={String(workers)}
+          onchange={(v) => (workers = +v)}
+          options={[1, 2, 3, 4].map((n) => ({
+            value: String(n),
+            label: String(n),
+          }))}
+        /><small
+          >Allow about 1.2 GB per game, plus app and engine overhead. {resources?.logicalProcessors ??
+            "—"} logical processors.</small
+        >
+      </div>
+    </div>
+    <details>
+      <summary>Advanced Options</summary>
+      <div class="config-grid">
+        <div>
+          <label for="pilot-policy">Pilot policy</label><AppSelect
+            id="pilot-policy"
+            label="Pilot policy"
+            options={catalog?.modes ?? []}
+            value={pilot || catalog?.defaultPilotMode || ""}
+            onchange={(v) => (pilot = v)}
+          /><small
+            >{catalog?.modes.find(
+              (m) => m.value === (pilot || catalog.defaultPilotMode),
+            )?.description}</small
+          >
+        </div>
+        <label
+          >Time limit per game (seconds)<input
+            type="number"
+            bind:value={timeout}
+            min="10"
+            max="1800"
+          /></label
+        ><label>Root Seed<input inputmode="numeric" bind:value={seed} /></label
+        ><label
+          >Maximum Actual Player Turns<input
+            type="number"
+            bind:value={turnLimit}
+            min="10"
+            max="1000"
+          /></label
+        ><label
+          ><input type="checkbox" bind:checked={performance} /> Forge
+          Performance Mode<small
+            >Skips selected Forge checks. Stored and reused separately.</small
+          ></label
+        >
+      </div>
+      <p class="small muted">
+        London mulligans approximate Arena Bo1 opening hands. Timeouts and turn
+        limits are incomplete attempts, never rules draws.
+      </p>
+    </details>
+    {#if !validSettings}<p class="error" role="status">
+        Use an even game count from 2–1,000, 1–4 workers, 10–1,800 seconds,
+        10–1,000 turns, and a signed 64-bit integer seed.
+      </p>{/if}
+    <div class="runtime-estimate" aria-live="polite">
+      {#if estimate?.preflight.cachedGames === total && total > 0}<strong
+          >No new games needed</strong
+        >
+        <p>Stored results are ready.</p>{:else if estimate?.runtime}<span
+          >Rough runtime</span
+        ><strong
+          >{duration(estimate.runtime.lowerSeconds)}–{duration(
+            estimate.runtime.upperSeconds,
+          )}</strong
+        >
+        <p class="small muted">
+          Advisory range from {estimate.runtime.observations} observed attempts. Conservative
+          estimate includes scheduled games; cached results can finish sooner.
+        </p>{:else}<p class="small muted">
+          Choose at least two decks to estimate runtime.
+        </p>{/if}{#each estimate?.preflight.blockers ?? [] as blocker}<p
+          class="error"
+        >
+          {blocker}
+        </p>{/each}{#if estimate?.preflight.cachedGames}<p>
+          {estimate.preflight.cachedGames} stored games available for these exact
+          settings.
+        </p>{/if}
+    </div>
+    <div class="run-bar">
+      <div>
+        <strong>{(selected.length * (selected.length - 1)) / 2} matchups</strong
+        >
+        · {total} full games<small
+          >{games / 2} starts per deck in each matchup · No sideboarding</small
+        >
+      </div>
+      <button
+        class="primary"
+        disabled={locked ||
+          busy ||
+          !validSettings ||
+          selected.length < 2 ||
+          snapshot?.capabilities.available !== true ||
+          !estimate ||
+          estimate.preflight.blockers.length > 0}
+        onclick={start}
+        >{busy
+          ? "Preparing…"
+          : estimate?.preflight.cachedGames === total && total > 0
+            ? "Use Stored Results"
+            : "Run Exploratory Games"}</button
+      >
+    </div>
+  </section>
+</fieldset>
+{#if snapshot?.runs[0]}<a
+    class="recent-link"
+    href={"/runs/" + snapshot.runs[0].id}
+    ><span>YOUR LATEST SESSION</span><strong
+      >{snapshot.runs[0].total} games · {label(snapshot.runs[0].status)}</strong
+    ><span>View Results →</span></a
+  >{/if}

@@ -12,3 +12,13 @@ ui-state/
 .build/
 dist/
 .swiftpm/
+node_modules/
+/target/
+/src/Crucible.Ui/src-tauri/target/
+/src/Crucible.Ui/src-tauri/binaries/
+/src/Crucible.Ui/src-tauri/resources/
+/src/Crucible.Ui/src-tauri/gen/
+/src/Crucible.Ui/public/assets/
+/src/Crucible.Ui/public/fonts/
+
+/src/Crucible.Ui/src/legacy.css

@@ -123,6 +123,13 @@ final class MonitorCoreChecks {
         XCTAssertEqual(try RuntimeLayout.launch(directory.path, component: .frontend, configuration: config).arguments, [directory.path + "/DeckTester.dll"])
         try FileManager.default.removeItem(at: directory.appendingPathComponent("DeckTester.dll"))
         XCTAssertFalse(RuntimeLayout.containsHost(directory.path, component: .frontend))
+        let ui = directory.appendingPathComponent("CrucibleUi")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: ui)
+        XCTAssertTrue(RuntimeLayout.containsHost(directory.path, component: .frontend))
+        let uiLaunch = try RuntimeLayout.launch(directory.path, component: .frontend, configuration: config)
+        XCTAssertEqual(uiLaunch.executable, ui.path)
+        XCTAssertEqual(uiLaunch.arguments, [])
+
         XCTAssertTrue(RuntimeLayout.containsHost(directory.path, component: .backend))
     }
     private func temporaryDirectory() -> URL {

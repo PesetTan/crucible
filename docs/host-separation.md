@@ -1,9 +1,9 @@
 # Independent UI and simulation hosts
 
-Crucible runs as two independent hosts sharing `Crucible.Core`. The solution contains a Blazor frontend (`DeckTester`) and a standalone backend (`Crucible.Service`). [Crucible Monitor](crucible-monitor.md) packages a native AOT backend and a .NET frontend on macOS; the shell scripts below run JIT development builds.
+Crucible runs as two independent hosts sharing `Crucible.Core`: the Svelte frontend host (`Crucible.UiHost`) and standalone backend (`Crucible.Service`). [Crucible Monitor](crucible-monitor.md) packages both as Native AOT executables on macOS; the shell scripts below run JIT development hosts. [Svelte desktop](svelte-desktop.md) covers the Tauri window and UI migration. The preceding Blazor implementation remains in `DeckTester` for rollback.
 
 - **Simulation service:** `scripts/run-service.sh`, loopback port 5079. Owns deck imports, SQLite, game scheduling, Java engines, replays, timing evidence, and resource measurements. A file lock prevents a second simulation host from opening the same data directory. The service exposes API routes and does not render the interface.
-- **UI host:** `scripts/run-ui.sh`, port 5077. Owns Blazor pages, branding, navigation, browser preferences, and its separate protection keys. Uses an API client for simulation data instead of registering the simulation store, importer, coordinator, engine, or resource sampler. It reads local pilot scorecards and has a separate SQLite editorial-note store; see [AI notes](ai-notes.md). It has no background simulation scheduler. `MTG_LAN_ADDRESS` enables iPad access to this host; the service stays on loopback.
+- **UI host:** `scripts/run-ui.sh`, port 5077. Serves Svelte assets, branding and presentation metadata, and proxies the versioned backend API. Browser preferences stay in local storage. It reads frozen local pilot scorecards and persists build aliases in its UI state directory. It has no simulation database or scheduler. `MTG_LAN_ADDRESS` enables iPad access to this host; the service stays on loopback. The legacy Blazor frontend additionally retains its separate protection keys and editorial-note store for rollback.
 
 ```sh
 # Terminal 1: leave this running during simulations.
@@ -19,9 +19,9 @@ MTG_LAN_ADDRESS=192.168.1.246 ./scripts/run-ui.sh
 
 `GET /api/v1/ui-state` supplies the setup snapshot: deck manifests and coverage, run metadata, timing calibration, active progress, resource capacity, mana values and reusable-game keys. JSON responses are compressed.
 
-Session results, logs and replays use `GET /api/v1/runs/{runId}/state` (also available through `ui-state?runId=...`). This focused snapshot includes only the selected run, its exact deck manifests and coverage, slots, timing records and active build identity. It does not scan other sessions, setup cache keys, global timing samples or resources. Single-run and single-deck lookups use their primary keys. Conditional ETags cover the complete selected-session payload; unchanged responses retain the same slot list and do not rebuild metrics or charts. Results poll every three seconds while active and every ten seconds when stopped. Live progress, saved pilot identity, filters, diagnostics and replay evidence retain their existing semantics.
+Session results, logs and replays use `GET /api/v1/runs/{runId}/state` (also available through `ui-state?runId=...`). This focused snapshot includes only the selected run, its exact deck manifests and coverage, slots, timing records and active build identity. It does not scan other sessions, setup cache keys, global timing samples or resources. Single-run and single-deck lookups use their primary keys. Conditional ETags cover the complete selected-session payload. Svelte results poll every three seconds while active and stop fetching completed sessions; explicit Refresh remains available. Live progress, saved pilot identity, filters, diagnostics and replay evidence retain their existing semantics.
 
-An updated UI can use an older service without restarting active games: if the focused endpoint is absent, it composes the same session state from the existing run, deck, capability, timing and paginated game endpoints. It reads all game pages, with a maximum of 100 per request, and retains unchanged state locally. The full setup snapshot is never used as this fallback.
+The retained Blazor client has a compatibility fallback for services without the focused endpoint. The Svelte client requires the current versioned API, so update older backend installations during an idle maintenance window before switching their frontend. This checkout's existing Native AOT backend already supplies that API.
 
 Run History uses `GET /api/v1/run-history`: one versioned response containing session progress, aggregate matchup outcomes, runtime records, active build identity, and only the decks referenced by those sessions. A single database read transaction projects game outcomes without deserializing attempts or turn samples. History does not load setup caches, resource sampling, card coverage, mana values, or separate per-session summaries. Search, sorting and pagination operate on the loaded history; the same focused request refreshes it every 10 seconds.
 
@@ -33,7 +33,7 @@ Deck Library uses `GET /api/v1/library-state` for exact manifests, card coverage
 
 Actions use the existing import, run creation, pause (`/cancel` for wire compatibility), resume, retry, and delete endpoints. Run creation forwards `requireIdle=true` for the home-page startup guard. Each action obtains the current service token; credentials are kept inside the UI process and are not persisted. A service restart does not require restarting the UI to refresh its token.
 
-Replay records use the replay API, with `audit=true` only when explicitly enabled. The UI proxies session log, game, and replay GET requests at its own origin. Summary exports (`/export`) and replay downloads (`/replay-export`) are service-only; the UI explicitly rejects those proxy routes and has no export controls. Host/origin checks, API mutation tokens, Blazor antiforgery, the four-failure allowance, exact engine/adapter resume checks, and deletion confirmation are preserved.
+Replay records use the replay API, with `audit=true` only when explicitly enabled. Svelte proxies session log, game, replay and read-only export/download requests at its own origin. Exports are generated by the backend. Host/origin checks, separate UI/backend mutation tokens, the four-failure allowance, exact engine/adapter resume checks, and deletion confirmation remain enforced. The retained Blazor frontend additionally uses antiforgery and excludes export proxy routes.
 
 ## Reconnection and restarts
 
@@ -49,4 +49,4 @@ The first migration from an already running combined host requires one controlle
 
 `tests/HostSeparationChecks` exercises the remote snapshot contract, cache identity, outage/recovery, fresh per-action credentials, guarded creation, and replay audit. Scheduling, sorting, and session-deletion checks continue to use temporary fixtures. Live verification also checks pages, downloads, and that the simulation-service process remains alive while the UI is restarted.
 
-This remains a local Blazor Server interface. The separation does not make it a static frontend or enable cloud hosting by itself.
+The Svelte frontend is static browser code with a local native API proxy. A Tauri window does not make the backend publicly reachable or add cloud ingestion.

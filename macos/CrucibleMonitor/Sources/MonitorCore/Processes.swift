@@ -23,7 +23,7 @@ public struct ProcessIdentity: Codable, Equatable {
         guard isCurrent else { return false }
         let project = URL(fileURLWithPath: root).resolvingSymlinksInPath().path + "/"
         let executableURL = URL(fileURLWithPath: executable).resolvingSymlinksInPath()
-        if executableURL.path.hasPrefix(project), ["DeckTester", "CrucibleBackend"].contains(executableURL.lastPathComponent) { return true }
+        if executableURL.path.hasPrefix(project), ["DeckTester", "CrucibleBackend", "CrucibleUi"].contains(executableURL.lastPathComponent) { return true }
         // KERN_PROCARGS2 contains argc, executable path, padding, argv, then environment.
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
@@ -42,7 +42,7 @@ public struct ProcessIdentity: Codable, Equatable {
             if position >= size { break }
         }
         return URL(fileURLWithPath: executable).lastPathComponent == "dotnet" && arguments.contains {
-            ($0.hasSuffix("/DeckTester.dll") || $0.hasSuffix("/CrucibleBackend.dll")) && URL(fileURLWithPath: $0).resolvingSymlinksInPath().path.hasPrefix(project)
+            ($0.hasSuffix("/DeckTester.dll") || $0.hasSuffix("/CrucibleBackend.dll") || $0.hasSuffix("/CrucibleUi.dll")) && URL(fileURLWithPath: $0).resolvingSymlinksInPath().path.hasPrefix(project)
         }
     }
 }

@@ -34,7 +34,7 @@ import ServiceManagement
         let dotnet = ["/opt/homebrew/opt/dotnet/libexec/dotnet", "/opt/homebrew/bin/dotnet", "/usr/local/share/dotnet/dotnet", "/usr/local/bin/dotnet"].first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/opt/homebrew/bin/dotnet"
         configuration = try store.load("configuration.json", as: MonitorConfiguration.self) ?? initialConfiguration ?? MonitorConfiguration(projectRoot: root, dotnet: dotnet)
         if let runtime = Bundle.main.resourceURL?.appendingPathComponent("runtime").path,
-           FileManager.default.fileExists(atPath: runtime + "/DeckTester.dll") {
+           RuntimeLayout.containsHost(runtime, component: .frontend) {
             let seed = Component.allCases.filter { component in
                 guard let selected = configuration.runtimes[component.rawValue] else { return true }
                 return selected.hasPrefix(Bundle.main.bundlePath + "/") || !RuntimeLayout.containsHost(selected, component: component)

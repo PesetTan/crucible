@@ -4,7 +4,7 @@ Crucible Monitor is a native macOS menu bar app for this local checkout. It star
 
 ## Build and open
 
-Requires macOS 13+, Apple's Command Line Tools (`xcode-select --install`), and the .NET 10 SDK. Full Xcode and external Swift packages are unnecessary. Crucible's existing card database, engine setup, Python tools, and checkout are still required for simulations.
+Requires macOS 13+, Apple's Command Line Tools (`xcode-select --install`), the .NET 10 SDK, and Node 22.12+ for building the Svelte assets. Full Xcode and external Swift packages are unnecessary. Crucible's existing card database, engine setup, Python tools, and checkout are still required for simulations.
 
 ```sh
 ./scripts/package-monitor.sh
@@ -13,7 +13,7 @@ ditto --norsrc --noextattr 'dist/Crucible Monitor.app' "$HOME/Applications/Cruci
 open "$HOME/Applications/Crucible Monitor.app"
 ```
 
-The app bundles a Native AOT backend (`CrucibleBackend`) and a published Blazor frontend. The backend runs directly as a native executable; the frontend uses the installed .NET executable. See [Native backend](native-backend.md) for build commands, measurements, and compatibility details. It copies that payload to an immutable project build directory on first launch, so replacing the app cannot overwrite a running host's files. It is locally ad hoc signed. Install it in `~/Applications` and keep the checkout in a stable location for login startup. The packaging script also creates `dist/Crucible Monitor.zip` for transfer without Finder metadata. Connection Settings includes the actual login-item status and a link to macOS Login Items if system approval is needed. Turning off **Launch at Mac Login** unregisters it.
+The app bundles a Native AOT backend (`CrucibleBackend`) and Svelte UI host (`CrucibleUi`). Both run directly as native executables. Runtime selection also supports preceding JIT/Blazor builds for rollback. See [Native backend](native-backend.md) and [Svelte desktop](svelte-desktop.md) for build commands, measurements, and compatibility details. It copies that payload to an immutable project build directory on first launch, so replacing the app cannot overwrite a running host's files. It is locally ad hoc signed. Install it in `~/Applications` and keep the checkout in a stable location for login startup. The packaging script also creates `dist/Crucible Monitor.zip` for transfer without Finder metadata. Connection Settings includes the actual login-item status and a link to macOS Login Items if system approval is needed. Turning off **Launch at Mac Login** unregisters it.
 
 The panel shows health, active work, last successful checks, and managed versus observed ownership. **Open Crucible** opens the browser. **View Logs** opens the monitor's configuration/log directory. **Advanced** holds connection settings, Build & Restart, and Roll Back. Each update can target the frontend, backend, or both. Backend builds include a native executable self-check before stopping a running host. Build failures leave running components untouched; restart failure retains the previous runtime as an explicit rollback option.
 

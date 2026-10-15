@@ -13,20 +13,23 @@ public enum RuntimeBuilder {
         defer { try? handle.close() }
         for component in [Component.frontend, .backend] where components.contains(component) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: configuration.dotnet)
         process.currentDirectoryURL = URL(fileURLWithPath: configuration.projectRoot)
         process.environment = configuration.environment(.backend)
-        let native = component == .backend
-        let destination = native ? output.appendingPathComponent("service") : output
-        process.arguments = ["publish", configuration.projectRoot + (native ? "/src/Crucible.Service/Crucible.Service.csproj" : "/src/DeckTester/DeckTester.csproj"),
-                             "--configuration", "Release", "--output", destination.path, "--nologo", "--disable-build-servers"]
-        if native {
+        process.environment?["MTG_DOTNET"] = configuration.dotnet
+        let backend = component == .backend
+        let destination = backend ? output.appendingPathComponent("service") : output
+        if backend {
+            process.executableURL = URL(fileURLWithPath: configuration.dotnet)
             #if arch(arm64)
-            process.arguments! += ["--runtime", "osx-arm64"]
+            let rid = "osx-arm64"
             #else
-            process.arguments! += ["--runtime", "osx-x64"]
+            let rid = "osx-x64"
             #endif
-        } else { process.arguments! += ["-p:UseAppHost=false"] }
+            process.arguments = ["publish", configuration.projectRoot + "/src/Crucible.Service/Crucible.Service.csproj", "--configuration", "Release", "--output", destination.path, "--runtime", rid, "--nologo", "--disable-build-servers", "-p:UseSharedCompilation=false", "-m:1"]
+        } else {
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = [configuration.projectRoot + "/scripts/publish-ui.sh", destination.path]
+        }
         process.standardOutput = handle; process.standardError = handle; process.standardInput = FileHandle.nullDevice
         let result: Int32 = try await withCheckedThrowingContinuation { continuation in
             process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
@@ -35,9 +38,9 @@ public enum RuntimeBuilder {
         guard result == 0, RuntimeLayout.containsHost(destination.path, component: component) else {
             throw MonitorError.message("Build failed. Running components were left untouched. Open build.log for details.")
         }
-        if native {
+        do {
             let check = Process()
-            check.executableURL = destination.appendingPathComponent("CrucibleBackend")
+            check.executableURL = destination.appendingPathComponent(backend ? "CrucibleBackend" : "CrucibleUi")
             check.arguments = ["--check-runtime"]
             check.environment = configuration.environment(.backend)
             check.standardInput = FileHandle.nullDevice; check.standardOutput = handle; check.standardError = handle
