@@ -3,6 +3,7 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 use std::{
     env, fs,
+    io::{Read, Seek, SeekFrom},
     os::windows::{io::AsRawHandle, process::CommandExt},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -87,6 +88,7 @@ struct OwnedHost {
     owner: String,
     instance: String,
     _gate: Handle,
+    log_offset: u64,
 }
 struct Session {
     root: PathBuf,
@@ -151,6 +153,18 @@ fn client() -> Result<Client, String> {
         .build()
         .map_err(|e| e.to_string())
 }
+fn startup_failure(log: &Path, offset: u64, fallback: &str) -> String {
+    let detail = (|| -> std::io::Result<String> {
+        let mut file = fs::File::open(log)?;
+        file.seek(SeekFrom::Start(offset.max(file.metadata()?.len().saturating_sub(65536))))?;
+        let mut text = String::new();
+        file.read_to_string(&mut text)?;
+        Ok(text)
+    })().unwrap_or_default();
+    if detail.contains("already owns this data directory") {
+        "Another Crucible host or engine setup already owns this data directory. Close that host before retrying. No external process was stopped.".into()
+    } else { fallback.into() }
+}
 impl Session {
     fn logs(&self) -> PathBuf {
         self.root.join("data/desktop/logs")
@@ -190,7 +204,7 @@ impl Session {
         port: u16,
         backend: u16,
         setup: bool,
-    ) -> Result<(Child, String, Handle), String> {
+    ) -> Result<(Child, String, Handle, u64), String> {
         let folder = if role == "service" { "service" } else { "ui" };
         let exe = if role == "service" {
             "CrucibleBackend.exe"
@@ -207,6 +221,7 @@ impl Session {
             .append(true)
             .open(self.logs().join(if setup { "setup.log" } else { role }))
             .map_err(|e| e.to_string())?;
+        let log_offset = log.metadata().map_err(|e|e.to_string())?.len();
         let owner = secret()?;
         let event_name = wide(&format!("Local\\Crucible-{}", secret()?));
         let event = Handle(unsafe { CreateEventW(std::ptr::null(), 1, 0, event_name.as_ptr()) });
@@ -247,7 +262,7 @@ impl Session {
             let _ = child.wait();
             return Err("Cannot release the host startup gate.".into());
         }
-        Ok((child, owner, event))
+        Ok((child, owner, event, log_offset))
     }
     fn ensure(
         &mut self,
@@ -262,7 +277,7 @@ impl Session {
             }
             return Ok(()); // Observed, never added to the owned process list.
         }
-        let (child, owner, gate) = self.spawn(role, port, backend, false)?;
+        let (child, owner, gate, log_offset) = self.spawn(role, port, backend, false)?;
         self.hosts.push(OwnedHost {
             child,
             port,
@@ -270,6 +285,7 @@ impl Session {
             owner,
             instance: String::new(),
             _gate: gate,
+            log_offset,
         });
         let index = self.hosts.len() - 1;
         let deadline = Instant::now() + Duration::from_secs(90);
@@ -279,9 +295,8 @@ impl Session {
                 .try_wait()
                 .map_err(|e| e.to_string())?
             {
-                return Err(format!(
-                    "{role} exited ({status}). Open the logs for details."
-                ));
+                return Err(startup_failure(&self.logs().join(role),self.hosts[index].log_offset,
+                    &format!("{role} exited ({status}). Open the logs for details.")));
             }
             if let Some(h) = health(client, port, &self.root, role)? {
                 if h["processId"].as_u64() != Some(self.hosts[index].child.id() as u64) {
@@ -414,16 +429,15 @@ fn bootstrap(app: &tauri::AppHandle) -> Result<(), String> {
     } else {
         if health(&client, backend, &session.root, "service")?.is_none() && session.needs_setup() {
             progress(app,"Preparing the card catalog and simulation engine. The first download may take several minutes.");
-            let (mut setup, _, _gate) = session.spawn("service", backend, backend, true)?;
+            let (mut setup, _, _gate, log_offset) = session.spawn("service", backend, backend, true)?;
             let setup_log = session.logs().join("setup.log");
             drop(session);
             let deadline = Instant::now() + Duration::from_secs(1800);
             loop {
                 if let Some(status) = setup.try_wait().map_err(|e| e.to_string())? {
                     if !status.success() {
-                        return Err(
-                            "Engine setup failed. Retry Setup or open the logs for details.".into(),
-                        );
+                        return Err(startup_failure(&setup_log,log_offset,
+                            "Engine setup failed. Retry Setup or open the logs for details."));
                     }
                     break;
                 }
@@ -672,6 +686,17 @@ mod tests {
             r"C:\Users\Name\Crucible",
             Path::new(r"\\?\C:\Users\Name\Crucible")
         ));
+    }
+    #[test]
+    fn ownership_errors_use_only_the_current_launch_log() {
+        let path=env::temp_dir().join(format!("crucible-startup-{}.log",secret().unwrap()));
+        let prior="already owns this data directory\n";
+        fs::write(&path,prior).unwrap();
+        assert_eq!(startup_failure(&path,prior.len() as u64,"generic failure"),"generic failure");
+        use std::io::Write;
+        fs::OpenOptions::new().append(true).open(&path).unwrap().write_all(prior.as_bytes()).unwrap();
+        assert!(startup_failure(&path,prior.len() as u64,"generic failure").contains("No external process was stopped"));
+        fs::remove_file(path).unwrap();
     }
     #[test]
     fn unique_credentials() {

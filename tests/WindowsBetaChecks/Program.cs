@@ -28,8 +28,8 @@ try{
     // Legacy checkout paths and roots remain independent of installed mode.
     var checkout=Path.Combine(sandbox,"checkout");Directory.CreateDirectory(Path.Combine(checkout,"docs","specs"));
     Check(new AppPaths(checkout).Source==Path.GetFullPath(Path.Combine(checkout,"..","..","standard_cards.sqlite")),"Legacy catalog path changed.");
-    using var ownership=new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
-    try{using var duplicate=new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);throw new Exception("Duplicate lock accepted.");}catch(IOException){}
+    using var ownership=HostControl.AcquireDataOwnership(paths);
+    try{using var duplicate=HostControl.AcquireDataOwnership(paths);throw new Exception("Duplicate lock accepted.");}catch(InvalidOperationException error){Check(error.Message.Contains("already owns this data directory"),"Ownership conflict must explain the existing owner.");}
     var compressed=Path.Combine(sandbox,"engine Ω.tar.bz2");
     File.WriteAllBytes(compressed,Convert.FromBase64String("QlpoOTFBWSZTWQwP/SQAAGfflsqYQAH/gsBIUABv4V9AACAIAQACCAggAJKGqaHpNAAAAAMgBKJT0mNJiZM1HqA0Gho09SPnHKlqizqAGEqIghdfMXUIT3VDJhBBUClg7D49rWlt8JXjGPoK1EHCghx56BCFUgyxkN8kXNqQTaN3xHcWBlqKQdOdxLa9qGzajQDE5wRgXKXVCVofZVlq60XMUeZg3EzHYTyWEYq1OAiB/F3JFOFCQDA/9JA="));
     var extraction=Path.Combine(sandbox,"managed extraction Ω");Directory.CreateDirectory(extraction);

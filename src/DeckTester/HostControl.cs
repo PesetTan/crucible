@@ -5,6 +5,11 @@ namespace DeckTester;
 
 public static class HostControl
 {
+    public static FileStream AcquireDataOwnership(AppPaths paths)
+    {
+        try{return new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
+        catch(IOException error){throw new InvalidOperationException("Another simulation host or engine setup already owns this data directory. Close that host before starting a replacement.",error);}
+    }
     public static void WaitForLauncher()
     {
         if(!OperatingSystem.IsWindows()||Environment.GetEnvironmentVariable("CRUCIBLE_LAUNCH_EVENT") is not {} name)return;

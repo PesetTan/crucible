@@ -165,12 +165,19 @@ def main():
                 result=Driver(url,f'127.0.0.1:{debug_port}')
             finally:startup_capture.cancel()
             print('WebDriver connected; waiting for engine setup and the main app.',flush=True)
+            last_setup_text=None
             def ready():
+                nonlocal last_setup_text
                 if any(native.text(h)=='Crucible Could Not Start' for h in native.windows()):
                     logs=state/'data/desktop/logs'
                     detail='\n'.join(f'{p.name}: {p.read_text(encoding="utf-8",errors="replace")[-4000:]}' for p in logs.glob('*') if p.is_file())
                     raise StartupFailure('The app displayed a startup error.\n'+detail)
-                return result.main()
+                if result.main():return True
+                setup_text=result.text().strip()
+                if setup_text!=last_setup_text:
+                    print('Setup window: '+setup_text.replace('\n',' | ')[:500],flush=True)
+                    last_setup_text=setup_text
+                return False
             wait(ready,1200)
             wait(lambda:'Choose the Decks' in result.text(),60)
             return result
@@ -187,6 +194,35 @@ def main():
             return value
         succeeded=False
         try:
+            # An external service can own the same database on a different port.
+            # Refuse that conflict visibly without terminating or replacing its owner.
+            lock_root=base/'Database Owner Ω';owner_port=port();owner_origin=f'http://127.0.0.1:{owner_port}'
+            owner_secret='external-fixture-'+os.urandom(32).hex()
+            with (output/'database-owner.log').open('wb') as owner_log:
+                existing=subprocess.Popen([str(install/'resources/service/CrucibleBackend.exe')],env=dict(env,MTG_PROJECT_ROOT=str(lock_root),MTG_ASSET_ROOT=str(install/'resources/assets'),MTG_PORT=str(owner_port),MTG_HOST_MODE='service',CRUCIBLE_HOST_OWNER=owner_secret),stdout=owner_log,stderr=subprocess.STDOUT)
+                blocker=None
+                try:
+                    wait(lambda:(h:=http(owner_origin+'/api/v1/health'))[0]==200 and h[1]['ready'],60)
+                    owner_health=http(owner_origin+'/api/v1/health')[1]
+                    blocker=subprocess.Popen([str(executable)],env=dict(env,MTG_PROJECT_ROOT=str(lock_root)))
+                    def ownership_dialog():
+                        return any('already owns this data directory' in native.text(control) for top in native.windows() if native.text(top)=='Crucible Could Not Start' for control in native.windows(top))
+                    wait(ownership_dialog,30)
+                    after=http(owner_origin+'/api/v1/health')[1]
+                    assert existing.poll() is None and after['ready'] and after['instanceId']==owner_health['instanceId']
+                    assert not (lock_root/'data/engine-bundles/active.json').exists()
+                    record('database ownership conflict is visible; external native host remains untouched')
+                finally:
+                    if blocker and blocker.poll() is None:blocker.terminate();blocker.wait(timeout=10)
+                    if existing.poll() is None:
+                        try:
+                            token=http(owner_origin+'/api/v1/session')[1]['instanceToken']
+                            assert http(owner_origin+'/api/v1/host/shutdown','POST',headers={'X-Instance-Token':token,'X-Crucible-Owner':owner_secret})[0]==202
+                            existing.wait(timeout=15)
+                        finally:
+                            if existing.poll() is None:existing.terminate();existing.wait(timeout=10)
+                    lock_log=lock_root/'data/desktop/logs/setup.log'
+                    if lock_log.exists():shutil.copy2(lock_log,output/'database-lock-startup.log')
             web=launch();web.shot(output/'first-launch.png');record('first-launch setup with real Forge and local Java; no SDK/runtime tools on PATH')
             for origin in [ui,backend]:
                 h=health(origin);assert h['ready'] and h['runtimeMode']=='native-aot' and not h['reflectionJsonEnabled'],h

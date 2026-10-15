@@ -21,9 +21,7 @@ static async Task Run(string[] args)
     builder.Services.ConfigureHttpJsonOptions(options=>options.SerializerOptions.TypeInfoResolverChain.Insert(0,Json.Options.TypeInfoResolver!));
     var paths=new AppPaths(builder.Environment);
     if(args.Contains("--setup",StringComparer.Ordinal)){await EngineSetup.Install(paths);return;}
-    FileStream ownership;
-    try{ownership=new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
-    catch(IOException error){throw new InvalidOperationException("Another simulation host already owns this data directory. Stop that host before starting a replacement.",error);}
+    var ownership=HostControl.AcquireDataOwnership(paths);
     CatalogBootstrap.Ensure(paths);
     builder.Services.AddSingleton(paths);
     BackendHosting.Register(builder.Services);

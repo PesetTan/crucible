@@ -15,7 +15,7 @@ public static class EngineSetup
     public static async Task Install(AppPaths paths)
     {
         // Setup and simulations must never mutate the same installation concurrently.
-        using var ownership=new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
+        using var ownership=HostControl.AcquireDataOwnership(paths);
         CatalogBootstrap.Ensure(paths);
         using var http=new HttpClient{Timeout=TimeSpan.FromMinutes(15)};
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Crucible-Setup/0.1");
