@@ -1,9 +1,5 @@
 name: Windows Installed App Diagnostics
 on:
-  # Temporary diagnostic loop against the last built installer.
-  push:
-    branches: [codex/windows-desktop-beta]
-    paths: ['.github/workflows/windows-installed-check.yml', 'tests/check_windows_desktop.py', 'tests/capture_windows_desktop.ps1']
   workflow_dispatch:
     inputs:
       installer_run_id:
@@ -21,7 +17,7 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 40
     env:
-      CRUCIBLE_INSTALLER_RUN_ID: ${{ inputs.installer_run_id || '38795004497' }}
+      CRUCIBLE_INSTALLER_RUN_ID: ${{ inputs.installer_run_id }}
     defaults:
       run:
         shell: pwsh
@@ -35,7 +31,7 @@ jobs:
         with:
           name: crucible-windows-x64-beta
           path: dist/windows
-          run-id: ${{ inputs.installer_run_id || '38795004497' }}
+          run-id: ${{ inputs.installer_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install matching WebView2 driver
         run: ./scripts/install-windows-webdriver.ps1
