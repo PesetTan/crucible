@@ -91,6 +91,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     {
         await mutations.WaitAsync();try {
             var run=store.Run(id);if(active.ContainsKey(id)||run.Status is "running" or "queued" or "cancelling")throw new InvalidOperationException("Run is already active.");
+            if(run.Config.ProviderId!="forge")throw new InvalidOperationException("Imported Pyre runs must be continued through Pyre; selectable provider execution is not installed.");
             if(!engine.HasBundle(run.Config))throw new InvalidOperationException("The run's pinned Forge bundle is unavailable.");
             foreach(var slot in store.Slots(id))if(slot.Result is null&&(slot.Status is "pending" or "cancelled"||retryFailures&&slot.Status=="failed")) {
                 if(!AttemptPolicy.CanResume(slot))continue;await store.SaveSlot(slot with{Status="pending"});
@@ -102,6 +103,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         foreach(var run in store.Runs()) {
+            if(run.Config.ProviderId!="forge")continue;
             foreach(var timing in store.SessionTimings(run.Id).Where(t=>t.Status=="running"))
                 await store.SaveSessionTiming(timing with{Status="interrupted",FinishedAt=timing.UpdatedAt});
             var slots=store.Slots(run.Id);
@@ -121,7 +123,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             await mutations.WaitAsync(stoppingToken);
             try{
                 var waiting=store.Runs().FirstOrDefault(run=>run.Id==id);
-                if(waiting is null||waiting.Status!="queued"){queued.TryRemove(id,out _);continue;}
+                if(waiting is null||waiting.Config.ProviderId!="forge"||waiting.Status!="queued"){queued.TryRemove(id,out _);continue;}
                 active[id]=cancellation;
                 await store.SaveRun(store.Run(id) with{Status="running"});
             }finally{mutations.Release();}

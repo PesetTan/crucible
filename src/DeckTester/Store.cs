@@ -2,7 +2,7 @@ using Microsoft.Data.Sqlite;
 
 namespace DeckTester;
 
-public sealed class Store
+public sealed partial class Store
 {
     private readonly string connection;
     private readonly SemaphoreSlim writer = new(1, 1);
@@ -229,7 +229,7 @@ public sealed class Store
     private static bool SameProfiles(Dictionary<string,string>? left,Dictionary<string,string>? right) =>
         left is null || right is null ? left is null && right is null :
         left.Count==right.Count && left.All(pair=>right.TryGetValue(pair.Key,out var profile)&&profile==pair.Value);
-    public static bool CompatibleSession(RunConfig left,RunConfig right)=>left.RootSeed==right.RootSeed&&left.EngineHash==right.EngineHash&&left.AdapterHash==right.AdapterHash&&left.PerformanceMode==right.PerformanceMode&&left.Pilot==right.Pilot&&left.OpeningPolicy==right.OpeningPolicy&&left.SeedScheme==right.SeedScheme&&left.AttributesHash==right.AttributesHash&&left.OptimizerPolicy?.Id==right.OptimizerPolicy?.Id&&left.ProtocolSet?.Hash==right.ProtocolSet?.Hash&&SameProfiles(left.PilotProfiles,right.PilotProfiles)&&SameCombination(left.DeckIds,right.DeckIds);
+    public static bool CompatibleSession(RunConfig left,RunConfig right)=>left.ProviderId==right.ProviderId&&left.Provider?.ExperimentId==right.Provider?.ExperimentId&&left.RootSeed==right.RootSeed&&left.EngineHash==right.EngineHash&&left.AdapterHash==right.AdapterHash&&left.PerformanceMode==right.PerformanceMode&&left.Pilot==right.Pilot&&left.OpeningPolicy==right.OpeningPolicy&&left.SeedScheme==right.SeedScheme&&left.AttributesHash==right.AttributesHash&&left.OptimizerPolicy?.Id==right.OptimizerPolicy?.Id&&left.ProtocolSet?.Hash==right.ProtocolSet?.Hash&&SameProfiles(left.PilotProfiles,right.PilotProfiles)&&SameCombination(left.DeckIds,right.DeckIds);
     public OptimizerPolicy PublishedOptimizerPolicy(string id)
     {
         if(id.Length!=64||id.Any(c=>!char.IsAsciiHexDigit(c)))throw new ArgumentException("Invalid optimizer policy ID.");
@@ -409,6 +409,11 @@ public sealed class Store
                     foreach(var suffix in new[]{".jsonl.gz",".jsonl.gz.partial",".incomplete.gz",".log"})candidates.Add(prefix+suffix);
                     if(attempt.Replay is {} replay)candidates.Add(replay);
                 }
+            }
+            var deletedRun=Json.Decode<SimulationRun>(payload);
+            if(deletedRun.Config.Provider?.ExperimentId is {} experiment){
+                cmd.CommandText="SELECT 1 FROM sqlite_master WHERE type='table' AND name='pyre_records'";
+                if(cmd.ExecuteScalar() is not null){cmd.CommandText="DELETE FROM pyre_records WHERE experiment_id=$experiment";cmd.Parameters.AddWithValue("$experiment",experiment);cmd.ExecuteNonQuery();cmd.Parameters.RemoveAt("$experiment");}
             }
             foreach(var table in new[]{"idempotency","session_timings","run_matchup_notes","slots","runs"}){
                 cmd.CommandText=$"DELETE FROM {table} WHERE {(table=="runs"?"id":"run_id")}=$id";cmd.ExecuteNonQuery();

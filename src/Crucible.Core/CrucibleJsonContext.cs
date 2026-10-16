@@ -10,6 +10,8 @@ namespace DeckTester;
 [JsonSerializable(typeof(ApiError))]
 [JsonSerializable(typeof(ArenaListRequest))]
 [JsonSerializable(typeof(Attempt))]
+[JsonSerializable(typeof(EngineProviderIdentity))]
+[JsonSerializable(typeof(PyreIngestReceipt))]
 [JsonSerializable(typeof(AttributesAppend))]
 [JsonSerializable(typeof(CachedGameKey))]
 [JsonSerializable(typeof(CapacityBadge))]
