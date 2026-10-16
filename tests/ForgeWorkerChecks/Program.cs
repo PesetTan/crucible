@@ -9,8 +9,7 @@ var originalRoot=Environment.GetEnvironmentVariable("MTG_PROJECT_ROOT");
 var originalJava=Environment.GetEnvironmentVariable("MTG_JAVA");
 var root=Path.Combine(Path.GetTempPath(),"forge-worker-checks-"+Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(Path.Combine(root,"docs","specs"));
-var fake=Path.Combine(root,"fake-forge.py");File.Copy(Path.Combine(AppContext.BaseDirectory,"fake-forge.py"),fake);
-if(!OperatingSystem.IsWindows())File.SetUnixFileMode(fake,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+var fake=Path.Combine(AppContext.BaseDirectory,"transport-fixture",OperatingSystem.IsWindows()?"fake-forge.exe":"fake-forge");
 Environment.SetEnvironmentVariable("MTG_PROJECT_ROOT",root);Environment.SetEnvironmentVariable("MTG_JAVA",fake);
 var engineHash=new string('a',64);var adapterHash=new string('b',64);var legacyHash=new string('c',64);
 string MakeBundle(string adapter,int? protocol){
@@ -66,6 +65,7 @@ try {
     Console.WriteLine("Forge worker lifecycle checks passed: reuse, cancellation, faults, timeout, recycling, parallel capacity, shutdown and legacy fallback.");
 } finally {
     await engine.DisposeAsync();Environment.SetEnvironmentVariable("MTG_PROJECT_ROOT",originalRoot);Environment.SetEnvironmentVariable("MTG_JAVA",originalJava);
+    Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
     Directory.Delete(root,true);
 }
 sealed class TestEnvironment:IHostEnvironment {

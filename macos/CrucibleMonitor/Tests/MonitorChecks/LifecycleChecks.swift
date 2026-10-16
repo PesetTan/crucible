@@ -29,6 +29,13 @@ import MonitorCore
         // Unused ports ensure that work status is unknown, rather than querying the user's hosts.
         config.frontendPort = 59471; config.backendPort = 59473
         let supervisor = try Supervisor(stateDirectory: root.appendingPathComponent("state"), initialConfiguration: config)
+        XCTAssertTrue(supervisor.overallStopped)
+        XCTAssertEqual(supervisor.statusLabel, "Crucible · Stopped")
+        supervisor.states[.frontend]?.starting()
+        XCTAssertFalse(supervisor.overallStopped)
+        XCTAssertEqual(supervisor.statusLabel, "Crucible · Needs Attention")
+        supervisor.states[.frontend]?.stopped()
+        XCTAssertTrue(supervisor.overallStopped)
         let process = try ProcessDriver.spawn(executable: executable.path,
             arguments: [],
             environment: ["PATH": "/usr/bin:/bin"], directory: root.path, log: root.appendingPathComponent("fake.log"))

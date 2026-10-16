@@ -4,9 +4,12 @@
   import { deckLabel, date, performance, rate } from "../lib/data.ts";
   import type { Catalog, Library, History } from "../lib/types.ts";
   import DeckIdentity from "../lib/DeckIdentity.svelte";
-  import LazyCardList from "../lib/LazyCardList.svelte";
+  import LazyDeckList from "../lib/LazyDeckList.svelte";
   import AppSelect from "../lib/AppSelect.svelte";
   import AiNote from "../lib/AiNote.svelte";
+  import PageHeader from "../lib/PageHeader.svelte";
+  import SimulatedRate from "../lib/SimulatedRate.svelte";
+  import { latestSimulatedRates } from "../lib/simulated-rates.ts";
   let {
     catalog,
     route,
@@ -25,6 +28,7 @@
       untrack(() => new URLSearchParams(route.split("?")[1]).get("deck") ?? ""),
     ),
     busy = $state(false);
+  let simulatedRates = $derived(latestSimulatedRates(history?.sessions ?? []));
   let rows = $derived(
     (library?.decks ?? [])
       .filter((r) =>
@@ -78,16 +82,15 @@
 </script>
 
 <svelte:head><title>Deck Library — Crucible</title></svelte:head>
-<div class="eyebrow">THE LIBRARY / EXACT DECK VERSIONS</div>
-<div class="section-head">
-  <div>
-    <h1>Deck Library.</h1>
-    <p class="lead">Know what is across the table.</p>
-  </div>
-  <button disabled={busy} onclick={refresh}
+{#snippet libraryActions()}<button disabled={busy} onclick={refresh}
     >{busy ? "Checking…" : "Refresh Sources"}</button
-  >
-</div>
+  >{/snippet}
+<PageHeader
+  title="Deck Library."
+  eyebrow="THE LIBRARY / EXACT DECK VERSIONS"
+  description="Know what is across the table."
+  actions={libraryActions}
+/>
 <AiNote subject="decks" />{#if error}<p class="error" role="alert">
     {error}
   </p>{/if}{#if message}<p role="status">{message}</p>{/if}
@@ -147,12 +150,13 @@
             rel="noreferrer">Source →</a
           >{/if}
       </details>{/if}
+    <SimulatedRate result={simulatedRates.get(deck.id)} />
     <p class="small">{deck.freshnessNote}</p>
     {#if coverage.status === "blocked"}<div class="error">
         {#each coverage.cards.filter((c) => c.status === "blocked") as card}<p>
             {card.name}: {card.reason}
           </p>{/each}
-      </div>{/if}<LazyCardList
+      </div>{/if}<LazyDeckList
       {deck}
       manaValues={library?.manaValues}
       initialOpen={choice === deck.id}

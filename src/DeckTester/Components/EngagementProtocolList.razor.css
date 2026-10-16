@@ -1,5 +1,1 @@
 .engagement-protocols { margin-block: .75rem; overflow-wrap: anywhere; }
-dl { display: grid; grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr); gap: .6rem 1rem; }
-dd { margin: 0; }
-dd p { margin: .2rem 0 0; }
-@media (max-width: 500px) { dl { grid-template-columns: 1fr; gap: .3rem; } dd { margin-bottom: .6rem; } }

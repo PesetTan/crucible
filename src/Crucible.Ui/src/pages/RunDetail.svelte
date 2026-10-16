@@ -5,7 +5,6 @@
     active,
     rate,
     number,
-    interval,
     deckLabel,
     label,
     points,
@@ -19,8 +18,11 @@
     Sample,
   } from "../lib/types.ts";
   import DeckIdentity from "../lib/DeckIdentity.svelte";
+  import DeckResult from "../lib/DeckResult.svelte";
+  import DeckMatchup from "../lib/DeckMatchup.svelte";
   import AppSelect from "../lib/AppSelect.svelte";
   import AiNote from "../lib/AiNote.svelte";
+  import PageHeader from "../lib/PageHeader.svelte";
   import Provenance from "../lib/Provenance.svelte";
   import SeriesChart from "../lib/SeriesChart.svelte";
   let {
@@ -200,17 +202,8 @@
 {#if error}<div class="error" role="alert">
     {error}<button onclick={load}>Refresh</button>
   </div>{/if}
-{#if !run}<h1>Loading Session…</h1>{:else}<div class="section-head">
-    <div>
-      <div class="eyebrow">
-        SESSION / {run.id.slice(0, 8)} · {label(run.status)}
-      </div>
-      <h1>Across the Table.</h1>
-      <p class="muted">
-        {run.config.deckIds.length} decks · {run.total} scheduled games · Root Seed
-        {run.config.rootSeed}
-      </p>
-    </div>
+{#if !run}<h1>Loading Session…</h1>{:else}
+  {#snippet resultActions()}
     <details class="session-actions" bind:open={actionsOpen}>
       <summary aria-label="Session actions">⋯</summary>
       <div class="actions">
@@ -237,7 +230,13 @@
         >
       </div>
     </details>
-  </div>
+  {/snippet}
+  <PageHeader
+    title="Across the Table."
+    eyebrow={`SESSION / ${run.id.slice(0, 8)} · ${label(run.status)}`}
+    description={`${run.config.deckIds.length} decks · ${run.total} scheduled games · Root Seed ${run.config.rootSeed}`}
+    actions={resultActions}
+  />
   <AiNote subject="results" /><AiNote
     scope="run"
     subject={id}
@@ -439,27 +438,23 @@
         class="matchup-entry"
       >
         <h2>
-          <DeckIdentity deck={decks.find((d) => d.id === m.deckA)} {catalog} />
-          <span class="muted">vs</span>
-          <DeckIdentity deck={decks.find((d) => d.id === m.deckB)} {catalog} />
+          <DeckMatchup
+            deckA={decks.find((d) => d.id === m.deckA)}
+            deckB={decks.find((d) => d.id === m.deckB)}
+            {catalog}
+          />
         </h2>
         <div class="matchup-cards">
           {#each [m.deckA, m.deckB] as deckId}{@const a = deckId === m.deckA}
-            <div>
-              <h3>
-                <DeckIdentity
-                  deck={decks.find((d) => d.id === deckId)}
-                  {catalog}
-                />
-              </h3>
-              <strong>{rate(a ? m.winRateA : m.winRateB)}</strong>
-              <p>
-                {a ? m.winsA : m.winsB} wins · {a ? m.winsB : m.winsA} losses · {m.draws}
-                draws
-              </p>
-              <p>
-                95% Wilson interval: {interval(a ? m.intervalA : m.intervalB)}
-              </p>
+            <DeckResult
+              deck={decks.find((d) => d.id === deckId)}
+              {catalog}
+              winRate={a ? m.winRateA : m.winRateB}
+              wins={a ? m.winsA : m.winsB}
+              losses={a ? m.winsB : m.winsA}
+              draws={m.draws}
+              interval={a ? m.intervalA : m.intervalB}
+            >
               <p>
                 On play: {rate(
                   (a ? m.playA : m.playB)
@@ -473,12 +468,12 @@
                     : null,
                 )}
               </p>
-              <a
-                class="button"
-                href={`/workshop?deck=${deckId}&opponent=${a ? m.deckB : m.deckA}&baseline=${id}`}
-                >Modify &amp; Rerun</a
-              >
-            </div>{/each}
+              {#snippet actions()}<a
+                  class="button"
+                  href={`/workshop?deck=${deckId}&opponent=${a ? m.deckB : m.deckA}&baseline=${id}`}
+                  >Modify &amp; Rerun</a
+                >{/snippet}
+            </DeckResult>{/each}
         </div>
         <p class="small muted">
           {m.valid} valid / {m.scheduled} scheduled · {m.failed} failed · {m.attemptFailures}

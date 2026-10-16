@@ -1,0 +1,681 @@
+/* Shared layout rhythm for the Svelte UI. Keep row disclosures free of rules;
+   panel outlines and table headers already establish the information groups. */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --page-gutter: 32px;
+  --panel-padding: 16px;
+  --control-height: 40px;
+}
+main {
+  padding: var(--page-gutter) var(--page-gutter) 40px;
+}
+main p {
+  margin: 0 0 var(--space-3);
+}
+main h2 {
+  margin: 0 0 var(--space-3);
+}
+main h3,
+main h4 {
+  margin: 0 0 var(--space-2);
+}
+main .panel {
+  padding: var(--panel-padding);
+  margin: var(--space-4) 0;
+  min-width: 0;
+}
+main .panel > :last-child {
+  margin-bottom: 0;
+}
+main .section-head {
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+main .section-head > div {
+  min-width: 0;
+}
+main .section-head h2,
+main .section-head h3 {
+  margin-bottom: 0;
+}
+main .section-head .eyebrow + h2 {
+  margin-top: var(--space-2);
+}
+main .eyebrow {
+  line-height: 1.5;
+}
+.page-header {
+  margin: 0 0 var(--space-5);
+}
+.page-header > .eyebrow {
+  margin-bottom: var(--space-3);
+}
+.page-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.page-header-copy {
+  min-width: 0;
+}
+.page-header h1 {
+  margin: 0;
+}
+.page-header h1 em {
+  font-family: inherit;
+}
+.page-header .lead {
+  margin: var(--space-3) 0 0;
+  max-width: 52rem;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding-top: var(--space-1);
+}
+main .back-link {
+  margin-bottom: var(--space-4);
+}
+
+/* Wrapped text-input labels and separate dropdown labels have the same gap. */
+main
+  label:has(
+    > input:where(:not([type="checkbox"], [type="radio"], [type="range"]))
+  ),
+main label:has(> textarea) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+main input:where(:not([type="checkbox"], [type="radio"], [type="range"])),
+main .select-trigger,
+main textarea {
+  min-height: var(--control-height);
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 20px;
+  margin: 0;
+}
+main
+  label
+  > input:where(:not([type="checkbox"], [type="radio"], [type="range"])),
+main label > textarea {
+  width: 100%;
+}
+main textarea {
+  display: block;
+  resize: vertical;
+}
+main label:has(> input[type="checkbox"]):not(.deck-card-choice),
+main label:has(> input[type="radio"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  line-height: 1.5;
+}
+main label > input:is([type="checkbox"], [type="radio"]) {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+}
+main label:has(> input[type="checkbox"]):not(.deck-card-choice) > small {
+  flex-basis: 100%;
+  margin: 0 0 0 var(--space-6);
+}
+main .toolbar {
+  gap: var(--space-4);
+  margin: var(--space-4) 0;
+  align-items: flex-end;
+}
+main .toolbar > div,
+main .toolbar > label {
+  min-width: min(180px, 100%);
+  margin: 0;
+}
+main .toolbar > div > label,
+main .config-grid > div > label {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+main .toolbar > button,
+main .toolbar > .button,
+main .config-grid button {
+  min-height: var(--control-height);
+}
+main .toolbar input {
+  width: 100%;
+}
+main .panel > .toolbar:first-child {
+  margin-top: 0;
+}
+main .panel > .toolbar:last-child {
+  margin-bottom: 0;
+}
+main .config-grid {
+  gap: var(--space-4);
+  align-items: start;
+  margin: var(--space-4) 0;
+}
+main .config-grid > * {
+  min-width: 0;
+}
+main .config-grid small {
+  margin-top: var(--space-2);
+  line-height: 1.5;
+}
+main .metadata > :is(dt, dd) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+main .actions {
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+}
+main .section-head > .actions {
+  margin-top: 0;
+}
+main .error:has(> button) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+main .actions > :is(button, .button) {
+  min-height: 32px;
+}
+main .notice,
+main .error {
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+}
+main .notice p,
+main .error p {
+  margin: 0;
+}
+
+/* Disclosure headings use their chevron and spacing instead of a border each. */
+main details:where(:not(.panel, .ai-note, .permanent)) {
+  border: 0;
+  margin: var(--space-3) 0;
+  padding: 0;
+}
+main details > summary {
+  padding: var(--space-1) 0;
+  line-height: 1.5;
+}
+main details[open] > summary {
+  margin-bottom: var(--space-2);
+}
+main summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+main details details:where(:not(.panel, .ai-note)) {
+  margin: var(--space-2) 0;
+}
+main .ai-note {
+  margin: var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+}
+main .ai-note > summary {
+  padding: 0;
+}
+main .ai-note footer {
+  padding: 0;
+}
+main .card-list {
+  margin: var(--space-3) 0;
+}
+main .deck-list-group > .card-row {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+main .card-row > summary {
+  min-height: 36px;
+  padding: var(--space-2);
+  gap: var(--space-3);
+  border-radius: 4px;
+}
+main .card-row .card-cost {
+  max-width: 46%;
+  flex-shrink: 0;
+  text-align: right;
+}
+main .card-row > summary:hover {
+  background: var(--theme-card-selected);
+}
+main .card-row[open] > summary {
+  margin-bottom: 0;
+}
+main .card-detail {
+  padding: var(--space-2) var(--space-3) var(--space-3) 42px;
+}
+main .card-detail > :last-child {
+  margin-bottom: 0;
+}
+main .deck-tier-group > summary {
+  padding: var(--space-3) 0;
+}
+main .deck-tier-group[open] > summary {
+  margin-bottom: var(--space-2);
+}
+main .deck-card-choice {
+  min-height: 44px;
+}
+main .deck-card p {
+  margin: var(--space-2) 0 0;
+}
+main .deck-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+}
+main .deck-bottom button {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+main .run-bar {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+}
+main .stats-grid,
+main .chart-grid,
+main .matchup-cards {
+  gap: var(--space-4);
+  margin: var(--space-4) 0;
+}
+main .matchup-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+main .stats-grid > div,
+main .chart,
+main .matchup-cards > div {
+  padding: var(--space-4);
+  min-width: 0;
+}
+main .stats-grid > div > span {
+  margin-bottom: var(--space-2);
+}
+main .history-session {
+  margin: var(--space-3) 0;
+}
+main .history-session-head {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+main .history-session-body {
+  padding: 0 var(--space-4) var(--space-3);
+}
+main .history-session-footer {
+  padding: 0 var(--space-4);
+  gap: var(--space-3);
+}
+main .history-session-footer > .provenance {
+  padding: var(--space-3) 0;
+  margin: 0;
+  background: transparent;
+}
+main .history-session-footer > a {
+  padding: var(--space-3) 0;
+}
+main .history-session-footer .provenance > summary {
+  padding: 0;
+}
+main .session-actions {
+  margin: 0;
+}
+main .session-actions > summary {
+  min-height: 40px;
+  padding: var(--space-2);
+}
+main .session-actions > .actions {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+}
+main .replay-toolbar {
+  margin: var(--space-4) 0;
+  padding: var(--space-3);
+  gap: var(--space-2);
+}
+main .replay-toolbar > small {
+  flex-basis: 100%;
+  margin: 0;
+}
+main .checkpoint {
+  margin: var(--space-4) 0 var(--space-3);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+main .player-board {
+  min-width: 0;
+  padding: var(--space-4);
+}
+main .player-head {
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+main .board-grid {
+  gap: var(--space-4);
+}
+main .player-board .permanent {
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+}
+main .player-board .permanent > summary {
+  padding: 0;
+}
+main .permanents > p {
+  grid-column: 1 / -1;
+}
+main .log-navigation {
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  flex-wrap: wrap;
+}
+main .pagination {
+  gap: var(--space-4);
+  margin: var(--space-5) 0;
+}
+main .empty {
+  padding: 32px var(--space-4);
+  margin: var(--space-4) 0;
+}
+
+/* Workshop rows have one clear quantity/name/remove rhythm and no double rules. */
+.workshop-grid {
+  align-items: start;
+  gap: var(--space-4);
+}
+.workshop-grid > .panel {
+  margin: 0;
+}
+.workshop-page .workshop-start-panel > details {
+  margin-bottom: 0;
+}
+.workshop-page .workshop-editor > label {
+  margin-bottom: var(--space-4);
+}
+.workshop-page .workshop-editor > h2 {
+  margin-bottom: var(--space-3);
+}
+.workshop-page .workshop-editor > h3 {
+  margin: var(--space-5) 0 var(--space-2);
+}
+.workshop-page .workshop-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 32px;
+  align-items: start;
+  gap: var(--space-2);
+  padding: 6px 0;
+  border: 0;
+}
+.workshop-page .workshop-card > input[type="number"] {
+  width: 56px;
+  min-height: 32px;
+  height: 32px;
+  padding: 5px 6px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.workshop-page .workshop-card > details {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.workshop-page .workshop-card > details > summary {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 32px;
+  padding: 6px var(--space-2);
+  border-radius: 4px;
+  margin: 0;
+}
+.workshop-page .workshop-card-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workshop-page .workshop-card-mana {
+  margin-left: auto;
+  max-width: 48%;
+  flex-shrink: 0;
+  text-align: right;
+}
+.workshop-page .workshop-card > details > summary::before {
+  content: "›";
+  color: var(--muted);
+  flex: none;
+}
+.workshop-page .workshop-card > details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.workshop-page .workshop-card > details > summary:hover {
+  background: var(--theme-card-selected);
+}
+.workshop-page .workshop-card > details > summary > small {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.workshop-page .workshop-card > details > p {
+  margin: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+}
+.workshop-page .workshop-card > button {
+  min-width: 32px;
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0;
+  line-height: 1;
+  font-size: 18px;
+}
+.workshop-page .workshop-search-form {
+  gap: var(--space-2);
+}
+.workshop-page .workshop-search-form > label {
+  min-width: 0;
+}
+.workshop-page .workshop-search-panel .search-card {
+  padding: var(--space-3) 0;
+  border: 0;
+}
+.workshop-page .search-card > details {
+  margin: 0;
+}
+.workshop-page .search-card .actions {
+  margin-top: var(--space-2);
+}
+.workshop-page .workshop-match-actions {
+  gap: var(--space-3);
+}
+.workshop-page .workshop-match-actions > :is(button, .button) {
+  min-height: var(--control-height);
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
+/* The form grid supplies the gap below the opponent field. */
+.workshop-page .config-grid #workshop-opponent {
+  margin: 0;
+}
+.workshop-page .workshop-start-panel textarea {
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+@media (max-width: 1050px) {
+  :root {
+    --page-gutter: 24px;
+  }
+}
+@media (max-width: 700px) {
+  :root {
+    --page-gutter: 18px;
+  }
+  main {
+    padding-top: 24px;
+    padding-bottom: 32px;
+  }
+  .page-header-row {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .page-header-actions {
+    padding-top: 0;
+  }
+  main .toolbar {
+    gap: var(--space-3);
+  }
+  main .toolbar > div,
+  main .toolbar > label {
+    min-width: 100%;
+  }
+  main .section-head {
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  main .history-session-footer {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  main .log-navigation {
+    gap: var(--space-1);
+  }
+  main .log-navigation a {
+    padding: var(--space-2);
+  }
+  .workshop-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workshop-page .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  main .matchup-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  main .player-board .permanents {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workshop-page .workshop-search-form > label {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+}
+
+/* Compact actions align with their neighboring fields. */
+main .toolbar > :is(button, .button),
+.page-header-actions > :is(button, .button) {
+  min-height: 40px;
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
+main .actions > :is(button, .button) {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+main .config-grid input:not([type="checkbox"]) {
+  margin: 0;
+}
+main .stats-grid strong > small,
+main .history-results-count strong > small {
+  display: inline;
+}
+.workshop-page .workshop-card > details > summary {
+  list-style: none;
+}
+.workshop-page .workshop-card > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+main .deck-tier-group {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+main .deck-tier-group > summary {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  text-align: left;
+}
+main .card-row > summary::before {
+  content: "›";
+  color: var(--muted);
+  flex: none;
+}
+main .card-row[open] > summary::before {
+  transform: rotate(90deg);
+}
+.workshop-page > .panel {
+  padding: var(--panel-padding);
+}
+
+main
+  :is(.toolbar, .config-grid)
+  > label:has(
+    > input:where(:not([type="checkbox"], [type="radio"], [type="range"]))
+  ) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Every read-only and editable Deck List uses the same section rhythm. */
+main .deck-list {
+  display: grid;
+  gap: var(--space-4);
+}
+main .deck-list-group {
+  min-width: 0;
+}
+main .deck-list-group > .deck-list-group-heading {
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+main .deck-list-group-heading > span {
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+@media (min-width: 1200px) {
+  .library-deck .deck-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+}

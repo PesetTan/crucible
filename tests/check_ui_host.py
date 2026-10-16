@@ -36,9 +36,9 @@ def main():
  parser=argparse.ArgumentParser();parser.add_argument('--runtime',required=True,type=Path);parser.add_argument('--output',type=Path);args=parser.parse_args();runtime=args.runtime.resolve();server=ThreadingHTTPServer(('127.0.0.1',0),Backend);threading.Thread(target=server.serve_forever,daemon=True).start();backend=f'http://127.0.0.1:{server.server_port}';ui_port=port();ui=f'http://127.0.0.1:{ui_port}';checks=[]
  with tempfile.TemporaryDirectory(prefix='crucible-ui-check-') as temp:
   root=Path(temp)/'projects/crucible';(root/'docs/specs').mkdir(parents=True)
-  env=dict(os.environ,MTG_PROJECT_ROOT=str(root),MTG_PORT=str(ui_port),MTG_BACKEND_URL=backend+'/',MTG_UI_STATE_ROOT=str(root/'ui-state'),ASPNETCORE_ENVIRONMENT='Production')
+  env=dict(os.environ,MTG_PROJECT_ROOT=str(root),MTG_PORT=str(ui_port),MTG_BACKEND_URL=backend+'/',MTG_UI_STATE_ROOT=str(root/'ui-state'),ASPNETCORE_ENVIRONMENT='Production',CRUCIBLE_HOST_OWNER='fixture-owner-'+('a'*48))
   with open(Path(temp)/'ui.log','wb') as log:
-   child=subprocess.Popen([str(runtime/'CrucibleUi')],cwd=runtime,env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
+   child=subprocess.Popen([str(runtime/('CrucibleUi.exe' if os.name=='nt' else 'CrucibleUi'))],cwd=runtime,env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
   try:
    deadline=time.monotonic()+20
    while True:
@@ -66,8 +66,12 @@ def main():
    assert call(ui,'/api/v1/missing')[0]==404;assert call(ui,'/api/v1/presentation/build-names?engine=../private&bridge=abc')[0]==422;checks.append('API 404 and presentation input bounds')
    catalog=json.loads(call(ui,'/api/v1/presentation/catalog')[1]);assert catalog['maximumDecks']==10 and catalog['modes'] and not catalog['decks'];assert 'auras-v001' in catalog['currentProfiles'] and catalog['pilotLabels']['auras-v001']=='Ajani · Auras v001';checks.append('source-generated presentation metadata and full current pilot catalog')
    server.shutdown();server.server_close();assert call(ui,'/api/v1/library-state')[0]==503;checks.append('backend outage remains recoverable')
+   assert call(ui,'/api/v1/host/shutdown','POST',headers={'X-Instance-Token':token,'X-Crucible-Owner':'wrong'})[0]==403
+   assert child.poll() is None
+   assert call(ui,'/api/v1/host/shutdown','POST',headers={'X-Instance-Token':token,'X-Crucible-Owner':env['CRUCIBLE_HOST_OWNER']})[0]==202
+   child.wait(timeout=15);assert child.returncode==0;checks.append('launcher ownership credential and graceful native shutdown')
   finally:
-   child.terminate();child.wait(timeout=10)
+   if child.poll() is None:child.terminate();child.wait(timeout=10)
    if args.output:
     args.output.mkdir(parents=True,exist_ok=True);(args.output/'ui-host-checks.log').write_bytes((Path(temp)/'ui.log').read_bytes())
  result={'checks':checks,'passed':True}

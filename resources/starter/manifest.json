@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "catalogDate": "2026-10-11",
+  "sha256": "08ccd6bb2db5a47fa3b0cf059b01fe61d18eaa183bd7acf0afc2b3fa4e5d99f4",
+  "rows": {
+    "cards": 9507,
+    "card_catalog": 27067,
+    "untapped_decks": 82,
+    "untapped_deck_cards": 1548,
+    "decks": 0,
+    "deck_cards": 0
+  },
+  "snapshots": [
+    "standard-bo1-bronze-platinum-2026-10-11",
+    "standard-bo1-tier-representatives-2026-10-11"
+  ],
+  "provenance": "Card metadata from the local Arena catalog; public deck snapshots retain source URLs and dated published rates. No ownership is inferred. Custom annotations are excluded.",
+  "generator": "scripts/export-starter-catalog.py"
+}

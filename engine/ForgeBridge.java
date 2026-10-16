@@ -32,9 +32,11 @@ import java.util.*;
 public final class ForgeBridge {
     static final String PROTOCOL_REANIMATOR = "reanimator-v012";
     // Pure protocol engine: these records deliberately contain no Forge objects.
-    enum CandidateFeature { DEFENSIVE, DEFENSIVE_DISCARD, COMBO_DISCARD, DEVELOPMENT, COMPLETE_COMBO, COUNTER_EXPOSED, GRAVEYARD_EXPOSED }
+    enum CandidateFeature { DEFENSIVE, DEFENSIVE_DISCARD, COMBO_DISCARD, DEVELOPMENT, COMPLETE_COMBO, COUNTER_EXPOSED, GRAVEYARD_EXPOSED,
+        BOARD_PRESENCE, LOW_COMMITMENT, FINISHING_DAMAGE, DAMAGE_PRESSURE }
     record ProtocolSettings(int lowLife, int maximumDelayTurns, int handSearchLimit) {}
     static final ProtocolSettings PROTOCOL_SETTINGS = new ProtocolSettings(8, 1, 24);
+    static final int PROTOCOL_LOW_COMMITMENT_MANA = 2;
     record DecisionContext(boolean counterRisk, boolean graveyardInterference, boolean urgentPressure,
             boolean comboOpponent, int ownTurn, List<String> evidence, boolean mayDelay) {
         DecisionContext { evidence=List.copyOf(evidence); }
@@ -51,7 +53,7 @@ public final class ForgeBridge {
     }
     record ProtocolEvaluation(List<String> activeProtocols, List<Integer> rank) {}
     static final class EngagementProtocols {
-        static final String VERSION="engagement-protocols-v1";
+        static final String VERSION="engagement-protocols-v2";
         static final List<ProtocolDefinition> REANIMATOR=List.of(
             new ProtocolDefinition("standard-execution","Standard Execution","Always available",
                 "Use the pilot's existing priorities for supported choices.",0,c->true,Map.of(),0),
@@ -68,7 +70,30 @@ public final class ForgeBridge {
             new ProtocolDefinition("graveyard-security","Graveyard Security","Relevant graveyard interference is visible",
                 "Avoid optional exposed graveyard setup and prefer independent development.",40,
                 DecisionContext::graveyardInterference,Map.of(CandidateFeature.GRAVEYARD_EXPOSED,-1),0));
-        static final Map<String,List<ProtocolDefinition>> REGISTRY=Map.of(PROTOCOL_REANIMATOR,REANIMATOR);
+        static final ProtocolDefinition ORDINARY=new ProtocolDefinition("standard-execution","Standard Execution","Always available",
+            "Retain the pilot's reviewed priorities and inherited Forge choices outside supported adapters.",0,c->true,Map.of(),0);
+        static final ProtocolDefinition BODY=new ProtocolDefinition("board-presence","Board Presence","Visible board pressure meets the shared life/power threshold",
+            "Prefer a reviewed creature permanent among legal after-pass development choices. A body is not a prediction of a successful block.",30,
+            DecisionContext::urgentPressure,Map.of(CandidateFeature.BOARD_PRESENCE,1),0);
+        static final ProtocolDefinition TEMPO=new ProtocolDefinition("public-counterplay","Public Counterplay","An observed counter route has compatible untapped basic-land mana; no urgent pressure or public combo race",
+            "Prefer reviewed development costing at most "+PROTOCOL_LOW_COMMITMENT_MANA+" mana. Do not defer or replace an action already selected by Forge.",10,
+            c->c.counterRisk()&&!c.urgentPressure()&&!c.comboOpponent(),Map.of(CandidateFeature.LOW_COMMITMENT,1),0);
+        static final ProtocolDefinition PRESSURE=new ProtocolDefinition("public-race","Public Race","Public actions identify a combo opponent",
+            "Prefer reviewed creature development to add a body; combat and combo execution remain Forge decisions.",20,
+            DecisionContext::comboOpponent,Map.of(CandidateFeature.BOARD_PRESENCE,1),0);
+        static final ProtocolDefinition FINISH=new ProtocolDefinition("close-with-burn","Close with Burn","Reviewed opponent-only burn is legally available after Forge passes",
+            "Prefer damage predicted to reach an opponent's current life, then greater predicted damage. Forge resolves prevention and outcomes.",40,
+            c->true,Map.of(CandidateFeature.FINISHING_DAMAGE,2,CandidateFeature.DAMAGE_PRESSURE,1),0);
+        static final Map<String,List<ProtocolDefinition>> REGISTRY=registry();
+        static Map<String,List<ProtocolDefinition>> registry(){
+            Map<String,List<ProtocolDefinition>> sets=new LinkedHashMap<>();sets.put(PROTOCOL_REANIMATOR,REANIMATOR);
+            sets.put("forge-default",List.of(ORDINARY));
+            sets.put(AGGRO,List.of(ORDINARY,FINISH));
+            sets.put(CONTROL,List.of(ORDINARY,TEMPO,PRESSURE,BODY));
+            SUBTYPE_PARENTS.keySet().stream().sorted().forEach(profile->sets.put(profile,
+                usesAggro(profile)?List.of(ORDINARY,TEMPO,PRESSURE,BODY,FINISH):List.of(ORDINARY,TEMPO,PRESSURE,BODY)));
+            return Collections.unmodifiableMap(sets);
+        }
         static List<ProtocolDefinition> definitions(String profile) { return REGISTRY.getOrDefault(profile,List.of()); }
         static int delayLimit(List<ProtocolDefinition> definitions,DecisionContext context){return definitions.stream()
             .filter(d->d.activation().test(context)).mapToInt(ProtocolDefinition::maximumDelayTurns).max().orElse(0);}
@@ -90,12 +115,18 @@ public final class ForgeBridge {
             boolean mayDefer(int card,int turn,int limit){return limit>0&&(!deferredAt.containsKey(card)||turn-deferredAt.get(card)<limit);}
             void deferred(int card,int turn){deferredAt.putIfAbsent(card,turn);}
         }
-        static Map<String,Object> catalog() {
-            var definitions=REANIMATOR.stream().map(d->map("id",d.id(),"name",d.name(),"condition",d.condition(),
+        static List<Map<String,Object>> describe(List<ProtocolDefinition> definitions) {
+            return definitions.stream().map(d->map("id",d.id(),"name",d.name(),"condition",d.condition(),
                 "response",d.response(),"priority",d.priority(),"maximumDelayTurns",d.maximumDelayTurns(),
                 "preferences",Arrays.stream(CandidateFeature.values()).filter(d.preferences()::containsKey)
                     .collect(java.util.stream.Collectors.toMap(Enum::name,d.preferences()::get,(a,b)->a,LinkedHashMap::new)))).toList();
-            var catalog=map("version",VERSION,"profile",PROTOCOL_REANIMATOR,"settings",PROTOCOL_SETTINGS,"definitions",definitions);
+        }
+        static Map<String,Object> catalog() {
+            Map<String,Object> sets=new LinkedHashMap<>();REGISTRY.forEach((profile,definitions)->sets.put(profile,
+                map("profile",profile,"parent",SUBTYPE_PARENTS.getOrDefault(profile,"forge-default"),"activation",profile.equals(PROTOCOL_REANIMATOR)?"existing-opt-in-mode":profile.equals("forge-default")?"baseline-only":"optimizer-policy",
+                    "definitions",describe(definitions))));
+            var catalog=map("version",VERSION,"profile",PROTOCOL_REANIMATOR,"settings",map("lowLife",PROTOCOL_SETTINGS.lowLife(),"maximumDelayTurns",PROTOCOL_SETTINGS.maximumDelayTurns(),
+                "handSearchLimit",PROTOCOL_SETTINGS.handSearchLimit(),"lowCommitmentMana",PROTOCOL_LOW_COMMITMENT_MANA),"definitions",describe(REANIMATOR),"sets",sets);
             try{catalog.put("hash",HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.toJson(catalog).getBytes(StandardCharsets.UTF_8))));}
             catch(Exception failure){throw new IllegalStateException(failure);}
             return catalog;
@@ -295,7 +326,7 @@ public final class ForgeBridge {
             "options",options,"selected",selected,"opponentClass",estimate.kind,"opponentConfidence",estimate.confidence,
             "visibleEvidence",estimate.evidence,"reason",reason);
         record.putAll(context);
-        if(profile.equals(PROTOCOL_REANIMATOR)){
+        if(profile.equals(PROTOCOL_REANIMATOR)||optimizerPoliciesByPlayer.containsKey(player)&&!EngagementProtocols.definitions(profile).isEmpty()){
             record.put("activeProtocols",activeProtocolsByPlayer.getOrDefault(player,List.of("standard-execution")));
             record.put("protocolSetVersion",EngagementProtocols.VERSION);
         }
@@ -309,6 +340,24 @@ public final class ForgeBridge {
     static final Set<String> OPTIMIZER_PRIORITY_PATHS=Set.of("pilot.priority","pilotCopyPriority","pilotCastCopyPriority",
         "pilotDuplicateHandPriority","pilotDuplicatePriority","control.keepPriority","control.graveyardExilePriority");
     static boolean optimizerEnabled(Player player){return optimizerPoliciesByPlayer.containsKey(player.getName());}
+    static boolean protocolsEnabled(Player player,String profile){return profile.equals(PROTOCOL_REANIMATOR)
+        ||optimizerEnabled(player)&&!profile.equals("forge-default")&&!EngagementProtocols.definitions(profile).isEmpty();}
+    static DecisionContext developmentContext(Game game,Player player){
+        DecisionContext creatures=protocolObservation(game,player,true),noncreatures=protocolObservation(game,player,false);
+        List<String> evidence=new ArrayList<>(creatures.evidence());evidence.addAll(noncreatures.evidence());
+        return new DecisionContext(creatures.counterRisk()||noncreatures.counterRisk(),creatures.graveyardInterference(),creatures.urgentPressure(),
+            creatures.comboOpponent(),creatures.ownTurn(),evidence.stream().distinct().toList());
+    }
+    static ProtocolEvaluation developmentRank(DecisionContext context,Player player,String profile,Card card,int score){
+        var active=EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),context,new CandidateFeatures(0,0,Set.of())).activeProtocols();
+        if(!active.equals(activeProtocolsByPlayer.put(player.getName(),active)))
+            emit(map("kind","protocol_state","player",player.getName(),"pilotProfile",profile,"activeProtocols",active,
+                "protocolSetVersion",EngagementProtocols.VERSION,"visibleEvidence",context.evidence(),"reason","Public observations activate the pilot's declared protocol set."));
+        Set<CandidateFeature> flags=EnumSet.of(CandidateFeature.DEVELOPMENT);
+        if(card.isCreature())flags.add(CandidateFeature.BOARD_PRESENCE);
+        if(card.getCMC()<=PROTOCOL_LOW_COMMITMENT_MANA)flags.add(CandidateFeature.LOW_COMMITMENT);
+        return EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),context,new CandidateFeatures(card.getId(),score,flags));
+    }
     static void validateOptimizerPolicy(JsonObject policy,String profile) {
         if(!policy.has("version")||policy.get("version").getAsInt()!=1||!policy.has("id")
             ||!policy.get("id").getAsString().matches("[a-f0-9]{64}")||!policy.has("profile")
@@ -471,49 +520,77 @@ public final class ForgeBridge {
     static SpellAbility aggroBurnOnPass(Game g,Player p,List<SpellAbility> baseline,String profile) {
         if(baseline!=null&&!baseline.isEmpty()||!g.getStack().isEmpty()||!g.getPhaseHandler().isPlayerTurn(p)
             ||!g.getPhaseHandler().getPhase().isMain())return null;
+        SpellAbility best=null;ProtocolEvaluation bestRank=null;List<Object> scores=new ArrayList<>();
         for(Card card:p.getCardsIn(ZoneType.Hand))for(SpellAbility sa:card.getSpellAbilities()) {
             if(!aggroBurnShape(sa))continue;
             sa.setActivatingPlayer(p);
             if(!sa.canPlay()||!sa.canCastTiming(p)||!ComputerUtilCost.canPayCost(sa,p,false))continue;
             int damage=Integer.parseInt(sa.getParam("NumDmg"));
-            boolean useful=false;
+            boolean useful=false,finishing=false;int predicted=0;
             for(Player opponent:p.getOpponents())if(opponent.canLoseLife()
-                &&ComputerUtilCombat.predictDamageTo(opponent,damage,card,false)>0)useful=true;
+                &&ComputerUtilCombat.predictDamageTo(opponent,damage,card,false)>0){
+                    useful=true;int value=ComputerUtilCombat.predictDamageTo(opponent,damage,card,false);
+                    predicted=Math.max(predicted,value);if(value>=opponent.getLife())finishing=true;
+                }
             if(!useful)continue;
+            if(protocolsEnabled(p,profile)){
+                DecisionContext context=protocolObservation(g,p,false);
+                Set<CandidateFeature> flags=EnumSet.of(CandidateFeature.DAMAGE_PRESSURE);if(finishing)flags.add(CandidateFeature.FINISHING_DAMAGE);
+                var rank=EngagementProtocols.evaluate(EngagementProtocols.definitions(profile),context,new CandidateFeatures(card.getId(),predicted,flags));
+                activeProtocolsByPlayer.put(p.getName(),rank.activeProtocols());
+                scores.add(map("id",card.getId(),"rank",rank.rank(),"features",flags));
+                if(bestRank==null||EngagementProtocols.compare(rank,bestRank)>0){best=sa;bestRank=rank;}
+                continue;
+            }
             decision(p.getName(),profile,"opponent-burn-on-pass",List.of("Forge pass",sa.getDescription()),sa.getDescription(),estimateOpponent(g,p),
                 "Spend available mana on reviewed opponent-only damage after Forge declines further main-phase development.",
                 map("source",card.getName(),"sourceId",card.getId(),"abilityApi",str(sa.getApi()),"damage",damage,"phase",str(g.getPhaseHandler().getPhase())));
             return sa;
         }
-        return null;
+        if(best!=null)decision(p.getName(),profile,"protocol-burn-on-pass",scores.stream().map(ForgeBridge.json::toJson).toList(),best.getDescription(),estimateOpponent(g,p),
+            "Shared declared protocols rank only reviewed, payable opponent-only burn after Forge passes.",map("baseline","Forge pass","source",best.getHostCard().getName(),"selectedId",best.getHostCard().getId(),"candidateScores",scores));
+        return best;
     }
     // Bounded own-hand development. Printed metadata is inert for cloned/targeted/variable-cost shapes.
     static boolean subtypeDevelopmentShape(SpellAbility sa,String profile) {
-        if(!SUBTYPE_PARENTS.containsKey(profile)||sa==null||sa.getHostCard()==null||!sa.isSpell()
+        if(sa==null||sa.getHostCard()==null||!sa.isSpell()
             ||sa.getHostCard().isCloned()||sa.usesTargeting()||sa.getSubAbility()!=null
             ||sa.getPayCosts()==null||!sa.getPayCosts().isOnlyManaCost()
             ||sa.getHostCard().getManaCost().toString().contains("X")
             ||(sa.getApi()!=ApiType.PermanentCreature&&sa.getApi()!=ApiType.PermanentNoncreature))return false;
-        return number(object(object(attributes(sa.getHostCard()),"subtypePilot"),"developOnPass"),profile,0)>0;
+        return developmentPriority(sa.getHostCard(),profile)>0;
+    }
+    static int developmentPriority(Card card,String profile){
+        JsonObject priorities=object(object(attributes(card),"subtypePilot"),"developOnPass");
+        if(SUBTYPE_PARENTS.containsKey(profile))return number(priorities,profile,0);
+        if(profile.equals(CONTROL)&&optimizerEnabled(card.getController()))
+            return SUBTYPE_PARENTS.entrySet().stream().filter(e->e.getValue().equals(profile)).mapToInt(e->number(priorities,e.getKey(),0)).max().orElse(0);
+        return 0;
     }
     static SpellAbility subtypeDevelopmentOnPass(Game g,Player p,List<SpellAbility> baseline,String profile) {
-        if(!SUBTYPE_PARENTS.containsKey(profile)||baseline!=null&&!baseline.isEmpty()||!g.getStack().isEmpty()
+        if(!(SUBTYPE_PARENTS.containsKey(profile)||optimizerEnabled(p)&&profile.equals(CONTROL))||baseline!=null&&!baseline.isEmpty()||!g.getStack().isEmpty()
             ||!g.getPhaseHandler().isPlayerTurn(p)||!g.getPhaseHandler().getPhase().isMain()
-            ||p.getCardsIn(ZoneType.Hand).size()>24)return null;
-        SpellAbility best=null;int bestScore=0;List<Object> scores=new ArrayList<>();
+            ||p.getCardsIn(ZoneType.Hand).size()>PROTOCOL_SETTINGS.handSearchLimit())return null;
+        SpellAbility best=null;int bestScore=0;ProtocolEvaluation bestRank=null;List<Object> scores=new ArrayList<>();
+        // Every candidate must use the same active protocol vector, including restricted counter routes.
+        DecisionContext context=protocolsEnabled(p,profile)?developmentContext(g,p):null;
         for(Card card:p.getCardsIn(ZoneType.Hand))for(SpellAbility sa:card.getSpellAbilities()) {
             if(!subtypeDevelopmentShape(sa,profile))continue;
             // Never replace a visible same-name legendary permanent merely to spend mana.
             if(card.getType().isLegendary()&&p.getCardsIn(ZoneType.Battlefield).stream().anyMatch(c->c.getName().equals(card.getName())))continue;
             sa.setActivatingPlayer(p);
             if(!sa.canPlay()||!sa.canCastTiming(p)||!ComputerUtilCost.canPayCost(sa,p,false))continue;
-            int score=number(object(object(attributes(card),"subtypePilot"),"developOnPass"),profile,0);
+            int score=developmentPriority(card,profile);
             scores.add(map("id",card.getId(),"name",card.getName(),"score",score,"abilityApi",str(sa.getApi())));
-            if(score>bestScore){best=sa;bestScore=score;}
+            if(protocolsEnabled(p,profile)){
+                var rank=developmentRank(context,p,profile,card,score);
+                scores.set(scores.size()-1,map("id",card.getId(),"name",card.getName(),"score",score,"rank",rank.rank(),"abilityApi",str(sa.getApi())));
+                if(bestRank==null||EngagementProtocols.compare(rank,bestRank)>0){best=sa;bestScore=score;bestRank=rank;}
+            }else if(score>bestScore){best=sa;bestScore=score;}
         }
         if(best!=null)decision(p.getName(),profile,"subtype-development-on-pass",
             scores.stream().map(row->json.toJson(row)).toList(),best.getDescription(),estimateOpponent(g,p),
-            "Develop the highest reviewed subtype permanent from own hand after Forge passes; engine timing, mana payment and resolution still apply.",
+            protocolsEnabled(p,profile)?"Shared declared protocols rank reviewed development after Forge passes; engine timing, payment and resolution still apply.":"Develop the highest reviewed subtype permanent from own hand after Forge passes; engine timing, mana payment and resolution still apply.",
             map("source",best.getHostCard().getName(),"sourceId",best.getHostCard().getId(),"selectedId",best.getHostCard().getId(),
                 "abilityApi",str(best.getApi()),"phase",str(g.getPhaseHandler().getPhase()),"baseline","Forge pass","candidateScores",scores));
         return best;

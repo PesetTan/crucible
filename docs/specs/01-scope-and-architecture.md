@@ -14,16 +14,16 @@ Include immutable deck imports; coverage and validation status; automated pilots
 
 Exclude deck optimization, collection-aware crafting, automated database refreshes, public hosting, Arena account automation, multiplayer formats, sideboarding between games, machine-learning training, and live language-model decisions. Preserve sideboards as provenance, but activate no between-game sideboarding. Any card that accesses outside-the-game cards requires a separately validated Arena Bo1 rule and accessible-card policy before that deck can run.
 
-## Proposed component choices
+## Component choices
 
-| Component | Proposed implementation | Responsibility |
+| Component | Implementation | Responsibility |
 |---|---|---|
-| Web client | C# Blazor Server | Deck selection, runs, charts, replay |
+| Desktop/browser client | Svelte + TypeScript, native .NET UI host, Tauri desktop shell; Blazor retained for rollback | Deck selection, runs, charts, replay |
 | Local service | C# ASP.NET Core on .NET 10 | Import, preflight, scheduling, persistence, aggregation, local HTTP API |
 | Engine adapter | Java around a pinned Forge build | Full rules execution, pilot integration, structured events |
 | App storage | SQLite plus compressed replay files | Immutable manifests, run history, summaries, detailed evidence |
 
-The implemented app runs its simulation service (`Crucible.Service`) and Blazor UI (`DeckTester`) as separate processes sharing `Crucible.Core`. The macOS Monitor packages the backend as Native AOT; shell scripts use JIT builds. The service owns SQLite, Java engines, replays, and scheduling on loopback port 5079; the UI host uses `IUiBackend` and service APIs on port 5077 and may expose that UI to an iPad on the local network. Session log pages fetch structured API records through this boundary. Restarting only the UI preserves an active simulation. See [host separation](../host-separation.md) for launch commands and recovery details.
+The implemented app runs its simulation service (`Crucible.Service`) and Svelte frontend (`Crucible.Ui`, served by `Crucible.UiHost`) as separate processes, with shared backend contracts in `Crucible.Core`. Native desktop builds use a Tauri WebView shell; Blazor `DeckTester` remains a rollback interface. The macOS Monitor packages Native AOT hosts; shell scripts also support JIT development hosts. The service owns SQLite, Java engines, replays, and scheduling on loopback port 5079; the UI host serves assets and a same-origin API proxy on port 5077 and may expose the UI on the configured private network. Session log pages fetch structured API records through this boundary. Restarting only the UI preserves an active simulation. See [host separation](../host-separation.md) for launch commands and recovery details.
 
 The user selected C# when approving implementation on October 11, 2026; this supersedes the earlier Python/React proposal. The existing Forge engine remains Java and uses a minimal interop shim. Record compatible runtime and package versions in lockfiles. See [implementation status](../implementation-status.md) for actual capability and validation limits; specifications are not proof that their gates have passed.
 

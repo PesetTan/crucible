@@ -13,9 +13,9 @@ The interface is Svelte + TypeScript (`Crucible.Ui`), served by a small Native A
 | **macOS 13+ · Apple Silicon (arm64)** | Supported. Native desktop, self-hosted browser UI, simulation backend, and Crucible Monitor have been built and tested locally. |
 | **macOS 13+ · Intel (x64)** | Source-build target exists, but has not been validated on an Intel Mac. |
 | **Linux · x64 / arm64** | Experimental self-hosting. Automatic Forge/Java setup supports Linux; the current UI/backend combination and desktop packaging have not been validated there. |
-| **Windows** | Not yet supported. Some platform-specific source paths exist, but automatic engine setup, desktop packaging, and end-to-end operation are not validated. |
+| **Windows 11 · x64** | Desktop beta implementation and Windows CI pipeline are available. The first Windows installer/installed-app validation run is pending; human Windows 11 verification remains required. See [Windows beta](docs/windows-beta.md). |
 
-Phones, tablets, and other computers can use the self-hosted browser UI over a private network; simulations run on the host computer. There is no native iOS/iPadOS or Android app. Crucible Monitor is macOS-only. Current desktop packaging produces a local macOS build; Windows and Linux desktop releases are not provided. See [build prerequisites and platform limits](docs/svelte-desktop.md#build-and-run).
+Phones, tablets, and other computers can use the self-hosted browser UI over a private network; simulations run on the host computer. There is no native iOS/iPadOS or Android app. Crucible Monitor is macOS-only. Desktop packaging produces a local macOS build and has a Windows beta installer workflow; Linux desktop releases are not provided. See [build prerequisites and platform limits](docs/svelte-desktop.md#build-and-run).
 
 ## Screenshots
 
@@ -37,7 +37,9 @@ Phones, tablets, and other computers can use the self-hosted browser UI over a p
 
 ## Start
 
-You need the .NET 10 SDK selected by [`global.json`](global.json), Node 22.12+ for building the interface, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS and Linux and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A clone alone does not include the local card catalog or account data.
+You need the .NET 10 SDK selected by [`global.json`](global.json), Node 22.12+ for building the interface, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS, Linux, and the Windows desktop beta and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A development clone alone does not include your local card catalog or account data. Windows desktop packages include a separate clean starter catalog; see [Windows setup and validation](docs/windows-beta.md).
+
+The owner can obtain a private catalog snapshot from [static-data](docs/static-data.md), including Codex Cloud setup through `MTG_CARD_DB`. The existing local catalog stays at its current path.
 
 From the repository root, run setup once, then start the service:
 

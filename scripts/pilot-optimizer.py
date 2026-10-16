@@ -38,6 +38,13 @@ def main():
                 import importlib.util
                 from pilot_optimizer import digest, no_links
                 experiment=backend.exp(request["id"])
+                if sys.argv[2]=="promote":
+                    from pilot_optimizer import catalog_publication_supported
+                    candidate=backend.candidate(request["id"],request["candidateId"])
+                    catalog_path=backend.root/"data/engine-bundles"/backend.frozen(request["id"])["bundleId"]/"protocol-catalog.json"
+                    baseline_catalog=json.loads(catalog_path.read_text()) if catalog_path.exists() else None
+                    if not catalog_publication_supported(experiment,candidate,baseline_catalog):
+                        raise ValueError("This frozen experiment predates catalog-aware publication. Its publisher would retain a stale catalog. Preserve its evidence and create a catalog-aware experiment before promotion.")
                 snapshot=no_links(backend.folder(request["id"])/"backend.py")
                 if digest(snapshot)!=experiment["evidenceHashes"]["backend.py"]:
                     raise ValueError("Frozen backend checksum mismatch")

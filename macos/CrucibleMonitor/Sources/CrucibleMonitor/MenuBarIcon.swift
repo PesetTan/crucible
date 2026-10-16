@@ -2,7 +2,7 @@ import AppKit
 
 /// The brand flame carries health status; the muted bowl keeps the Crucible silhouette recognizable.
 enum MenuBarIcon {
-    static func image(healthy: Bool, brandingPath: String? = nil) -> NSImage {
+    static func image(healthy: Bool, stopped: Bool, brandingPath: String? = nil) -> NSImage {
         let yellow = frontendYellow(at: brandingPath)
         // Draw as one image: MenuBarExtra does not reliably display arbitrary Shape views in its label.
         // The drawing handler resolves semantic colors in the menu bar's current drawing appearance.
@@ -15,13 +15,13 @@ enum MenuBarIcon {
             context.setFillColor(NSColor.labelColor.withAlphaComponent(0.35).cgColor)
             context.fillPath()
             context.addPath(flames)
-            context.setFillColor((healthy ? yellow : NSColor.systemOrange).cgColor)
+            context.setFillColor((stopped ? NSColor.secondaryLabelColor : healthy ? yellow : NSColor.systemOrange).cgColor)
             context.fillPath()
             context.restoreGState()
             return true
         }
         image.isTemplate = false // Preserve the flame color and the bowl's reduced opacity.
-        image.accessibilityDescription = healthy ? "Crucible · Healthy" : "Crucible · Needs Attention"
+        image.accessibilityDescription = stopped ? "Crucible · Stopped" : healthy ? "Crucible · Healthy" : "Crucible · Needs Attention"
         return image
     }
 

@@ -1,6 +1,6 @@
 # Changing the logo and colors
 
-Edit `src/DeckTester/branding.json`. It is the central palette for the interface; layout, spacing, and typography stay in `wwwroot/app.css`, `wwwroot/theme-polish.css`, and component styles.
+Edit `src/DeckTester/branding.json`. It is the central palette for the interface; the active Svelte UI reuses its theme tokens and compatibility styles, then applies shared layout in `src/Crucible.Ui/src/spacing.css` and `PageHeader.svelte`. See [visual design and Deck Lists](specs/11-visual-design-and-deck-lists.md) for the spacing and content-presentation contract. Legacy Blazor styles remain in `wwwroot/app.css`, `wwwroot/theme-polish.css`, and component styles.
 
 The `Branding` object controls:
 

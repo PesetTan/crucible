@@ -1,0 +1,18 @@
+@if(Catalog is { Definitions.Count: > 0 } catalog){
+    <ol class="protocol-cards" aria-label="Engagement Protocols in priority order">
+        @{var protocols=catalog.ForProfile(Profile).OrderByDescending(d=>d.Priority).ToList();}
+        @for(var index=0;index<protocols.Count;index++){
+            var protocol=protocols[index];
+            <li class="protocol-card" @key="protocol.Id">
+                <div class="protocol-card-heading"><span class="protocol-order" aria-hidden="true">@((index+1).ToString("D2"))</span><strong>@protocol.Name</strong></div>
+                <dl><dt>When</dt><dd>@protocol.Condition</dd><dt>Response</dt><dd>@protocol.Response</dd></dl>
+            </li>
+        }
+    </ol>
+}else{<p class="small muted" role="status">@(Loading?"Loading protocol definitions…":"Protocol definitions are unavailable from the active engine bundle.")</p>}
+
+@code {
+    [Parameter] public ProtocolCatalog? Catalog { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string? Profile { get; set; }
+}

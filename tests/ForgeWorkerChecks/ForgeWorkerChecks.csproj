@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
-<ItemGroup><ProjectReference Include="../../src/DeckTester/DeckTester.csproj" /><None Include="fake-forge.py" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+<ItemGroup><ProjectReference Include="../../src/DeckTester/DeckTester.csproj" /><ProjectReference Include="../FakeForge/FakeForge.csproj" ReferenceOutputAssembly="false" /></ItemGroup>
+<Target Name="CopyFixture" AfterTargets="Build"><ItemGroup><FixtureFiles Include="../FakeForge/bin/$(Configuration)/net10.0/*" /></ItemGroup><Copy SourceFiles="@(FixtureFiles)" DestinationFolder="$(OutDir)transport-fixture" /></Target>
 </Project>

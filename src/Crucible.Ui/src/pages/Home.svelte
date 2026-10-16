@@ -8,12 +8,16 @@
     Resource,
     RunRequest,
     Estimate,
+    History,
   } from "../lib/types.ts";
   import DeckIdentity from "../lib/DeckIdentity.svelte";
   import AppSelect from "../lib/AppSelect.svelte";
   import AiNote from "../lib/AiNote.svelte";
+  import PageHeader from "../lib/PageHeader.svelte";
+  import DeckList from "../lib/DeckList.svelte";
+  import SimulatedRate from "../lib/SimulatedRate.svelte";
   import { pilotLabel } from "../lib/pilot-label.ts";
-  import CardList from "../lib/CardList.svelte";
+  import { latestSimulatedRates } from "../lib/simulated-rates.ts";
   let {
     catalog,
     navigate,
@@ -24,6 +28,7 @@
     refreshCatalog: () => Promise<void>;
   } = $props();
   let snapshot = $state<Snapshot>(),
+    history = $state<History>(),
     resources = $state<Resource>(),
     error = $state(""),
     busy = $state(false),
@@ -31,6 +36,7 @@
     estimate = $state<Estimate>(),
     preview = $state("");
   let expandedGroups = $state<Record<string, boolean>>({});
+  let simulatedRates = $derived(latestSimulatedRates(history?.sessions ?? []));
   const saved = loadSaved("home", {
     selected: [] as string[],
     games: 200,
@@ -162,8 +168,11 @@
   });
   async function load() {
     try {
-      snapshot = await api<Snapshot>("/api/v1/ui-state");
-      resources = await api<Resource>("/api/v1/resources");
+      [snapshot, resources, history] = await Promise.all([
+        api<Snapshot>("/api/v1/ui-state"),
+        api<Resource>("/api/v1/resources"),
+        api<History>("/api/v1/run-history"),
+      ]);
       const filtered = selected
         .filter((id) =>
           snapshot?.decks.some(
@@ -215,12 +224,15 @@
 </script>
 
 <svelte:head><title>Crucible — Standard Deck Testing</title></svelte:head>
-<div class="eyebrow">THE LOCAL PLAYTESTING DESK</div>
-<h1>Put Your Decks<br /><em>Across the Table.</em></h1>
-<p class="lead">
-  Run complete head-to-head games. Follow every turn.<br />Compare what happens
-  when your deck has an opponent.
-</p>
+{#snippet setupHeading()}<h1>
+    Put Your Decks<br /><em>Across the Table.</em>
+  </h1>{/snippet}
+<PageHeader
+  title="Put Your Decks Across the Table."
+  eyebrow="THE LOCAL PLAYTESTING DESK"
+  heading={setupHeading}
+  description="Run complete head-to-head games. Follow every turn. Compare what happens when your deck has an opponent."
+/>
 <AiNote subject="setup" />
 <div class="notice">
   <strong>Exploratory Mode</strong><span
@@ -314,6 +326,7 @@
                   Published: {deck.publishedWinRatePercent}% · {deck.publishedMatchesDisplayed ??
                     "Unknown sample"} matches
                 </p>{/if}
+              <SimulatedRate result={simulatedRates.get(deck.id)} />
               <div class="deck-bottom">
                 <span class="small"
                   >{row.coverage.status === "blocked"
@@ -329,7 +342,12 @@
                   >Deck List</button
                 >
               </div>
-              {#if preview === deck.id}<div class="deck-preview" id={"deck-list-" + deck.id}><CardList cards={deck.cards} /></div>{/if}
+              {#if preview === deck.id}<div class="deck-preview" id={"deck-list-" + deck.id}>
+                  <DeckList
+                    cards={deck.cards}
+                    manaValues={snapshot?.manaValues}
+                  />
+                </div>{/if}
             </article>{/each}
         </div>
       </details>{/each}

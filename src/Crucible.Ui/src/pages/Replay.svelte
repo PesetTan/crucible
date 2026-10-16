@@ -1,5 +1,6 @@
 <script lang="ts">
   import { pilotLabel } from "../lib/pilot-label.ts";
+  import PageHeader from "../lib/PageHeader.svelte";
   import { onMount, onDestroy, untrack } from "svelte";
   import { api, loadSaved, save } from "../lib/api.ts";
   import type {
@@ -9,6 +10,9 @@
     ReplayState,
   } from "../lib/types.ts";
   import DeckIdentity from "../lib/DeckIdentity.svelte";
+  import DeckMatchup from "../lib/DeckMatchup.svelte";
+  import ManaCost from "../lib/ManaCost.svelte";
+  import CardRules from "../lib/CardRules.svelte";
   let {
     runId,
     id,
@@ -137,18 +141,16 @@
 </script>
 
 <svelte:head><title>Game Replay — Crucible</title></svelte:head><a
-  class="button"
+  class="button back-link"
   href={back}>← Back to {from ? "Session Log" : "Session Results"}</a
 >
-<div class="eyebrow">STORED GAME / EVENT REPLAY</div>
-<h1>At the Table.</h1>
+<PageHeader title="At the Table." eyebrow="STORED GAME / EVENT REPLAY" />
 {#if slot}<p>
-    <DeckIdentity
-      deck={snapshot?.decks.find((d) => d.manifest.id === slot.deckA)?.manifest}
-      {catalog}
-    /> <span class="muted">vs</span>
-    <DeckIdentity
-      deck={snapshot?.decks.find((d) => d.manifest.id === slot.deckB)?.manifest}
+    <DeckMatchup
+      deckA={snapshot?.decks.find((d) => d.manifest.id === slot.deckA)
+        ?.manifest}
+      deckB={snapshot?.decks.find((d) => d.manifest.id === slot.deckB)
+        ?.manifest}
       {catalog}
     />
   </p>
@@ -230,8 +232,10 @@
         >{current.activeProtocols
           .map(
             (id) =>
-              config?.protocolSet?.definitions.find((p) => p.id === id)?.name ??
-              id,
+              (
+                config?.protocolSet?.sets?.[current.pilotProfile ?? ""]
+                  ?.definitions ?? config?.protocolSet?.definitions
+              )?.find((p) => p.id === id)?.name ?? id,
           )
           .join(" · ")}</span
       >{#if current.protocolDelay}<p>
@@ -279,10 +283,10 @@
                     >{card.power != null
                       ? card.power + "/" + card.toughness
                       : ""} · {card.tapped ? "Tapped" : "Ready"}</span
-                  ><small>{card.cost}</small></summary
+                  ><ManaCost cost={card.cost} /></summary
                 >
                 <p>{card.type}</p>
-                <p class="rules-text">{card.text.replaceAll("\\n", "\n")}</p>
+                <p class="rules-text"><CardRules text={card.text} /></p>
                 <p>
                   Counters: {card.counters || "None"}<br />Owner: {card.owner} · Controller:
                   {card.controller}<br />Attached to: {card.attachedTo ?? "—"}
@@ -302,7 +306,7 @@
           {#if audit}<details open>
               <summary>Private Hand — Audit View</summary
               >{#each player.hand as card}<p>
-                  {card.name} · {card.cost}
+                  {card.name} · <ManaCost cost={card.cost} />
                 </p>{/each}
             </details>{/if}
         </section>{/each}

@@ -17,7 +17,7 @@
     <div class="library-deck-sections">
         <AiNote Scope="deck" Subject="@Deck.Id" Context="@Deck.ManifestHash" />
         <details class="library-disclosure" open="@cardsOpen">
-            <summary @onclick="()=>cardsOpen=!cardsOpen" @onclick:preventDefault>Card list <span>@Deck.MainCount main
+            <summary @onclick="()=>cardsOpen=!cardsOpen" @onclick:preventDefault>Deck List <span>@Deck.MainCount main
                     @if(Deck.SideCount>0){<text> · @Deck.SideCount sideboard</text>}
                 </span></summary>
             @if(cardsOpen){
@@ -29,7 +29,7 @@
                         </div>
                     }
                 </div>
-                @if(Deck.SideCount>0){<details class="library-sideboard"><summary>Sideboard provenance · Excluded from game decks</summary>@foreach(var card in SortCards(Deck.Cards.Where(c=>c.Zone=="Sideboard"))){<LibraryCard Card="card" Missing="@Missing.Contains(card.Name)" />}</details>}
+                @if(Deck.SideCount>0){<details class="library-sideboard"><summary>Sideboard provenance · Excluded from game decks</summary>@foreach(var category in new[]{"Creatures","Non-Creatures","Lands"}){var entries=SortCards(Deck.Cards.Where(c=>c.Zone=="Sideboard"&&Category(c)==category)).ToList();if(entries.Count>0){<div class="deck-card-group"><h3>@category <span class="muted">· @entries.Sum(c=>c.Quantity)</span></h3>@foreach(var card in entries){<LibraryCard Card="card" Missing="@Missing.Contains(card.Name)" />}</div>}}</details>}
                 <p class="small muted">Script presence does not validate interaction correctness, tokens, faces, or pilot behavior.</p>
             }
         </details>
@@ -79,8 +79,8 @@
     private string DefaultProfile=>ReanimatorPilots.Profile(Deck,ReanimatorPilots.AggroMode);
     private string SubtypeProfile=>ReanimatorPilots.Profile(Deck,ReanimatorPilots.CurrentSubtypeMode);
     private HashSet<string> Missing=>Coverage.Cards.Where(c=>c.Status=="missing").Select(c=>c.Name).ToHashSet(StringComparer.Ordinal);
-    private IOrderedEnumerable<CardEntry> SortCards(IEnumerable<CardEntry> cards)=>cards.OrderBy(c=>ManaValues.GetValueOrDefault(c.ArenaId,int.MaxValue)).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase);
-    private static string Category(CardEntry card){var type=card.Type.Split("//",StringSplitOptions.None)[0];return type.Contains("Land",StringComparison.Ordinal)?"Lands":type.Contains("Creature",StringComparison.Ordinal)?"Creatures":"Non-Creatures";}
+    private IOrderedEnumerable<CardEntry> SortCards(IEnumerable<CardEntry> cards)=>cards.OrderBy(c=>ManaValues.GetValueOrDefault(c.ArenaId,int.MaxValue)).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase).ThenBy(c=>c.ArenaId);
+    private static string Category(CardEntry card){var type=card.Type.Split("//",StringSplitOptions.None)[0].Split('—','–')[0];return type.Contains("Land",StringComparison.Ordinal)?"Lands":type.Contains("Creature",StringComparison.Ordinal)?"Creatures":"Non-Creatures";}
     private string ResultText(HistoryRun session){
         var pairs=session.Matchups.Where(m=>m.DeckA==Deck.Id||m.DeckB==Deck.Id).ToList();
         var valid=pairs.Sum(m=>m.Valid);

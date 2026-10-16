@@ -14,6 +14,20 @@
     <button type="button" @onclick="Load" disabled="@loading">@(loading?"Refreshing…":"Refresh")</button>
 </div>
 <p class="small muted">@ModeDescription Preview only. Set the session's pilot policy in Deck Tester.</p>
+<section id="engagement-protocols" class="pilot-protocol-overview" aria-labelledby="engagement-protocols-heading">
+    <div class="protocol-overview-heading"><div><span class="protocol-owner">PILOT PROTOCOLS · OPT-IN PREVIEW</span><h2 id="engagement-protocols-heading">Engagement Protocols</h2></div><span class="protocol-preview-badge">@(mode==ReanimatorPilots.EngagementMode?"Previewing assignments":"Available preview")</span></div>
+    <p class="small">A pilot adapts its choices to the opponent it observes. The opponent model starts unknown and uses public play, revealed cards, and available mana.</p>
+    <ol class="protocol-flow" aria-label="How Engagement Protocols guide play"><li><span>1</span> Observe public play</li><li><span>2</span> Combine protocols</li><li><span>3</span> Choose a legal action</li></ol>
+    <p class="small muted">Higher priorities appear first. Compatible protocols combine; ordinary pilot priorities settle remaining choices. Definitions below come from the active immutable engine bundle. Evaluated candidates remain opt-in.</p>
+    @if(history?.Capabilities.Protocols?.Sets is {Count:>1} sets){
+        <label for="protocol-profile">Pilot protocol set</label><AppSelect Id="protocol-profile" Label="Pilot protocol set" Options="sets.Keys.Select(p=>new SelectOption(p,Label(p))).ToList()" @bind-Value="protocolProfile" />
+    }
+    <EngagementProtocolCards Catalog="history?.Capabilities.Protocols" Loading="loading" Profile="@(protocolProfile.Length>0?protocolProfile:null)" />
+    <div class="protocol-preview-action">
+        @if(mode!=ReanimatorPilots.EngagementMode){<button type="button" @onclick="()=>mode=ReanimatorPilots.EngagementMode" disabled="@(history?.Capabilities.Protocols?.Profile!=ReanimatorPilots.Engagement)">Preview protocol assignments</button>}
+        <span class="small muted">@(mode==ReanimatorPilots.EngagementMode?"Showing Reanimator with Engagement Protocols below. Select this policy in Deck Tester for a new run.":"Preview the assignments here, then select this policy in Deck Tester for a new run.")</span>
+    </div>
+</section>
 <section class="pilot-win-rates" aria-label="Pilot match win rates">
     <div class="pilot-heading"><h2>Pilot win rates</h2><label class="pilot-history-toggle"><input type="checkbox" @bind="includeOlder" /> Include older pilot versions</label></div>
     <p class="small muted">Latest measured session for each exact pilot · Wins / completed player appearances, including draws. Decks and opponents differ, so these rates do not rank pilot skill. Exploratory Forge results, not Arena forecasts.</p>
@@ -67,7 +81,7 @@
             <p class="small muted">Profile ID: <code>@group.Key</code></p>
             <AiNote Scope="pilot" Subject="@group.Key" />
             <PilotScorecard Profile="@group.Key" Evaluation="evaluation" />
-            @if(group.Key==ReanimatorPilots.Engagement){<EngagementProtocolList Catalog="history?.Capabilities.Protocols" />}
+            @if(group.Key==ReanimatorPilots.Engagement){<p class="small"><a href="/pilots#engagement-protocols">View this pilot's Engagement Protocols ↑</a></p>}
             <ul class="pilot-decks">
                 @foreach(var deck in group.OrderBy(DeckDisplay.Text)){
                     <li><a href="@($"/decks#{deck.Id}")" aria-label="@($"Open {DeckDisplay.Text(deck)} in Deck Library")"><DeckIdentity Deck="deck" Compact="true" /></a><span class="small muted">@DeckStrategy.Label(deck.Strategy)</span></li>
@@ -81,6 +95,7 @@
     private string mode=ReanimatorPilots.CurrentAggroMode,query="";
     private bool loading=true;
     private bool includeOlder;
+    private string protocolProfile=ReanimatorPilots.Engagement;
     private HistorySnapshot? history;
     private Dictionary<string,List<PilotSessionRate>> winRates=[];
     private int unassignedGames;

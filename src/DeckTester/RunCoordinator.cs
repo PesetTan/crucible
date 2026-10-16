@@ -33,12 +33,13 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
         }
         var capability=engine.Capabilities();var decks=request.DeckIds.Order(StringComparer.Ordinal).ToList();
         var attributeSnapshot=attributes?.Snapshot(decks.Select(store.Deck));
+        var optimizerPolicy=engine.OptimizerPolicy(request);
         var config=new RunConfig(decks,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capability.EngineHash,capability.AdapterHash,
             Pilot:request.PilotMode,StaggerStarts:request.StaggerStarts,EstimatedGameSeconds:request.EstimatedGameSeconds,StartLeadSeconds:request.StartLeadSeconds,
             StartupSpacingSeconds:request.StartupSpacingSeconds,PerformanceMode:request.PerformanceMode,
             PilotProfiles:decks.ToDictionary(deck=>deck,deck=>ReanimatorPilots.Profile(store.Deck(deck) with{Cards=store.Deck(deck).Cards.Select(c=>c with{Attributes=attributeSnapshot?.Cards.GetValueOrDefault(c.Name)??c.Attributes}).ToList()},request.PilotMode)))
-            {CardAttributes=attributeSnapshot?.Cards,AttributesHash=attributeSnapshot?.Hash,OptimizerPolicy=engine.OptimizerPolicy(request),
-                ProtocolSet=request.PilotMode==ReanimatorPilots.EngagementMode?capability.Protocols:null};
+            {CardAttributes=attributeSnapshot?.Cards,AttributesHash=attributeSnapshot?.Hash,OptimizerPolicy=optimizerPolicy,
+                ProtocolSet=request.PilotMode==ReanimatorPilots.EngagementMode||optimizerPolicy is not null&&capability.Protocols?.SupportsOptimizerProfile(optimizerPolicy.Profile)==true?capability.Protocols:null};
         var id=Guid.NewGuid().ToString("N");var slots=new List<GameSlot>();var seeds=new HashSet<long>();
         for(var a=0;a<decks.Count;a++)for(var b=a+1;b<decks.Count;b++)for(var starter=0;starter<2;starter++)for(var index=0;index<request.GamesPerPair/2;index++){
             var digest=SHA256.HashData(Encoding.UTF8.GetBytes(Json.Encode(new SeedFingerprint("sha256-v1",request.RootSeed,decks[a],decks[b],starter,index))));

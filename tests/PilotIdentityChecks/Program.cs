@@ -115,6 +115,7 @@ try{
     Console.WriteLine("Optimizer and protocol SQL cache isolation checks passed.");
 }finally{
     Environment.SetEnvironmentVariable("MTG_PROJECT_ROOT",previousRoot);
+    Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
     if(Directory.Exists(temporary))Directory.Delete(temporary,true);
 }
 
@@ -137,6 +138,13 @@ Check(ReanimatorPilots.Profile(aggro,ReanimatorPilots.EngagementMode)==Reanimato
 Check(ReanimatorPilots.Profile(control,ReanimatorPilots.EngagementMode)==ReanimatorPilots.Control,"Protocol mode retains Control");
 Check(ReanimatorPilots.Profile(metadataDeck,ReanimatorPilots.CurrentAggroMode)==ReanimatorPilots.Unified,"Standard remains v011");
 var protocols=new ProtocolCatalog("v1",ReanimatorPilots.Engagement,"hash",System.Text.Json.JsonSerializer.SerializeToElement(new{maximumDelayTurns=1}),[]);
+var declaredProtocol=new EngagementProtocol("board-presence","Board Presence","Public pressure","Reviewed body",30,0,new(){{"BOARD_PRESENCE",1}});
+var multiCatalog=protocols with{Sets=new(){[ReanimatorPilots.Control]=new(ReanimatorPilots.Control,"forge-default","optimizer-policy",[declaredProtocol])}};
+var restoredCatalog=Json.Decode<ProtocolCatalog>(Json.Encode(multiCatalog));
+Check(restoredCatalog.ForProfile(ReanimatorPilots.Control).Single().Id=="board-presence","Immutable multi-profile catalogs survive source-generated JSON serialization");
+Check(restoredCatalog.ForProfile("unknown").Count==0,"Unknown profiles do not borrow Reanimator definitions");
+Check(restoredCatalog.SupportsOptimizerProfile(ReanimatorPilots.Control)&&!restoredCatalog.SupportsOptimizerProfile(ReanimatorPilots.Unified),"Only declared optimizer profiles receive protocol provenance; legacy Reanimator numeric policies retain their semantics");
+Check(Json.Decode<ProtocolCatalog>(Json.Encode(protocols)).Sets is null,"Historical single-profile catalog remains readable");
 Check(!Store.CompatibleSession(adaptive,adaptive with{ProtocolSet=protocols}),"Protocol snapshot isolates compatibility");
 Check(!Store.CompatibleSession(adaptive with{ProtocolSet=protocols},adaptive with{ProtocolSet=protocols with{Hash="changed"}}),"Changed protocol hash cannot reuse a session");
 Check(Json.Decode<RunConfig>(Json.Encode(adaptive)).ProtocolSet is null,"Historical runs have no implied protocols");

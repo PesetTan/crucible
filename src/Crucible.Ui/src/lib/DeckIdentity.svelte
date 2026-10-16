@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Deck, Catalog } from "./types.ts";
+  import ManaSymbol from "./ManaSymbol.svelte";
+  import { manaColors } from "./mana.ts";
   let {
     deck,
     catalog,
@@ -11,13 +13,11 @@
   } = $props();
   let ui = $derived(catalog?.decks.find((d) => d.id === deck?.id));
   let colors = $derived(
-    "WUBRG"
-      .split("")
-      .filter((c) =>
-        deck?.cards.some(
-          (card) => card.zone === "MainDeck" && card.cost.includes(c),
-        ),
-      ),
+    manaColors(
+      (deck?.cards ?? [])
+        .filter((card) => card.zone === "MainDeck")
+        .map((card) => card.cost),
+    ),
   );
 </script>
 
@@ -26,11 +26,14 @@
   class:compact
   title={ui?.label ?? deck?.name ?? "Unavailable deck version"}
 >
-  <span class="color-symbols" aria-label={ui?.colors ?? "Deck colors"}
-    >{#each colors as color}<i class={"mana mana-" + color} aria-hidden="true"
-        >{color}</i
-      >{/each}{#if !colors.length}<i class="mana mana-C" aria-hidden="true">C</i
-      >{/if}</span
+  <span
+    class="color-symbols"
+    aria-label={ui?.colors ?? "Deck colors"}
+    role="img"
+    >{#each colors.length ? colors : ["C"] as color}<ManaSymbol
+        symbol={color}
+        decorative
+      />{/each}</span
   >
   <span class="deck-identity-copy"
     ><strong

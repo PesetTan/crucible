@@ -53,7 +53,7 @@
         <div class="combination-notice" role="status"><strong>@CachedCount stored games available for seed @seed.</strong><span>Reuse completed matchups; continue saved sessions for missing games.</span><a href="/runs">View Run History →</a></div>
     }
     @if(ExistingSession is {} existing&&games>existing.Config.GamesPerPair){<p class="small muted" role="status">Continue the saved session from @existing.Config.GamesPerPair to @games games per matchup, using its saved run settings. <a href="@($"/runs/{existing.Id}")">View Session →</a></p>}
-    @foreach(var group in decks.GroupBy(d=>d.SourceType=="custom"?"Custom Decks":d.SourceType=="personal"?"Your Deck":d.ArchetypeTier is {} tier?$"Tier {tier}":"Unrated").OrderBy(g=>(g.Key is "Your Deck" or "Custom Decks")?0:g.Key=="Tier A"?1:g.Key=="Tier B"?2:g.Key=="Tier C"?3:4)){
+    @foreach(var group in decks.GroupBy(d=>d.SourceType=="custom"?"Custom Decks":d.SourceType=="personal"?"Your Deck":d.ArchetypeTier is {} tier?$"Tier {tier}":"Unrated").OrderBy(g=>g.Key switch{"Tier A"=>0,"Tier B"=>1,"Tier C"=>2,"Your Deck"=>3,"Custom Decks"=>4,"Unrated"=>5,_=>6}).ThenBy(g=>g.Key,StringComparer.OrdinalIgnoreCase)){
     var selectedInGroup=group.Count(d=>selected.Contains(d.Id));
     var groupCountLabel=selectedInGroup>0?$"{group.Count()} decks · {selectedInGroup} selected":$"{group.Count()} decks";
     <details class="deck-tier-group" open="@(selectedInGroup>0)"><summary><span>@group.Key</span><span class="deck-tier-count">@groupCountLabel</span></summary>
@@ -67,7 +67,7 @@
                         <p>@deck.CreatureCount creatures · @deck.LandCount lands</p>
                         @if(selected.Contains(deck.Id)){var color=Branding.Palette[selected.Order(StringComparer.Ordinal).ToList().IndexOf(deck.Id)];<span class="deck-chart-color"><i style="background:@color.Color"></i>Chart Color: @UiText.Label(color.Name)</span>}
                         @if(!blocked){<details class="pilot-help"><summary aria-label="About exploratory pilot">Exploratory Pilot <span aria-hidden="true">?</span></summary><p>@(ReanimatorPilots.Profile(deck,pilotMode)==ReanimatorPilots.Default?"Forge Default plays this deck.":"The assigned Aggro, Control or Reanimator policy uses its own hand and public evidence.") Its strategy is unvalidated; results may differ from human play.</p></details>}
-                        <button type="button" class="deck-list-button" @onclick="()=>OpenDeckList(deck.Id)">List</button>
+                        <button type="button" class="deck-list-button" @onclick="()=>OpenDeckList(deck.Id)">Deck List</button>
                     </div>
                 </details>
             </div>

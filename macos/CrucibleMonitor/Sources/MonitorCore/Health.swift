@@ -21,13 +21,15 @@ public struct HostHealth: Codable, Equatable {
     public let activeOptimizations: Int
     public let queuedOptimizations: Int
     public let error: String?
+    public let runtimeMode: String?
     package init(version: Int, application: String, role: String, processId: Int32, instanceId: String,
                  startedAt: String, projectRoot: String, ready: Bool, database: String, activeRuns: Int,
-                 queuedRuns: Int, activeOptimizations: Int, queuedOptimizations: Int, error: String?) {
+                 queuedRuns: Int, activeOptimizations: Int, queuedOptimizations: Int, error: String?, runtimeMode: String? = nil) {
         self.version = version; self.application = application; self.role = role; self.processId = processId
         self.instanceId = instanceId; self.startedAt = startedAt; self.projectRoot = projectRoot; self.ready = ready
         self.database = database; self.activeRuns = activeRuns; self.queuedRuns = queuedRuns
         self.activeOptimizations = activeOptimizations; self.queuedOptimizations = queuedOptimizations; self.error = error
+        self.runtimeMode = runtimeMode
     }
     public var workCount: Int { activeRuns + queuedRuns + activeOptimizations + queuedOptimizations }
     public func matches(_ component: Component, root: String) -> Bool {

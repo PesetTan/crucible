@@ -14,12 +14,12 @@
     <summary>@(hasDraft?"Choose another deck or paste a list":"Start with a deck") <span class="muted">Standard Bo1</span></summary>
     <label for="workshop-source">Library deck</label>
     <div class="workshop-start"><DeckSelect Id="workshop-source" Label="Library deck" Decks="decks" @bind-Value="sourceId" /><button disabled="@(busy||sourceId.Length==0)" @onclick="LoadSource">Edit a copy</button></div>
-    <details><summary>Paste an Arena deck list</summary><label for="arena-list">Arena deck text</label><textarea id="arena-list" rows="5" @bind="paste" placeholder="Deck&#10;4 Card Name (SET) 123"></textarea><button disabled="@(busy||string.IsNullOrWhiteSpace(paste)||Backend.ConnectionError is not null)" @onclick="ResolvePaste">Load Pasted List</button></details>
+    <details><summary>Paste an Arena Deck List</summary><label for="arena-list">Arena deck text</label><textarea id="arena-list" rows="5" @bind="paste" placeholder="Deck&#10;4 Card Name (SET) 123"></textarea><button disabled="@(busy||string.IsNullOrWhiteSpace(paste)||Backend.ConnectionError is not null)" @onclick="ResolvePaste">Load Pasted List</button></details>
 </details>
 @if(hasDraft){
 <div class="workshop-edit-layout">
 <section class="panel workshop-editor">
-    <div class="section-head workshop-editor-heading"><h2>Edit Main Deck</h2><span class="pill @(MainCount==60?"":"workshop-invalid")">@MainCount / 60 cards</span><button disabled="@(busy||!CanSave||Backend.ConnectionError is not null)" @onclick="Save">@(busy?"Working…":"Save Version to Library")</button></div>
+    <div class="section-head workshop-editor-heading"><h2>Deck List</h2><span class="pill @(MainCount==60?"":"workshop-invalid")">@MainCount / 60 cards</span><button disabled="@(busy||!CanSave||Backend.ConnectionError is not null)" @onclick="Save">@(busy?"Working…":"Save Version to Library")</button></div>
     @if(parentId is {} parent&&decks.FirstOrDefault(d=>d.Id==parent) is {} original){<p class="small muted workshop-copy"><span>Copy of</span><DeckIdentity Deck="original" /><a href="@($"/decks#{parent}")">Original list</a></p>}
     <div class="workshop-draft-meta"><span class="small muted">Draft saved in this browser · Each save creates an exact version</span>@if(savedId is not null){<a class="small" href="@($"/decks#{savedId}")">Open saved version ↗</a>}</div>
     <div class="workshop-search"><label for="workshop-search">Add a card</label><form class="workshop-start" @onsubmit="Search" @onsubmit:preventDefault><input id="workshop-search" @bind="query" @bind:event="oninput" placeholder="Search by card name" /><button type="submit" disabled="@(busy||query.Trim().Length<2||Backend.ConnectionError is not null)">Search Cards</button><button type="button" disabled="@(busy||(!searched&&query.Length==0))" @onclick="ClearSearch">Clear</button></form></div>
@@ -27,9 +27,7 @@
     <div class="workshop-card-list">
         @foreach(var category in new[]{"Creatures","Non-Creatures","Lands"}){
             var categoryCards=cards.Where(c=>Category(c)==category);
-            var groupedCards=(category=="Lands"
-                ?categoryCards.OrderBy(LandMana.SortKey,StringComparer.Ordinal).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase)
-                :categoryCards.OrderBy(c=>manaValues.GetValueOrDefault(c.ArenaId,int.MaxValue)).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase)).ToList();
+            var groupedCards=categoryCards.OrderBy(c=>manaValues.GetValueOrDefault(c.ArenaId,int.MaxValue)).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase).ThenBy(c=>c.ArenaId).ToList();
             <details class="deck-card-group workshop-card-category" open>
                 <summary><strong>@category</strong> <span class="muted">· @groupedCards.Sum(c=>c.Quantity)</span></summary>
                 @foreach(var card in groupedCards){
@@ -42,7 +40,7 @@
             </details>
         }
     </div>
-    @if(sideboard.Count>0){<details><summary>Sideboard provenance · @sideboard.Sum(c=>c.Quantity) cards · excluded from games</summary>@foreach(var card in sideboard){<p>@card.Quantity @card.Name</p>}</details>}
+    @if(sideboard.Count>0){<details><summary>Sideboard provenance · @sideboard.Sum(c=>c.Quantity) cards · excluded from games</summary>@foreach(var category in new[]{"Creatures","Non-Creatures","Lands"}){var entries=sideboard.Where(c=>Category(c)==category).OrderBy(c=>manaValues.GetValueOrDefault(c.ArenaId,int.MaxValue)).ThenBy(c=>c.Name,StringComparer.OrdinalIgnoreCase).ThenBy(c=>c.ArenaId).ToList();if(entries.Count>0){<h3>@category <span class="muted">· @entries.Sum(c=>c.Quantity)</span></h3>@foreach(var card in entries){<p>@card.Quantity @card.Name</p>}}}</details>}
     @if(resolveIssues.Count>0){<div class="error"><strong>Resolve these pasted-list issues before saving.</strong>@foreach(var issue in resolveIssues){<p>@issue</p>}<p>Correct the Arena text and load it again.</p></div>}
     @if(validation is not null){@foreach(var issue in validation.Errors){<p class="error">@issue</p>}@foreach(var issue in validation.Blockers){<p class="notice">@issue</p>}}
     <details class="workshop-change-details">
@@ -136,7 +134,7 @@
     private bool HasActiveSession=>activeSessions.Count>0;
     private int MainCount=>cards.Sum(c=>c.Quantity);
     private static string Category(CardEntry card){
-        var type=card.Type.Split("//",StringSplitOptions.None)[0];
+        var type=card.Type.Split("//",StringSplitOptions.None)[0].Split('—','–')[0];
         return type.Contains("Land",StringComparison.Ordinal)?"Lands":type.Contains("Creature",StringComparison.Ordinal)?"Creatures":"Non-Creatures";
     }
     private bool CanSave=>!needsValidation&&validation?.CanSave==true&&resolveIssues.Count==0;

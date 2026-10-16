@@ -1,10 +1,12 @@
 <script lang="ts">
+  import PageHeader from "../lib/PageHeader.svelte";
   import { onMount, untrack } from "svelte";
   import { api, loadSaved, save } from "../lib/api.ts";
   import { date, deckLabel, duration, label, number } from "../lib/data.ts";
   import type { Catalog, Snapshot, Slot, Timing } from "../lib/types.ts";
   import AppSelect from "../lib/AppSelect.svelte";
   import DeckIdentity from "../lib/DeckIdentity.svelte";
+  import DeckMatchup from "../lib/DeckMatchup.svelte";
   let {
     id,
     kind,
@@ -205,7 +207,7 @@
 </script>
 
 <svelte:head><title>{title} — Crucible</title></svelte:head><a
-  class="button"
+  class="button back-link"
   href={"/runs/" + id}>← Back to Session Results</a
 >
 <nav class="log-navigation" aria-label="Session logs">
@@ -214,10 +216,9 @@
       href={`/runs/${id}/logs/${key}`}>{text}</a
     >{/each}
 </nav>
-<div class="section-head">
-  <h1>{title}.</h1>
-  <button disabled={loading} onclick={load}>Refresh</button>
-</div>
+{#snippet logActions()}<button disabled={loading} onclick={load}>Refresh</button
+  >{/snippet}
+<PageHeader title={title + "."} actions={logActions} />
 {#if error}<p class="error" role="alert">{error}</p>{/if}{#if loading}<p
     role="status"
   >
@@ -485,13 +486,10 @@
         ><tbody
           >{#each gameRows.slice(page * 25, page * 25 + 25) as s}<tr
               ><td>{s.index + 1}</td><td
-                ><DeckIdentity
-                  deck={snapshot?.decks.find((d) => d.manifest.id === s.deckA)
+                ><DeckMatchup
+                  deckA={snapshot?.decks.find((d) => d.manifest.id === s.deckA)
                     ?.manifest}
-                  {catalog}
-                  compact
-                /><span class="muted">vs</span><DeckIdentity
-                  deck={snapshot?.decks.find((d) => d.manifest.id === s.deckB)
+                  deckB={snapshot?.decks.find((d) => d.manifest.id === s.deckB)
                     ?.manifest}
                   {catalog}
                   compact

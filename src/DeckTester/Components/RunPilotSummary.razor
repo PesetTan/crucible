@@ -16,6 +16,7 @@
         <p class="small muted">These are the settings recorded for this session. Changing a pilot or card attributes later does not change this record.</p>
         <dl class="saved-pilot-settings">
             <dt>Policy</dt><dd>@ReanimatorPilots.DisplayName(Config.Pilot)</dd>
+            <dt>Optimizer policy</dt><dd>@if(Config.OptimizerPolicy is {} optimizer){<code>@optimizer.Id</code><span>@optimizer.Profile</span>}else{<span>None recorded</span>}</dd>
             @foreach (var id in Config.DeckIds)
             {
                 <dt><DeckIdentity DeckId="@id" Compact="true" /></dt><dd><code>@(Config.PilotProfiles?.GetValueOrDefault(id) ?? "Not recorded")</code></dd>

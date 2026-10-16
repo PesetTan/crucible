@@ -132,6 +132,29 @@ final class MonitorCoreChecks {
 
         XCTAssertTrue(RuntimeLayout.containsHost(directory.path, component: .backend))
     }
+    func testDesktopLaunchUsesConfiguredHostsWithoutStartingServices() throws {
+        let directory = temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let preferred = directory.appendingPathComponent("preferred")
+        let fallback = directory.appendingPathComponent("fallback")
+        var config = MonitorConfiguration(projectRoot: directory.path, dotnet: "/usr/bin/true")
+        config.frontendPort = 61001; config.backendPort = 61002
+        XCTAssertTrue(DesktopApplication.launchPlan(configuration: config, applicationDirectories: [preferred, fallback]) == nil)
+        for (folder, identifier) in [(preferred, "another.application"), (fallback, "local.crucible.desktop")] {
+            let app = folder.appendingPathComponent("Crucible.app/Contents")
+            try FileManager.default.createDirectory(at: app.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
+            let executable = app.appendingPathComponent("MacOS/Crucible")
+            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+            let info = ["CFBundleIdentifier": identifier, "CFBundleExecutable": "Crucible", "CFBundlePackageType": "APPL"]
+            try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: app.appendingPathComponent("Info.plist"))
+        }
+        let plan = DesktopApplication.launchPlan(configuration: config, applicationDirectories: [preferred, fallback])!
+        XCTAssertEqual(plan.application.path, fallback.appendingPathComponent("Crucible.app").path)
+        XCTAssertEqual(plan.arguments, ["--existing-hosts-only"])
+        XCTAssertEqual(plan.environment["MTG_PROJECT_ROOT"], directory.path)
+        XCTAssertEqual(plan.environment["CRUCIBLE_UI_PORT"], "61001")
+        XCTAssertEqual(plan.environment["CRUCIBLE_BACKEND_PORT"], "61002")
+    }
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("crucible-test-" + UUID().uuidString)
         try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -148,6 +171,21 @@ func XCTFail(_ message: String) { preconditionFailure(message) }
 
 @main struct MonitorChecks {
     @MainActor static func main() async throws {
+        // Optional installed-app smoke check. It only adopts already healthy native hosts.
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--open-desktop" {
+            let configuration = try JSONDecoder().decode(MonitorConfiguration.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2])))
+            let backend = try await HealthClient.fetch(port: configuration.backendPort)
+            let frontend = try await HealthClient.fetch(port: configuration.frontendPort)
+            precondition(backend.ready && frontend.ready && backend.matches(.backend, root: configuration.projectRoot) && frontend.matches(.frontend, root: configuration.projectRoot))
+            precondition(backend.runtimeMode == "native-aot" && frontend.runtimeMode == "native-aot")
+            let plan = DesktopApplication.launchPlan(configuration: configuration, applicationDirectories: [FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")])!
+            let pid = try await DesktopApplication.open(plan)
+            let afterBackend = try await HealthClient.fetch(port: configuration.backendPort)
+            let afterFrontend = try await HealthClient.fetch(port: configuration.frontendPort)
+            precondition(afterBackend == backend && afterFrontend == frontend)
+            print("Desktop launch passed; process \(pid); both existing hosts preserved.")
+            return
+        }
         let checks = MonitorCoreChecks()
         checks.testTransientFailuresAndOneNotificationPerEpisode()
         checks.testStartupAndWakeGraceAndIntentionalStop()
@@ -160,6 +198,7 @@ func XCTFail(_ message: String) { preconditionFailure(message) }
         try checks.testLogRotationIsBounded()
         try checks.testHomebrewWrapperResolvesBeforeOwnershipCapture()
         try checks.testNativeAndLegacyRuntimeSelection()
+        try checks.testDesktopLaunchUsesConfiguredHostsWithoutStartingServices()
         try await LifecycleChecks.run()
         print("Monitor checks passed: health, wake, ownership, locks, ports, failed builds, logging, shutdown approval and force-stop.")
     }

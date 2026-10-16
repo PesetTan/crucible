@@ -37,3 +37,11 @@ python3 tests/smoke_optimizer_tuning.py
 ```
 
 The real smoke checks use small diagnostic schedules and never promote. The installed `$pilot-optimizer` skill supplies the operating workflow and focused references. Runtime scripts use Python's standard library, SQLite and bundled Java; no paid external tools or model API keys are needed. GPT activity uses the existing Codex allowance; local elapsed hours do not establish its token or dollar cost.
+
+## Profile Discovery and Compiled Protocol Catalogs
+
+Fresh experiments may target an exact broad Aggro/Control assignment even when the same deck also has a subtype profile. `inspect` exposes `targetProfiles`; choosing the target changes only that side, while opponent profiles retain their discovered subtype assignments. Source-run experiments continue to pin their original profiles. Hybrid strategy labels are not substring matches.
+
+When compiled bridge classes support `--protocol-catalog`, the backend saves their generated catalog and its file hash with the candidate. Forge Pilots can inspect this inactive catalog without publication. Replay evidence caches are partitioned by exact profile as well as replay hash. See [the non-Reanimator protocol evaluation](engagement-protocols-all-pilots.md) for the practical skill test, batch computation cap and completion report.
+
+Catalog-aware publication copies that verified candidate catalog with its classes and rejects a pre-existing immutable bundle with different definitions. Frozen experiments created before this support cannot promote a changed catalog through their older publisher; the fixed entry point blocks that stale-catalog path without rewriting their evidence. Catalog-preserving legacy promotions retain their existing behavior.

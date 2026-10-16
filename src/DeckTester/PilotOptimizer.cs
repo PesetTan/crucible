@@ -30,6 +30,7 @@ public sealed class PilotOptimizer(AppPaths paths, Store store, CardAttributes a
 
     private async Task<JsonElement> Invoke(string action, object request, CancellationToken cancellation = default)
     {
+        if(paths.Installed)throw new InvalidOperationException("Pilot optimization is not available in this desktop beta.");
         var isWork = action is "work" or "profile" or "promote";
         if (isWork) Interlocked.Increment(ref workingCount);
         try {
@@ -123,6 +124,7 @@ public sealed class PilotOptimizer(AppPaths paths, Store store, CardAttributes a
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if(paths.Installed){ready.TrySetResult();return;}
         try { await Invoke("recover", new EmptyRequest(), stoppingToken); ready.TrySetResult(); }
         catch (Exception error) { ready.TrySetException(error); throw; }
         await foreach (var id in queue.Reader.ReadAllAsync(stoppingToken)) {

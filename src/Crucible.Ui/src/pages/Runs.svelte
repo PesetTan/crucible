@@ -15,6 +15,7 @@
   import AppSelect from "../lib/AppSelect.svelte";
   import Provenance from "../lib/Provenance.svelte";
   import AiNote from "../lib/AiNote.svelte";
+  import PageHeader from "../lib/PageHeader.svelte";
   let { catalog }: { catalog: Catalog | undefined } = $props();
   let data = $state<History>(),
     error = $state(""),
@@ -76,14 +77,14 @@
 </script>
 
 <svelte:head><title>Run History — Crucible</title></svelte:head>
-<div class="eyebrow">YOUR LOCAL PLAYTESTS</div>
-<div class="section-head">
-  <div>
-    <h1>Run History.</h1>
-    <p class="lead">Track your sessions. Compare what happened.</p>
-  </div>
-  <a class="button primary" href="/">New Session</a>
-</div>
+{#snippet historyActions()}<a class="button primary" href="/">New Session</a
+  >{/snippet}
+<PageHeader
+  title="Run History."
+  eyebrow="YOUR LOCAL PLAYTESTS"
+  description="Track your sessions. Compare what happened."
+  actions={historyActions}
+/>
 <p class="small muted">
   Exploratory Forge results · Win rates describe these local games, not Arena
   forecasts.

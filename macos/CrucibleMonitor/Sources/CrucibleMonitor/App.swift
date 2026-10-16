@@ -60,6 +60,7 @@ import ServiceManagement
             } icon: {
                 Image(nsImage: MenuBarIcon.image(
                     healthy: supervisor.overallHealthy,
+                    stopped: supervisor.overallStopped,
                     brandingPath: supervisor.configuration.runtimes[Component.frontend.rawValue].map { $0 + "/branding.json" }
                 ))
                     .renderingMode(.original)
@@ -77,7 +78,11 @@ private struct MonitorPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Image(systemName: "flame.fill").foregroundStyle(.orange)
+                Image(nsImage: MenuBarIcon.image(
+                    healthy: supervisor.overallHealthy,
+                    stopped: supervisor.overallStopped,
+                    brandingPath: supervisor.configuration.runtimes[Component.frontend.rawValue].map { $0 + "/branding.json" }
+                )).renderingMode(.original)
                 Text("Crucible Monitor").font(.headline)
                 Spacer()
                 if supervisor.busy { ProgressView().controlSize(.small).accessibilityLabel("Operation in progress") }
@@ -98,13 +103,15 @@ private struct MonitorPanel: View {
             Divider()
             HStack {
                 Button("Open Crucible") {
-                    NSWorkspace.shared.open(URL(string: "http://127.0.0.1:\(supervisor.configuration.frontendPort)/")!)
-                }.keyboardShortcut("o").accessibilityIdentifier("open-crucible")
+                    supervisor.action { try await supervisor.openCrucible() }
+                }.keyboardShortcut("o").disabled(controlsDisabled).accessibilityIdentifier("open-crucible")
                 Spacer()
                 Button("View Logs") { NSWorkspace.shared.open(supervisor.store.directory) }
             }
             HStack {
                 Menu("Advanced") {
+                    Button("Open in Browser") { supervisor.openBrowser() }
+                    Divider()
                     Menu("Build & Restart") { buildItems(rollback: false) }
                     Menu("Roll Back") { buildItems(rollback: true) }
                     Divider()

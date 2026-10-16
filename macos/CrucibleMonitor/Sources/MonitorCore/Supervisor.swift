@@ -102,10 +102,29 @@ import ServiceManagement
         try store.save(owned, name: "ownership.json")
     }
     package func log(_ component: Component) -> URL { store.directory.appendingPathComponent(component.rawValue + ".log") }
+    package func openBrowser() {
+        NSWorkspace.shared.open(URL(string: "http://127.0.0.1:\(configuration.frontendPort)/")!)
+    }
+    package func openCrucible() async throws {
+        let directories = [Bundle.main.bundleURL.deletingLastPathComponent(),
+                           FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
+                           URL(fileURLWithPath: "/Applications")]
+        guard let plan = DesktopApplication.launchPlan(configuration: configuration, applicationDirectories: directories) else {
+            openBrowser(); return
+        }
+        try await start(.backend)
+        try await start(.frontend)
+        // A rolled-back JIT/Blazor host remains available through the browser.
+        guard states[.backend]?.health?.runtimeMode == "native-aot",
+              states[.frontend]?.health?.runtimeMode == "native-aot" else { openBrowser(); return }
+        _ = try await DesktopApplication.open(plan)
+    }
     package var buildLog: URL { store.directory.appendingPathComponent("build.log") }
     package var overallHealthy: Bool { Component.allCases.allSatisfy { states[$0]?.status == .healthy } }
+    package var overallStopped: Bool { Component.allCases.allSatisfy { states[$0]?.status == .stopped } }
     package var statusLabel: String {
         if busy { return "Crucible · Working" }
+        if overallStopped { return "Crucible · Stopped" }
         if overallHealthy { return "Crucible · Healthy" }
         return "Crucible · Needs Attention"
     }

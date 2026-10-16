@@ -25,6 +25,21 @@ RESOURCE_DIRS = ["cardsfolder", "tokenscripts", "editions", "ai", "formats", "ef
 SCOPE = "Exploratory local Forge evidence; curated fixtures and finite paired games, not Arena forecasts or full pilot validation."
 UNMEASURED = ["general sequencing", "blocking", "mulligans", "general interaction", "full inherited Forge hidden-information audit"]
 
+def target_profiles(entry):
+    """Exact current subtype assignment plus the independently selectable Standard assignment."""
+    deck = entry["manifest"]
+    profiles = {entry["profile"]}
+    if entry["profile"] not in ("aggro-v001", "control-shared-v1", "forge-default") and (deck.get("subtype") or "").casefold() != "reanimator":
+        broad = {"aggro": "aggro-v001", "control": "control-shared-v1"}.get((deck.get("strategy") or "").casefold())
+        if broad:
+            profiles.add(broad)
+    return sorted(profiles)
+
+def catalog_publication_supported(experiment, candidate, baseline_catalog):
+    """Old frozen publishers copy their baseline catalog; permit only catalog-preserving cases."""
+    return (not candidate.get("protocolCatalog") or experiment.get("catalogPublicationVersion", 0) >= 1
+            or candidate["protocolCatalog"] == baseline_catalog)
+
 def encoded(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
@@ -297,8 +312,8 @@ class Backend:
 
     def inspect(self, request):
         return dict(scope=SCOPE, defaults=dict(budgetSeconds=7200, maxCodeRounds=3, maxCandidates=12, screenPairs=10, holdoutPairs=40),
-                    profiles=sorted({d["profile"] for d in request.get("catalog", [])}),
-                    decks=[dict(id=d["manifest"]["id"], name=d["manifest"]["name"], profile=d["profile"], coverage=d["coverage"]) for d in request.get("catalog", [])],
+                    profiles=sorted({p for d in request.get("catalog", []) for p in target_profiles(d)}),
+                    decks=[dict(id=d["manifest"]["id"], name=d["manifest"]["name"], profile=d["profile"], targetProfiles=target_profiles(d), coverage=d["coverage"]) for d in request.get("catalog", [])],
                     numericPaths=sorted(PRIORITIES), tuningBounds=[-1000, 1000], unmeasured=UNMEASURED)
 
     def create(self, request):
@@ -315,6 +330,9 @@ class Backend:
             return self.status(row[0])
         profile = request.get("profile")
         catalog = {d["manifest"]["id"]: d for d in request.get("catalog", [])}
+        # Only the target assignment changes; opponents retain their discovered subtype policies.
+        if not request.get("sourceRunId"):
+            catalog = {did: dict(entry, profile=profile) if profile in target_profiles(entry) else entry for did, entry in catalog.items()}
         if not profile or profile not in {d["profile"] for d in catalog.values()}:
             # A source run may pin a previously supported revision.
             if not request.get("sourceRunId"):
@@ -414,6 +432,7 @@ class Backend:
         shutil.copyfile(Path(__file__), folder / "backend.py")
         evidence = {str(p.relative_to(folder)): digest(p) for p in sorted(folder.rglob("*")) if p.is_file()}
         e = dict(id=eid, createdAt=now(), updatedAt=now(), status="created", frozenHash=digest(folder / "frozen.json"),
+                 catalogPublicationVersion=1,
                  evidenceHashes=evidence, budgetSeconds=budget, activeSeconds=0.0, maxCodeRounds=3, codeRounds=0,
                  maxCandidates=12, screenPairs=screen, holdoutPairs=holdout, diagnosticOnly=screen < 10 or holdout < 40,
                  pauseRequested=False, error=None, scope=SCOPE, modelUsage=None)
@@ -433,7 +452,7 @@ class Backend:
     def status(self, eid):
         e = self.exp(eid)
         e["remainingSeconds"] = max(0, e["budgetSeconds"] - e["activeSeconds"])
-        e["candidates"] = [{k: c.get(k) for k in ["id", "kind", "label", "status", "sourceHash", "classHashes", "adapterHash", "tuningHash", "codeRound", "fixtures", "screen", "holdout"]} for c in self.candidates(eid)]
+        e["candidates"] = [{k: c.get(k) for k in ["id", "kind", "label", "status", "sourceHash", "classHashes", "adapterHash", "tuningHash", "codeRound", "fixtures", "screen", "holdout", "protocolCatalog", "protocolCatalogHash"]} for c in self.candidates(eid)]
         e["registry"] = tuning_registry(self.frozen(eid))
         return e
 
@@ -488,8 +507,10 @@ class Backend:
         if not isinstance(source, str) or len(source.encode()) > 2 * 1024 * 1024 or "public final class ForgeBridge" not in source:
             raise ValueError("Provide a bounded ForgeBridge.java source snapshot")
         source_hash = hashlib.sha256(source.encode()).hexdigest()
-        is_code = source_hash != e["evidenceHashes"]["bridge-template.java"]
         fixture_source = request.get("fixtureSource")
+        # An explicit source snapshot is a reviewed code candidate even when the working
+        # tree already contained it when this experiment was frozen.
+        is_code = supplied is not None or source_hash != e["evidenceHashes"]["bridge-template.java"] or fixture_source is not None
         if is_code and not fixture_source:
             raise ValueError("Code revisions require a focused OptimizerCandidateChecks.java fixture snapshot")
         if fixture_source is not None and (not isinstance(fixture_source, str) or len(fixture_source.encode()) > 1024 * 1024 or "public final class OptimizerCandidateChecks" not in fixture_source):
@@ -588,6 +609,17 @@ class Backend:
             raise ValueError("Candidate compilation failed; inspect compile.log")
         candidate["classHashes"] = class_hashes(classes)
         candidate["adapterHash"] = adapter_hash(classes)
+        if candidate["kind"]=="parameters" and candidate["adapterHash"]!=frozen["adapterHash"]:
+            raise ValueError("Frozen template differs from the pinned baseline bridge; stage an explicit code candidate with focused fixtures")
+        # Introspection executes the exact compiled candidate, never a second hand-maintained table.
+        if b"--protocol-catalog" in (classes / "ForgeBridge.class").read_bytes():
+            path = folder / "protocol-catalog.json"
+            rc, _ = self.run_process(eid, [str(self.java), "-cp", os.pathsep.join(map(str, [classes, bundle / manifest["jarName"]])), "ForgeBridge", "--protocol-catalog"],
+                                     bundle, path, folder / "protocol-catalog.log", 30)
+            if rc:
+                raise ValueError("Candidate protocol catalog introspection failed")
+            candidate["protocolCatalog"] = json.loads(path.read_text())
+            candidate["protocolCatalogHash"] = digest(path)
         candidate["status"] = "compiled"
         self.put_candidate(eid, candidate)
 
@@ -854,8 +886,9 @@ class Backend:
             if digest(no_links(path)) != expected:
                 failures.append(dict(replay=str(path.relative_to(self.root)), error="Replay checksum mismatch"))
                 continue
+            cache_key = identity(["profile-evidence-v2", expected, frozen["profile"]])
             with self.db() as db:
-                cached = db.execute("SELECT payload FROM pilot_optimizer_replay_index WHERE replay_hash=?", (expected,)).fetchone()
+                cached = db.execute("SELECT payload FROM pilot_optimizer_replay_index WHERE replay_hash=?", (cache_key,)).fetchone()
             if cached:
                 grouped = json.loads(cached[0])
             else:
@@ -873,7 +906,7 @@ class Backend:
                             entry["examples"].append(dict(replay=str(path.relative_to(self.root)), sequence=r["sequence"], actualTurn=r.get("actualTurn"),
                                                           visibleEvidence=[str(x)[:100] for x in r.get("visibleEvidence", [])[:4]]))
                 with self.db() as db:
-                    db.execute("INSERT OR IGNORE INTO pilot_optimizer_replay_index VALUES(?,?)", (expected, encoded(grouped)))
+                    db.execute("INSERT OR IGNORE INTO pilot_optimizer_replay_index VALUES(?,?)", (cache_key, encoded(grouped)))
             for key, entry in grouped.items():
                 combined = patterns.setdefault(key, dict(entry, count=0, examples=[]))
                 combined["count"] += entry["count"]
@@ -957,11 +990,18 @@ class Backend:
                 shutil.copytree(baseline, staging)
                 shutil.rmtree(staging / "bridge")
                 shutil.copytree(self.folder(eid) / "candidates" / cid / "classes", staging / "bridge")
+                if c.get("protocolCatalog"):
+                    catalog_path=self.folder(eid)/"candidates"/cid/"protocol-catalog.json"
+                    if digest(no_links(catalog_path))!=c["protocolCatalogHash"] or json.loads(catalog_path.read_text())!=c["protocolCatalog"]:
+                        raise ValueError("Candidate protocol catalog checksum mismatch")
+                    shutil.copyfile(catalog_path,staging/"protocol-catalog.json")
                 save(staging / "bundle.json", dict(manifest, adapterHash=c["adapterHash"]))
                 if engine_hash(staging, manifest["jarName"]) != manifest["engineHash"] or adapter_hash(staging / "bridge") != c["adapterHash"]:
                     raise ValueError("Publication copy checksum mismatch")
                 os.rename(staging, final)
             validate_bundle(self.root, bundle_id)
+            if c.get("protocolCatalog") and (not (final/"protocol-catalog.json").is_file() or json.loads((final/"protocol-catalog.json").read_text())!=c["protocolCatalog"]):
+                raise ValueError("Published immutable bundle has a different protocol catalog")
             for slot in frozen["schedule"][:2]:
                 self.play(eid, c, slot, "candidate", final, "publication-smoke")
             # Publication only switches immutable identity; applying this policy stays opt-in.
@@ -985,7 +1025,14 @@ class Backend:
         if action == "recover": return self.recover()
         if action == "list":
             with self.db() as db:
-                return [dict(id=e["id"], status=e["status"], createdAt=e["createdAt"], activeSeconds=e["activeSeconds"]) for e in [json.loads(r[0]) for r in db.execute("SELECT payload FROM pilot_optimizer_experiments ORDER BY rowid DESC LIMIT 100")]]
+                result=[]
+                for raw, in db.execute("SELECT payload FROM pilot_optimizer_experiments ORDER BY rowid DESC LIMIT 100"):
+                    e=json.loads(raw)
+                    candidates=[json.loads(r[0]) for r in db.execute("SELECT payload FROM pilot_optimizer_candidates WHERE experiment_id=? ORDER BY rowid DESC",(e["id"],))]
+                    catalogued=next((c for c in candidates if c.get("protocolCatalog") and not c.get("reviewDisposition")),None)
+                    result.append(dict(id=e["id"], status=e["status"], createdAt=e["createdAt"], activeSeconds=e["activeSeconds"],
+                                       protocolCandidateId=catalogued["id"] if catalogued else None))
+                return result
         identifier(eid)
         if action == "stage": return self.stage(eid, request)
         if action == "prepare": return self.prepare(eid, request)

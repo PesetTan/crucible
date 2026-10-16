@@ -61,7 +61,13 @@ public sealed record Capabilities(bool Available, string Engine, string EngineHa
     public ProtocolCatalog? Protocols { get; init; }
 }
 public sealed record EngagementProtocol(string Id,string Name,string Condition,string Response,int Priority,int MaximumDelayTurns,Dictionary<string,int> Preferences);
-public sealed record ProtocolCatalog(string Version,string Profile,string Hash,JsonElement Settings,List<EngagementProtocol> Definitions);
+public sealed record ProtocolProfileSet(string Profile,string Parent,string Activation,List<EngagementProtocol> Definitions);
+public sealed record ProtocolCatalog(string Version,string Profile,string Hash,JsonElement Settings,List<EngagementProtocol> Definitions)
+{
+    public Dictionary<string,ProtocolProfileSet>? Sets { get; init; }
+    public List<EngagementProtocol> ForProfile(string? profile)=>profile is null||profile==Profile?Definitions:Sets?.GetValueOrDefault(profile)?.Definitions??[];
+    public bool SupportsOptimizerProfile(string profile)=>Sets?.GetValueOrDefault(profile)?.Activation=="optimizer-policy";
+}
 public sealed record RunRequest(List<string> DeckIds, int GamesPerPair = 200, int Workers = 2, int TimeoutSeconds = 180, int TurnLimit = 150, long RootSeed = 42, bool Diagnostic = true,
     bool StaggerStarts = true, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = 1, bool PerformanceMode = false, string PilotMode = ReanimatorPilots.CurrentAggroMode)
 {

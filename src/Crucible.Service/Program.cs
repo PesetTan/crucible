@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using DeckTester;
 
+HostControl.WaitForLauncher();
 if(Environment.GetEnvironmentVariable("MTG_STARTUP_DIAGNOSTICS")=="1")Console.Error.WriteLine("Crucible.Service entered Main.");
 if(args.Contains("--check-runtime",StringComparer.Ordinal)){
     Console.WriteLine(Json.Encode(new CreatedRun(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported?"jit":"native-aot")));
@@ -19,9 +20,9 @@ static async Task Run(string[] args)
     builder.Services.AddResponseCompression(options=>options.MimeTypes=Microsoft.AspNetCore.ResponseCompression.ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]));
     builder.Services.ConfigureHttpJsonOptions(options=>options.SerializerOptions.TypeInfoResolverChain.Insert(0,Json.Options.TypeInfoResolver!));
     var paths=new AppPaths(builder.Environment);
-    FileStream ownership;
-    try{ownership=new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
-    catch(IOException error){throw new InvalidOperationException("Another simulation host already owns this data directory. Stop that host before starting a replacement.",error);}
+    if(args.Contains("--setup",StringComparer.Ordinal)){await EngineSetup.Install(paths);return;}
+    var ownership=HostControl.AcquireDataOwnership(paths);
+    CatalogBootstrap.Ensure(paths);
     builder.Services.AddSingleton(paths);
     BackendHosting.Register(builder.Services);
     builder.Services.AddSingleton<AiNoteStore>();
@@ -32,6 +33,7 @@ static async Task Run(string[] args)
     var instanceToken=Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
     LocalApiSecurity.Use(app,new(StringComparer.OrdinalIgnoreCase){"127.0.0.1","localhost"},instanceToken);
     HostHealth.Map(app,"service");
+    HostControl.Map(app);
     BackendHosting.MapAnnotations(app);
     BackendHosting.Map(app,instanceToken);
     await BackendHosting.Initialize(app);

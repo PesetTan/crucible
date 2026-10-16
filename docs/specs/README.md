@@ -1,6 +1,6 @@
 # Design contracts and validation targets
 
-Originally specified October 11, 2026; current-state notes updated October 14, 2026 (America/Los_Angeles).
+Originally specified October 11, 2026; current-state notes updated October 15, 2026 (America/Los_Angeles).
 
 The app is implemented and remains exploratory. These documents combine design contracts, subsequent extensions, and outstanding validated-result requirements. Use [implementation status](../implementation-status.md) for shipped behavior and evidence, [operating guides](../README.md) for current workflows, and [development checks](../development.md) for the test entry points. The initial test waiver is historical; the repository now includes .NET, Java, Python, and Swift checks.
 
@@ -18,7 +18,7 @@ These specifications implement the scope of the [dated simulator plan](../plans/
 | [08 — Mana incident logging](08-mana-incident-logging.md) | Per-player mana-starved/mana-flooded detection, evidence, and filters |
 | [09 — Mulligan tracking](09-mulligan-tracking.md) | Each synthetic player's mulligans before keep and kept hand size |
 | [10 — Expanded deck library](10-expanded-deck-library.md) | Historical library expansion and the current ten-deck run cap |
-| [11 — Deck Tester selection and pilot labels](11-visual-design-and-deck-lists.md) | Direct tile selection, independent group disclosures, color-name ordering, and Pilot-prefixed names |
+| [11 — Visual design and Deck Lists](11-visual-design-and-deck-lists.md) | Shared spacing, headers, pilot views, Deck List naming, grouping, mana-value ordering, and land-production indicators |
 
 The original implementation order was: capability investigation → data manifests → rules and pilot fixtures → audited small batch → interface and full batch. The interface may be developed with clearly labeled fixtures, but fixture data must never appear as simulated results.
 
@@ -45,3 +45,15 @@ This review validates the documentation's consistency; it does not establish eng
 ## Deck Workshop extension
 
 October 12, 2026: Deck Workshop is specified in 02, 05, 06, and 07. It adds custom immutable deck versions, browser drafts, one-matchup reruns, and scoped comparisons. The user authorized implementation of this extension. Specification contracts were checked against the current service/UI separation, exact-version cache keys, and existing seed scheme before feature implementation.
+
+## Shared interface design update
+
+October 15, 2026: specification 11 records the shared Svelte layout and four-view Forge Pilots design, then defines Deck List terminology and a single grouping/sorting contract for setup previews, library, and Workshop. Mana-value order applies to all categories and replaces the earlier Workshop land-production order. The user authorized both specification updates and implementation. Other outstanding engine and interface targets retain their validation status.
+
+### Land-production display requirement
+
+October 15, 2026: land rows in all Deck Lists must visibly identify the mana they can produce using the existing mana symbols, independently of casting cost. Specification 11 defines conditional, fetch-only, nonproducing, and unknown states; 06 and 07 link the interface and acceptance requirements. The user subsequently authorized implementation. The active Svelte Deck Lists now use a shared land-production renderer/interpreter; verification and interpretation limits are recorded in [implementation status](../implementation-status.md).
+
+### Run-setup group ordering
+
+October 15, 2026: run setup explicitly orders Tier A, Tier B, Tier C, Your Deck, Custom Decks, then Unrated, with empty groups omitted. Specifications 06, 07, and 11 define classification, source-order independence, and acceptance. This corrects the source-order-dependent interleaving of Your Deck between Tier B and Tier C.

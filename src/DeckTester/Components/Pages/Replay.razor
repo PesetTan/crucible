@@ -21,7 +21,7 @@
     </section>
     @if(record.Kind=="trigger"){<div class="notice"><strong>Trigger · @(record.TriggerCategory??"Unclassified")</strong><span>@record.TriggerSource · <CardRules Text="@record.TriggerText" /></span></div>}
     @if(record.Kind=="pilot_decision"){<div class="notice"><strong>Pilot decision · @ReanimatorPilots.DisplayName(record.PilotProfile)</strong><span>@record.Decision: @record.Selected<br />Opponent estimate: @(record.OpponentClass??"unknown") · heuristic score @(record.OpponentConfidence??0)/100<br />@record.Reason</span><details><summary>Legal options and public evidence</summary><p>Options: @(record.Options is null?"Enable Omniscient Hand Audit to inspect offered options.":string.Join(", ",record.Options))</p><p>Evidence: @string.Join(", ",record.VisibleEvidence??[])</p></details></div>}
-    @if(record.ActiveProtocols is {Count:>0} activeProtocols){<div class="notice" aria-label="Active Engagement Protocols"><strong>Engagement Protocols · @record.ProtocolSetVersion</strong><span>@string.Join(" · ",activeProtocols.Select(ProtocolLabel))</span>@if(record.Kind=="protocol_state"){<p>@record.Reason</p><p class="small muted">@string.Join(", ",record.VisibleEvidence??[])</p>}@if(record.ProtocolDelay==true){<p>Bounded caution: this card's waiting allowance has started.</p>}</div>}
+    @if(record.ActiveProtocols is {Count:>0} activeProtocols){<div class="notice" aria-label="Active Engagement Protocols"><strong>Engagement Protocols · @record.ProtocolSetVersion</strong><span>@string.Join(" · ",activeProtocols.Select(id=>ProtocolLabel(id,record.PilotProfile)))</span>@if(record.Kind=="protocol_state"){<p>@record.Reason</p><p class="small muted">@string.Join(", ",record.VisibleEvidence??[])</p>}@if(record.ProtocolDelay==true){<p>Bounded caution: this card's waiting allowance has started.</p>}</div>}
     @if(state is {} snapshot){
         <div class="board-grid">@foreach(var player in snapshot.Players){
             <section class="player-board"><div class="player-head"><div><span class="tag">@(snapshot.ActivePlayer==player.Id?"ACTIVE PLAYER":"OPPONENT")</span><h2><DeckIdentity Deck="@(Store.Deck(player.Id=="A"?slot!.DeckA:slot!.DeckB))" /></h2></div><div class="life-total">@player.Life<small>LIFE</small></div></div>
@@ -38,7 +38,7 @@
 <details><summary>Events on This Page</summary><div class="event-list">@for(int i=0;i<records.Count;i++){var position=i;var r=records[i];<button @onclick="()=>Choose(position)"><span>Turn @r.ActualTurn · #@r.Sequence</span><strong>@(r.Kind=="trigger"?$"Trigger · {r.TriggerCategory??"Unclassified"}":r.Event?.Replace("GameEvent","")??r.Kind)</strong></button>}</div></details>
 </div>
 @code{
-    private string ProtocolLabel(string id)=>Store.Run(RunId).Config.ProtocolSet?.Definitions.FirstOrDefault(d=>d.Id==id)?.Name??id.Replace('-',' ');
+    private string ProtocolLabel(string id,string? profile)=>Store.Run(RunId).Config.ProtocolSet?.ForProfile(profile).FirstOrDefault(d=>d.Id==id)?.Name??id.Replace('-',' ');
     private async Task PollConnection(){try{using var timer=new PeriodicTimer(TimeSpan.FromSeconds(10));while(await timer.WaitForNextTickAsync(lifetime.Token))await InvokeAsync(async()=>{await Store.Refresh(RunId,lifetime.Token);if(slot is null&&Store.ConnectionError is null){slot=Store.Slot(RunId,Id);turnPositions=await Engine.ReplayTurns(slot);await Load();Choose(0);error=null;}StateHasChanged();});}catch(OperationCanceledException){}}
 
     protected override string SelectionKey => "replay";

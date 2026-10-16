@@ -21,7 +21,7 @@ public sealed class AiNoteStore
             CREATE INDEX IF NOT EXISTS ai_notes_subject ON ai_notes(scope,subject,written_at DESC);
             """;
         cmd.ExecuteNonQuery();
-        var seed=Path.Combine(paths.Root,"src","DeckTester","notes","editorial.json");
+        var seed=Path.Combine(paths.Assets,"src","DeckTester","notes","editorial.json");
         if(!File.Exists(seed))seed=Path.Combine(AppContext.BaseDirectory,"notes","editorial.json");
         if(File.Exists(seed)){
             var notes=Json.Decode<List<AiNoteRecord>>(File.ReadAllText(seed));

@@ -69,6 +69,7 @@ export interface ProtocolSet {
   hash: string;
   definitions: Protocol[];
   settings: Record<string, unknown>;
+  sets?: Record<string, { profile: string; parent: string; activation: string; definitions: Protocol[] }>;
 }
 export interface Capability {
   available: boolean;
@@ -103,7 +104,7 @@ export interface RunConfig {
   attributesHash?: string;
   cardAttributes?: Record<string, unknown>;
   protocolSet?: ProtocolSet;
-  optimizerPolicy?: { id: string };
+  optimizerPolicy?: { id: string; profile?: string; tuningHash?: string };
 }
 export interface Baseline {
   runId: string;
@@ -240,6 +241,7 @@ export interface Slot {
 }
 export interface Snapshot {
   version: number;
+  manaValues?: Record<string, number>;
   decks: DeckRow[];
   capabilities: Capability;
   runs: Run[];

@@ -58,7 +58,7 @@ try {
     var page=new RunDetail();var js=new Confirmation();var navigation=new TestNavigation();
     typeof(RunDetail).GetProperty("Id",instance)!.SetValue(page,source.Id);
     typeof(RunDetail).GetProperty("JS",instance)!.SetValue(page,js);
-    typeof(RunDetail).GetProperty("Coordinator",instance)!.SetValue(page,new LocalUiBackend(store,new ForgeEngine(paths,store),coordinator,new DeckImporter(paths,store),new ResourceCapacity()));
+    typeof(RunDetail).GetProperty("Coordinator",instance)!.SetValue(page,new LocalUiBackend(store,new ForgeEngine(paths,store),coordinator,new DeckImporter(paths,store),new ResourceCapacity(),new DeckWorkshop(paths,store,new ForgeEngine(paths,store))));
     typeof(RunDetail).GetProperty("Navigation",instance)!.SetValue(page,navigation);
     typeof(RunDetail).GetField("summary",instance)!.SetValue(page,Metrics.Summarize(source,[sourceSlot]));
     async Task ClickDelete()=>await (Task)typeof(RunDetail).GetMethod("DeleteSession",instance)!.Invoke(page,null)!;

@@ -3,6 +3,7 @@
   import type { Run, Catalog, Deck, Capability } from "./types.ts";
   import { api } from "./api.ts";
   import DeckIdentity from "./DeckIdentity.svelte";
+  import EngagementProtocols from "./EngagementProtocols.svelte";
   let {
     run,
     catalog,
@@ -39,6 +40,8 @@
       {catalog?.modes.find((m) => m.value === run.config.pilot)?.label ??
         run.config.pilot}
     </dd>
+    <dt>Optimizer policy</dt>
+    <dd>{#if run.config.optimizerPolicy}<code>{run.config.optimizerPolicy.id}</code>{#if run.config.optimizerPolicy.profile}<span>{run.config.optimizerPolicy.profile}</span>{/if}{:else}None recorded{/if}</dd>
     {#each run.config.deckIds as id}<dt>
         <DeckIdentity deck={decks.find((d) => d.id === id)} {catalog} compact />
       </dt>
@@ -68,18 +71,7 @@
       capability.adapterHash === run.config.adapterHash
         ? "Engine and adapter match the current build."
         : "Historical engine or adapter build."}
-    </p>{/if}{#if run.config.protocolSet}<details>
-      <summary>Engagement Protocols · {run.config.protocolSet.version}</summary
-      ><code>{run.config.protocolSet.hash}</code
-      >{#each run.config.protocolSet.definitions as p}<article>
-          <h4>{p.name}</h4>
-          <p>{p.condition}</p>
-          <p>{p.response}</p>
-          <p class="small muted">
-            Priority {p.priority} · maximum wait {p.maximumDelayTurns} turns
-          </p>
-        </article>{/each}
-    </details>{/if}{#if run.config.cardAttributes}<details>
+    </p>{/if}{#if run.config.protocolSet}<EngagementProtocols catalog={run.config.protocolSet} title="Recorded Engagement Protocols" note="Catalog frozen with this session. Recorded pilots and optimizer policy determine which sets were enabled." />{/if}{#if run.config.cardAttributes}<details>
       <summary
         >Recorded card attributes · {Object.keys(run.config.cardAttributes)
           .length} cards</summary

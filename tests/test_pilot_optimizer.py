@@ -15,6 +15,29 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 class QualityChecks(unittest.TestCase):
+    def test_batch_meter_includes_a_job_finished_after_a_queue_reorder(self):
+        spec=importlib.util.spec_from_file_location("protocol_batch",ROOT/"scripts/evaluate-engagement-protocols.py")
+        batch=importlib.util.module_from_spec(spec);spec.loader.exec_module(batch)
+        statuses={"previous":dict(activeSeconds=1,status="running"),"current":dict(activeSeconds=10,status="running")}
+        total=batch.refresh_clocks(statuses,[dict(id="previous",activeSeconds=200,status="awaiting-review"),dict(id="current",activeSeconds=6601,status="running")],lambda _:self.fail("Unexpected missing experiment"))
+        self.assertEqual(total,6801)
+        self.assertEqual(statuses["previous"]["status"],"awaiting-review")
+
+    def test_discovery_includes_exact_broad_assignments_without_hybrid_matching(self):
+        entry = dict(profile="burn-v001", manifest=dict(strategy="aGgRo", subtype="Burn"))
+        self.assertEqual(m.target_profiles(entry), ["aggro-v001", "burn-v001"])
+        entry["manifest"]["strategy"] = "Aggro–Control"
+        self.assertEqual(m.target_profiles(entry), ["burn-v001"])
+        entry["manifest"].update(strategy="Control", subtype="rEaNiMaToR")
+        entry["profile"] = "reanimator-v011"
+        self.assertEqual(m.target_profiles(entry), ["reanimator-v011"])
+
+    def test_frozen_legacy_publishers_cannot_publish_changed_catalogs(self):
+        candidate=dict(protocolCatalog=dict(version="v2"))
+        self.assertFalse(m.catalog_publication_supported({},candidate,dict(version="v1")))
+        self.assertTrue(m.catalog_publication_supported({},candidate,dict(version="v2")))
+        self.assertTrue(m.catalog_publication_supported(dict(catalogPublicationVersion=1),candidate,dict(version="v1")))
+
     def test_cpu_and_allocation_samples_are_not_combined(self):
         stack=dict(stackTrace=dict(frames=[dict(method=dict(type=dict(name="Example"),name="choose"))]))
         report=m.jfr_hotspots([dict(type="jdk.ExecutionSample",values=stack),*[dict(type="jdk.ObjectAllocationSample",values=stack) for _ in range(5)]])
@@ -163,6 +186,23 @@ class PersistenceChecks(unittest.TestCase):
         base=(self.backend.folder(self.eid)/"bridge-template.java").read_text()
         with self.assertRaisesRegex(ValueError,"focused"):self.backend.stage(self.eid,dict(source=base+"\n// revision\n"))
 
+    def test_explicit_working_tree_snapshot_is_a_code_candidate(self):
+        base=(self.backend.folder(self.eid)/"bridge-template.java").read_text()
+        with self.assertRaisesRegex(ValueError,"focused"):self.backend.stage(self.eid,dict(source=base))
+        fixture="public final class OptimizerCandidateChecks { public static void main(String[] args) {} }"
+        c=self.backend.stage(self.eid,dict(source=base,fixtureSource=fixture))
+        self.assertEqual(c["kind"],"code")
+        self.assertEqual(self.backend.exp(self.eid)["codeRounds"],1)
+
+    def test_numeric_candidate_cannot_hide_a_changed_working_tree_bridge(self):
+        c=self.backend.stage(self.eid,{})
+        def compile_changed(*args,**kwargs):
+            classes=self.backend.folder(self.eid)/"candidates"/c["id"]/"classes"
+            (classes/"ForgeBridge.class").write_bytes(b"different compiled adapter")
+            return 0,0
+        with patch.object(self.backend,"run_process",side_effect=compile_changed):
+            with self.assertRaisesRegex(ValueError,"pinned baseline"):self.backend.compile(self.eid,c)
+
     def test_focused_fixture_tampering_is_rejected(self):
         base=(self.backend.folder(self.eid)/"bridge-template.java").read_text()
         fixture="public final class OptimizerCandidateChecks { public static void main(String[] args) {} }"
@@ -222,6 +262,32 @@ class PersistenceChecks(unittest.TestCase):
         source=self.backend.source(self.eid,dict(term="optimizerEnabled"))
         self.assertLessEqual(len(source["excerpt"]),12000)
         with self.assertRaises(ValueError):self.backend.evidence(self.eid,100)
+
+    def test_broad_target_resolution_preserves_opponent_subtype_policy(self):
+        catalog=json.loads(m.encoded(self.catalog))
+        catalog[0]["profile"]="jace-control-v001"
+        catalog[1]["profile"]="burn-v001"
+        catalog[1]["manifest"]["strategy"]="Aggro"
+        eid=self.backend.create(dict(self.request,key="broad-current",catalog=catalog))["id"]
+        frozen=self.backend.frozen(eid)
+        self.assertEqual(frozen["profile"],"control-shared-v1")
+        self.assertEqual(frozen["profiles"],{"target":"control-shared-v1","opponent":"burn-v001"})
+        self.assertEqual(frozen["targets"],["target"])
+
+    def test_replay_evidence_cache_is_partitioned_by_exact_profile(self):
+        first=self.backend.stage(self.eid,{})
+        other=self.backend.create(dict(self.request,key="other-profile",profile="aggro-v001",deckIds=["opponent"],opponentIds=["target"]))["id"]
+        second=self.backend.stage(other,{})
+        path=self.root/"shared.jsonl.gz"
+        with gzip.open(path,"wt") as stream:
+            for profile in ["control-shared-v1","aggro-v001"]:
+                stream.write(json.dumps(dict(kind="pilot_decision",pilotProfile=profile,sequence=1,decision=profile,selected="example",reason="fixture"))+"\n")
+        game=dict(kind="game",replay="shared.jsonl.gz",replayHash=m.digest(path))
+        with self.backend.db() as db:
+            for eid,c in [(self.eid,first),(other,second)]:
+                db.execute("INSERT INTO pilot_optimizer_evaluations VALUES(?,?,?,?)",(eid,eid,c["id"],m.encoded(game)))
+        self.assertEqual(self.backend.evidence(self.eid)["patterns"][0]["decision"],"control-shared-v1")
+        self.assertEqual(self.backend.evidence(other)["patterns"][0]["decision"],"aggro-v001")
 
     def test_symlink_artifacts_are_rejected(self):
         c=self.backend.stage(self.eid,{})
@@ -288,5 +354,15 @@ class PersistenceChecks(unittest.TestCase):
             self.assertEqual(self.backend.promote(self.eid,c["id"]),published)
             self.assertEqual(smoke.call_count,2)
         self.assertNotEqual(json.loads((self.root/"data/engine-bundles/active.json").read_text())["id"],self.bundle_id)
+
+    def test_publication_copies_the_compiled_candidates_catalog(self):
+        c,games=self.promotion_fixture()
+        catalog=dict(version="v2",definitions=[],sets={"control-shared-v1":dict(definitions=[])})
+        path=self.backend.folder(self.eid)/"candidates"/c["id"]/"protocol-catalog.json";m.save(path,catalog)
+        c.update(protocolCatalog=catalog,protocolCatalogHash=m.digest(path));self.backend.put_candidate(self.eid,c)
+        with patch.object(self.backend,"games",side_effect=lambda eid,cid,phase=None:[g for g in games if phase is None or g["phase"]==phase]),patch.object(self.backend,"audit_games"),patch.object(self.backend,"fixture_run",return_value=self.promotion_checks()),patch.object(self.backend,"play",return_value={}):
+            policy=self.backend.promote(self.eid,c["id"])
+        published=self.root/"data/engine-bundles"/policy["bundleId"]/"protocol-catalog.json"
+        self.assertEqual(m.digest(published),c["protocolCatalogHash"])
 
 if __name__=="__main__":unittest.main()

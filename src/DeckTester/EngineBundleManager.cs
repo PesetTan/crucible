@@ -14,7 +14,7 @@ public sealed record EngineBundle(string Id, string EngineHash, string AdapterHa
 
 // Publishing is the only operation that touches mutable vendor/ and engine/build files.
 // Games and coverage always read a complete, versioned bundle.
-public sealed class EngineBundleManager(string root)
+public sealed class EngineBundleManager(string root, string? assets = null)
 {
     private string Base => Path.Combine(root, "data", "engine-bundles");
     private string ActiveFile => Path.Combine(Base, "active.json");
@@ -55,8 +55,8 @@ public sealed class EngineBundleManager(string root)
             .Concat(new[] { "cardsfolder", "tokenscripts", "editions", "ai", "formats", "effects", "defaults" }
                 .Select(name => Path.Combine(folder, "res", name)).Where(Directory.Exists)
                 .SelectMany(path => Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)))
-            .Where(File.Exists).Order(StringComparer.Ordinal);
-        return DeckImporter.Hash(string.Join("\n", files.Select(file => Path.GetRelativePath(folder, file) + ":" + ForgeEngine.FileHash(file))));
+            .Where(File.Exists).OrderBy(file=>Path.GetRelativePath(folder,file).Replace('\\','/'),StringComparer.Ordinal);
+        return DeckImporter.Hash(string.Join("\n", files.Select(file => Path.GetRelativePath(folder, file).Replace('\\','/') + ":" + ForgeEngine.FileHash(file))));
     }
 
     private static string AdapterHash(string bridge) => DeckImporter.Hash(string.Join("\n",
@@ -76,24 +76,36 @@ public sealed class EngineBundleManager(string root)
             || !Path.GetFileName(jar).EndsWith("-jar-with-dependencies.jar", StringComparison.Ordinal))
             throw new InvalidOperationException("MTG_FORGE_JAR must name a Forge desktop jar directly inside vendor/.");
         var jarName = Path.GetFileName(jar);
-        var javac = Path.Combine(Vendor, "jdk", OperatingSystem.IsMacOS() ? "Contents/Home/bin/javac" : "bin/javac");
+        var javac = Path.Combine(Vendor, "jdk", OperatingSystem.IsMacOS() ? "Contents/Home/bin/javac" : "bin/"+AppPaths.JavaTool("javac"));
         if (!File.Exists(jar) || !File.Exists(javac) || !Directory.Exists(Path.Combine(Vendor, "res")))
             throw new InvalidOperationException("Forge jar, Java compiler, or card resources are missing; run setup first.");
         Directory.CreateDirectory(Build);
-        var process = new ProcessStartInfo(javac) { WorkingDirectory = root, UseShellExecute = false };
-        foreach (var arg in new[] { "-cp", jar, "-d", Build, Path.Combine(root, "engine", "ForgeBridge.java") }) process.ArgumentList.Add(arg);
+        var source=Path.Combine(assets??root,"engine","ForgeBridge.java");
+        // Java 17's Windows launcher can lose characters outside the system code page.
+        // Keep tool arguments ASCII and let the Unicode-aware OS set the working directory.
+        if(OperatingSystem.IsWindows()){
+            var stagedSource=Path.Combine(Build,"ForgeBridge.java");File.Copy(source,stagedSource,true);source=stagedSource;
+        }
+        string ToolPath(string path)=>OperatingSystem.IsWindows()?Path.GetRelativePath(root,path):path;
+        var process = new ProcessStartInfo(javac) { WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,RedirectStandardOutput=true,RedirectStandardError=true };
+        foreach (var arg in new[] { "-J-Dfile.encoding=UTF-8", "-J-Dsun.stdout.encoding=UTF-8", "-J-Dsun.stderr.encoding=UTF-8", "-encoding", "UTF-8", "-cp", ToolPath(jar), "-d", ToolPath(Build), ToolPath(source) }) process.ArgumentList.Add(arg);
         using (var compiler = Process.Start(process) ?? throw new InvalidOperationException("Could not start javac.")) {
-            await compiler.WaitForExitAsync();
-            if (compiler.ExitCode != 0) throw new InvalidOperationException("Forge bridge compilation failed; active bundle was not changed.");
+            var output=compiler.StandardOutput.ReadToEndAsync();var errors=compiler.StandardError.ReadToEndAsync();
+            await compiler.WaitForExitAsync();var text=await output;var error=await errors;
+            if(!string.IsNullOrWhiteSpace(text))Console.WriteLine(text);
+            if(!string.IsNullOrWhiteSpace(error))Console.Error.WriteLine(error);
+            if (compiler.ExitCode != 0) throw new InvalidOperationException($"Forge bridge compilation failed ({compiler.ExitCode}): {error.Trim()} Active bundle was not changed.");
         }
         var catalogProcess=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(javac)!,OperatingSystem.IsWindows()?"java.exe":"java")) {
-            WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true
+            WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true
         };
-        foreach(var arg in new[]{"-cp",Build+Path.PathSeparator+jar,"ForgeBridge","--protocol-catalog"})catalogProcess.ArgumentList.Add(arg);
+        foreach(var arg in new[]{"-Dfile.encoding=UTF-8","-Dsun.stdout.encoding=UTF-8","-Dsun.stderr.encoding=UTF-8","-cp",ToolPath(Build)+Path.PathSeparator+ToolPath(jar),"ForgeBridge","--protocol-catalog"})catalogProcess.ArgumentList.Add(arg);
         string protocolCatalog;
         using(var exporter=Process.Start(catalogProcess)??throw new InvalidOperationException("Could not export protocols.")){
-            protocolCatalog=await exporter.StandardOutput.ReadToEndAsync();await exporter.WaitForExitAsync();
-            if(exporter.ExitCode!=0)throw new InvalidOperationException("Protocol export failed.");
+            var output=exporter.StandardOutput.ReadToEndAsync();var errors=exporter.StandardError.ReadToEndAsync();
+            await exporter.WaitForExitAsync();protocolCatalog=await output;var error=await errors;
+            if(!string.IsNullOrWhiteSpace(error))Console.Error.WriteLine(error);
+            if(exporter.ExitCode!=0)throw new InvalidOperationException($"Protocol export failed ({exporter.ExitCode}): {error.Trim()}");
             _=Json.Decode<ProtocolCatalog>(protocolCatalog);
         }
         var sourceEngine = EngineHash(Vendor, jarName);

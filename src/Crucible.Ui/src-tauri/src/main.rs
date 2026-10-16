@@ -1,18 +1,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#[cfg(not(windows))]
 use serde_json::Value;
+use std::env;
+#[cfg(not(windows))]
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
-};
+#[cfg(not(windows))]
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+#[cfg(not(windows))]
 use tauri_plugin_opener::OpenerExt;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+fn main() {
+    windows::run();
+}
 
 fn port(name: &str, default: u16) -> Result<u16, String> {
     env::var(name)
@@ -27,6 +35,7 @@ fn port(name: &str, default: u16) -> Result<u16, String> {
             }
         })
 }
+#[cfg(not(windows))]
 fn probe(
     client: &reqwest::blocking::Client,
     port: u16,
@@ -62,6 +71,7 @@ fn probe(
     }
     Ok(Some(h))
 }
+#[cfg(not(windows))]
 fn ensure(
     client: &reqwest::blocking::Client,
     port: u16,
@@ -155,6 +165,7 @@ fn ensure(
         logs.display()
     ))
 }
+#[cfg(not(windows))]
 fn root(resources: &Path) -> Result<PathBuf, String> {
     let candidate = env::var_os("MTG_PROJECT_ROOT")
         .map(PathBuf::from)
@@ -171,7 +182,9 @@ fn root(resources: &Path) -> Result<PathBuf, String> {
     }
     Ok(root)
 }
+#[cfg(not(windows))]
 fn main() {
+    let existing_hosts_only = env::args().any(|a| a == "--existing-hosts-only");
     let diagnostics = env::args().any(|a| a == "--check-runtime");
     if diagnostics {
         println!("Crucible desktop: native Tauri shell");
@@ -185,7 +198,7 @@ fn main() {
                 let _ = w.set_focus();
             }
         }))
-        .setup(|app| {
+        .setup(move |app| {
             let resources = app.path().resource_dir()?;
             let root = root(&resources).map_err(std::io::Error::other)?;
             let ui_port = port("CRUCIBLE_UI_PORT", 5077).map_err(std::io::Error::other)?;
@@ -196,17 +209,31 @@ fn main() {
                 .redirect(reqwest::redirect::Policy::none())
                 .no_proxy()
                 .build()?;
-            ensure(
-                &client,
-                backend_port,
-                backend_port,
-                &root,
-                &resources,
-                "service",
-            )
-            .map_err(std::io::Error::other)?;
-            ensure(&client, ui_port, backend_port, &root, &resources, "ui")
+            if existing_hosts_only {
+                for (port, role) in [(backend_port, "service"), (ui_port, "ui")] {
+                    if probe(&client, port, &root, role)
+                        .map_err(std::io::Error::other)?
+                        .is_none()
+                    {
+                        return Err(std::io::Error::other(format!(
+                            "Crucible {role} is unavailable. Start it in Crucible Monitor."
+                        ))
+                        .into());
+                    }
+                }
+            } else {
+                ensure(
+                    &client,
+                    backend_port,
+                    backend_port,
+                    &root,
+                    &resources,
+                    "service",
+                )
                 .map_err(std::io::Error::other)?;
+                ensure(&client, ui_port, backend_port, &root, &resources, "ui")
+                    .map_err(std::io::Error::other)?;
+            }
             let opener = app.handle().clone();
             WebviewWindowBuilder::new(
                 app,
@@ -231,32 +258,6 @@ fn main() {
                     && url.port() == Some(ui_port)
             })
             .build()?;
-            let open = MenuItem::with_id(app, "open", "Open Crucible", true, None::<&str>)?;
-            let quit = MenuItem::with_id(
-                app,
-                "quit",
-                "Quit Window — Keep Simulations Running",
-                true,
-                None::<&str>,
-            )?;
-            let menu = Menu::with_items(app, &[&open, &quit])?;
-            let mut tray = TrayIconBuilder::new()
-                .tooltip("Crucible · Local Playtesting")
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
-                    "quit" => app.exit(0),
-                    _ => {}
-                });
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
-            }
-            tray.build(app)?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -267,7 +268,16 @@ fn main() {
         })
         .build(tauri::generate_context!());
     match app {
-        Ok(app) => app.run(|_, _| {}),
+        Ok(app) => app.run(|app, event| {
+            // A regular Mac application reopens its hidden window from the Dock or Monitor.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        }),
         Err(error) => {
             eprintln!("Crucible could not open: {error}");
             std::process::exit(1)

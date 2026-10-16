@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { api, poll, loadSaved, save, idempotencyKey } from "../lib/api.ts";
-  import { active, deckLabel, rate, interval, date } from "../lib/data.ts";
+  import { active, deckLabel, date } from "../lib/data.ts";
   import type {
     Catalog,
     Card,
@@ -12,8 +12,12 @@
     RunRequest,
   } from "../lib/types.ts";
   import AppSelect from "../lib/AppSelect.svelte";
-  import DeckIdentity from "../lib/DeckIdentity.svelte";
+  import DeckResult from "../lib/DeckResult.svelte";
   import AiNote from "../lib/AiNote.svelte";
+  import DeckList from "../lib/DeckList.svelte";
+  import CardMana from "../lib/CardMana.svelte";
+  import CardRules from "../lib/CardRules.svelte";
+  import PageHeader from "../lib/PageHeader.svelte";
   let {
     catalog,
     route,
@@ -353,69 +357,69 @@
 </script>
 
 <svelte:head><title>Deck Workshop — Crucible</title></svelte:head>
-<div class="eyebrow">CHANGE A LIST / TEST A MATCHUP</div>
-<h1>Deck Workshop.</h1>
-<p class="lead">Make a change. Play it across the table.</p>
-<AiNote subject="workshop" />{#if error}<p class="error" role="alert">
-    {error}
-  </p>{/if}{#if message}<p role="status">{message}</p>{/if}{#if locked}<p
-    class="notice"
-  >
-    A session is active. You can edit a draft; rerunning waits until the active
-    session stops.
-  </p>{/if}
-<section class="panel">
-  <div class="toolbar">
-    <div>
-      <label for="workshop-source">Start from a saved deck</label><AppSelect
-        id="workshop-source"
-        label="Start from a saved deck"
-        bind:value={source}
-        options={[
-          { value: "", label: "Choose a deck" },
-          ...(data?.decks ?? []).map((d) => ({
-            value: d.id,
-            label: deckLabel(d, catalog),
-          })),
-        ]}
-      />
+<div class="workshop-page">
+  <PageHeader
+    title="Deck Workshop."
+    eyebrow="CHANGE A LIST / TEST A MATCHUP"
+    description="Make a change. Play it across the table."
+  />
+  <AiNote subject="workshop" />{#if error}<p class="error" role="alert">
+      {error}
+    </p>{/if}{#if message}<p role="status">{message}</p>{/if}{#if locked}<p
+      class="notice"
+    >
+      A session is active. You can edit a draft; rerunning waits until the
+      active session stops.
+    </p>{/if}
+  <section class="panel workshop-start-panel">
+    <div class="toolbar">
+      <div>
+        <label for="workshop-source">Start from a saved deck</label><AppSelect
+          id="workshop-source"
+          label="Start from a saved deck"
+          bind:value={source}
+          options={[
+            { value: "", label: "Choose a deck" },
+            ...(data?.decks ?? []).map((d) => ({
+              value: d.id,
+              label: deckLabel(d, catalog),
+            })),
+          ]}
+        />
+      </div>
+      <button
+        disabled={!source}
+        onclick={() => {
+          const d = data?.decks.find((d) => d.id === source);
+          if (d) copy(d);
+        }}>Copy Deck</button
+      >
     </div>
-    <button
-      disabled={!source}
-      onclick={() => {
-        const d = data?.decks.find((d) => d.id === source);
-        if (d) copy(d);
-      }}>Copy Deck</button
-    >
-  </div>
-  <details>
-    <summary>Paste an Arena decklist</summary><label
-      >Decklist<textarea
-        rows="8"
-        bind:value={paste}
-        placeholder="Deck&#10;4 Card Name"></textarea></label
-    ><button disabled={busy || !paste.trim()} onclick={resolve}
-      >Resolve Cards</button
-    >{#each issues as issue}<p class="error">{issue}</p>{/each}
-  </details>
-</section>
-<div class="workshop-grid">
-  <section class="panel">
-    <label
-      >Deck name<input
-        bind:value={name}
-        oninput={() => (savedId = "")}
-      /></label
-    >
-    <h2>{count} Main-Deck Cards</h2>
-    {#each [["Main deck", cards, false], ["Sideboard", sideboard, true]] as entry}{@const list =
-        entry[1] as Card[]}{@const side = entry[2] as boolean}{#if side}<h3>
-          Sideboard · {list.reduce((n, c) => n + c.quantity, 0)}
-        </h3>{/if}
-      <div class="workshop-cards">
-        {#each list.toSorted((a, b) => (data?.manaValues[a.arenaId] ?? 99) - (data?.manaValues[b.arenaId] ?? 99) || a.name.localeCompare(b.name)) as card}<div
-            class="workshop-card"
-          >
+    <details>
+      <summary>Paste an Arena Deck List</summary><label
+        >Deck List<textarea
+          rows="8"
+          bind:value={paste}
+          placeholder="Deck&#10;4 Card Name"></textarea></label
+      ><button disabled={busy || !paste.trim()} onclick={resolve}
+        >Resolve Cards</button
+      >{#each issues as issue}<p class="error">{issue}</p>{/each}
+    </details>
+  </section>
+  <div class="workshop-grid">
+    <section class="panel workshop-editor">
+      <label
+        >Deck name<input
+          bind:value={name}
+          oninput={() => (savedId = "")}
+        /></label
+      >
+      <h2>Deck List <span class="small muted">· {count} main</span></h2>
+      {#each [["Main deck", cards, false], ["Sideboard", sideboard, true]] as entry}{@const list =
+          entry[1] as Card[]}{@const side = entry[2] as boolean}{#if side}<h3>
+            Sideboard · {list.reduce((n, c) => n + c.quantity, 0)}
+          </h3>{/if}
+        {#snippet editCard(card: Card)}<div class="workshop-card">
             <input
               aria-label={"Quantity of " +
                 card.name +
@@ -428,9 +432,13 @@
                 quantity(card.arenaId, +e.currentTarget.value, side)}
             />
             <details>
-              <summary>{card.name} <small>{card.cost}</small></summary>
+              <summary
+                ><span class="workshop-card-name">{card.name}</span><span
+                  class="workshop-card-mana"><CardMana {card} /></span
+                ></summary
+              >
               <p>{card.type}</p>
-              <p class="rules-text">{card.text.replaceAll("\\n", "\n")}</p>
+              <p class="rules-text"><CardRules text={card.text} /></p>
             </details>
             <button
               aria-label={"Remove " +
@@ -438,186 +446,206 @@
                 (side ? " from sideboard" : "")}
               onclick={() => quantity(card.arenaId, 0, side)}>×</button
             >
-          </div>{/each}
-      </div>{/each}
-    <div class="actions">
+          </div>{/snippet}
+        <DeckList
+          cards={list}
+          manaValues={data?.manaValues}
+          zone={side ? "Sideboard" : "MainDeck"}
+          row={editCard}
+          headingLevel={side ? 4 : 3}
+        />{/each}
+      <div class="actions">
+        <button
+          disabled={busy || validation?.canSave !== true}
+          onclick={() =>
+            action(async () => {
+              await persist();
+            })}>Save to Library</button
+        >{#if savedId}<a href={"/decks?deck=" + savedId}>Open Saved Deck →</a
+          >{/if}
+      </div>
+      {#each validation?.errors ?? [] as message}<p class="error">
+          {message}
+        </p>{/each}{#each validation?.blockers ?? [] as message}<p
+          class="notice"
+        >
+          {message}
+        </p>{/each}
+    </section>
+    <section class="panel workshop-search-panel">
+      <h2>Find a Card</h2>
+      <form
+        class="toolbar workshop-search-form"
+        onsubmit={(e) => {
+          e.preventDefault();
+          void search();
+        }}
+      >
+        <label
+          >Search card catalog<input type="search" bind:value={query} /></label
+        ><button disabled={busy || query.trim().length < 2}>Search</button>
+      </form>
+      {#each results as card}<article class="search-card">
+          <details>
+            <summary><strong>{card.name}</strong> · <CardMana {card} /></summary
+            >
+            <p>{card.type}</p>
+            <p class="rules-text"><CardRules text={card.text} /></p>
+          </details>
+          <div class="actions">
+            <button onclick={() => add(card)}>Add to Deck</button><button
+              onclick={() => add(card, true)}>Add to Sideboard</button
+            >
+          </div>
+        </article>{/each}
+    </section>
+  </div>
+  <section class="panel">
+    <h2>Test the Matchup</h2>
+    <div class="config-grid">
+      <div>
+        <label for="workshop-opponent">Opponent</label><AppSelect
+          id="workshop-opponent"
+          label="Opponent"
+          bind:value={opponent}
+          onchange={() => {
+            baseline = baselineDeck = latest = "";
+            baselineMatch = editedMatch = undefined;
+          }}
+          options={[
+            { value: "", label: "Choose an opponent" },
+            ...(data?.decks.filter((d) => d.id !== savedId) ?? []).map((d) => ({
+              value: d.id,
+              label: deckLabel(d, catalog),
+            })),
+          ]}
+        />
+      </div>
+      <div>
+        <label for="workshop-baseline">Baseline session</label><AppSelect
+          id="workshop-baseline"
+          label="Baseline session"
+          value={baseline && baselineDeck ? baseline + ":" + baselineDeck : ""}
+          onchange={(v) => {
+            [baseline, baselineDeck] = v.split(":");
+            if (baseline) settings(baseline);
+            void compare();
+          }}
+          options={[
+            { value: "", label: "No baseline" },
+            ...(
+              data?.runs.filter((r) => r.config.deckIds.includes(opponent)) ??
+              []
+            ).flatMap((r) =>
+              r.config.deckIds
+                .filter((d) => d !== opponent)
+                .map((d) => ({
+                  value: r.id + ":" + d,
+                  label:
+                    deckLabel(
+                      data?.decks.find((x) => x.id === d),
+                      catalog,
+                    ) +
+                    " · " +
+                    date(r.createdAt),
+                })),
+            ),
+          ]}
+        />
+      </div>
+      <label
+        >Games per matchup<input
+          type="number"
+          bind:value={games}
+          min="2"
+          max="1000"
+          step="2"
+        /></label
+      ><label
+        >Parallel games<input
+          type="number"
+          bind:value={workers}
+          min="1"
+          max="4"
+        /></label
+      ><label>Root seed<input bind:value={seed} inputmode="numeric" /></label
+      ><label
+        >Time limit (seconds)<input
+          type="number"
+          bind:value={timeout}
+          min="10"
+          max="1800"
+        /></label
+      ><label
+        >Actual player turn limit<input
+          type="number"
+          bind:value={turnLimit}
+          min="10"
+          max="1000"
+        /></label
+      >
+      <div>
+        <label for="workshop-pilot">Pilot policy</label><AppSelect
+          id="workshop-pilot"
+          label="Pilot policy"
+          options={catalog?.modes ?? []}
+          value={pilot || catalog?.defaultPilotMode || ""}
+          onchange={(v) => (pilot = v)}
+        />
+      </div>
+      <label
+        ><input type="checkbox" bind:checked={performance} /> Performance Mode</label
+      >
+    </div>
+    <div class="actions workshop-match-actions">
       <button
-        disabled={busy || validation?.canSave !== true}
-        onclick={() =>
-          action(async () => {
-            await persist();
-          })}>Save to Library</button
-      >{#if savedId}<a href={"/decks?deck=" + savedId}>Open Saved Deck →</a
+        class="primary"
+        disabled={busy ||
+          locked ||
+          !opponent ||
+          validation?.canSave !== true ||
+          !!validation?.blockers.length}
+        onclick={rerun}>Save &amp; Rerun Matchup</button
+      >{#if latest}<a class="button" href={"/runs/" + latest}
+          >Open Session Results →</a
         >{/if}
     </div>
-    {#each validation?.errors ?? [] as message}<p class="error">
-        {message}
-      </p>{/each}{#each validation?.blockers ?? [] as message}<p class="notice">
-        {message}
-      </p>{/each}
   </section>
-  <section class="panel">
-    <h2>Find a Card</h2>
-    <form
-      onsubmit={(e) => {
-        e.preventDefault();
-        void search();
-      }}
-    >
-      <label
-        >Search card catalog<input type="search" bind:value={query} /></label
-      ><button disabled={busy || query.trim().length < 2}>Search</button>
-    </form>
-    {#each results as card}<article class="search-card">
-        <details>
-          <summary><strong>{card.name}</strong> · {card.cost}</summary>
-          <p>{card.type}</p>
-          <p class="rules-text">{card.text}</p>
-        </details>
-        <div class="actions">
-          <button onclick={() => add(card)}>Add to Deck</button><button
-            onclick={() => add(card, true)}>Add to Sideboard</button
-          >
-        </div>
-      </article>{/each}
-  </section>
+  {#if baselineMatch || editedMatch}<section class="panel">
+      <h2>Workshop Comparison</h2>
+      <p class="small muted">
+        These are exploratory aggregate differences. Deck IDs participate in
+        derived game seeds, so edited lists are not paired causal comparisons.
+      </p>
+      {#if comparisonError}<p class="error">{comparisonError}</p>{/if}
+      <div class="matchup-cards">
+        {#each [["Baseline", baselineMatch], ["Edited", editedMatch]] as entry}{@const match =
+            entry[1] as WorkshopMatch | undefined}
+          {#if match}<DeckResult
+              heading={entry[0] as string}
+              deck={match.deck}
+              {catalog}
+              winRate={match.winRate}
+              wins={match.wins}
+              losses={match.losses}
+              draws={match.draws}
+              interval={match.interval}
+            >
+              {#snippet actions()}<a href={"/runs/" + match.run.id}
+                  >Session evidence →</a
+                >{/snippet}
+            </DeckResult>
+          {:else}<div>
+              <h3>{entry[0] as string}</h3>
+              <p class="muted">No results yet.</p>
+            </div>{/if}{/each}
+      </div>
+      {#if baselineMatch?.winRate != null && editedMatch?.winRate != null}<p>
+          Observed difference: {(
+            (editedMatch.winRate - baselineMatch.winRate) *
+            100
+          ).toFixed(1)} percentage points. Check build, pilot, and settings before
+          comparing.
+        </p>{/if}
+    </section>{/if}
 </div>
-<section class="panel">
-  <h2>Test the Matchup</h2>
-  <div class="config-grid">
-    <div>
-      <label for="workshop-opponent">Opponent</label><AppSelect
-        id="workshop-opponent"
-        label="Opponent"
-        bind:value={opponent}
-        onchange={() => {
-          baseline = baselineDeck = latest = "";
-          baselineMatch = editedMatch = undefined;
-        }}
-        options={[
-          { value: "", label: "Choose an opponent" },
-          ...(data?.decks.filter((d) => d.id !== savedId) ?? []).map((d) => ({
-            value: d.id,
-            label: deckLabel(d, catalog),
-          })),
-        ]}
-      />
-    </div>
-    <div>
-      <label for="workshop-baseline">Baseline session</label><AppSelect
-        id="workshop-baseline"
-        label="Baseline session"
-        value={baseline && baselineDeck ? baseline + ":" + baselineDeck : ""}
-        onchange={(v) => {
-          [baseline, baselineDeck] = v.split(":");
-          if (baseline) settings(baseline);
-          void compare();
-        }}
-        options={[
-          { value: "", label: "No baseline" },
-          ...(
-            data?.runs.filter((r) => r.config.deckIds.includes(opponent)) ?? []
-          ).flatMap((r) =>
-            r.config.deckIds
-              .filter((d) => d !== opponent)
-              .map((d) => ({
-                value: r.id + ":" + d,
-                label:
-                  deckLabel(
-                    data?.decks.find((x) => x.id === d),
-                    catalog,
-                  ) +
-                  " · " +
-                  date(r.createdAt),
-              })),
-          ),
-        ]}
-      />
-    </div>
-    <label
-      >Games per matchup<input
-        type="number"
-        bind:value={games}
-        min="2"
-        max="1000"
-        step="2"
-      /></label
-    ><label
-      >Parallel games<input
-        type="number"
-        bind:value={workers}
-        min="1"
-        max="4"
-      /></label
-    ><label>Root seed<input bind:value={seed} inputmode="numeric" /></label
-    ><label
-      >Time limit (seconds)<input
-        type="number"
-        bind:value={timeout}
-        min="10"
-        max="1800"
-      /></label
-    ><label
-      >Actual player turn limit<input
-        type="number"
-        bind:value={turnLimit}
-        min="10"
-        max="1000"
-      /></label
-    >
-    <div>
-      <label for="workshop-pilot">Pilot policy</label><AppSelect
-        id="workshop-pilot"
-        label="Pilot policy"
-        options={catalog?.modes ?? []}
-        value={pilot || catalog?.defaultPilotMode || ""}
-        onchange={(v) => (pilot = v)}
-      />
-    </div>
-    <label
-      ><input type="checkbox" bind:checked={performance} /> Performance Mode</label
-    >
-  </div>
-  <button
-    class="primary"
-    disabled={busy ||
-      locked ||
-      !opponent ||
-      validation?.canSave !== true ||
-      !!validation?.blockers.length}
-    onclick={rerun}>Save &amp; Rerun Matchup</button
-  >{#if latest}<a class="button" href={"/runs/" + latest}
-      >Open Session Results →</a
-    >{/if}
-</section>
-{#if baselineMatch || editedMatch}<section class="panel">
-    <h2>Workshop Comparison</h2>
-    <p class="small muted">
-      These are exploratory aggregate differences. Deck IDs participate in
-      derived game seeds, so edited lists are not paired causal comparisons.
-    </p>
-    {#if comparisonError}<p class="error">{comparisonError}</p>{/if}
-    <div class="matchup-cards">
-      {#each [["Baseline", baselineMatch], ["Edited", editedMatch]] as entry}{@const match =
-          entry[1] as WorkshopMatch | undefined}
-        <div>
-          <h3>{entry[0] as string}</h3>
-          {#if match}<DeckIdentity deck={match.deck} {catalog} /><strong
-              >{rate(match.winRate)}</strong
-            >
-            <p>{match.wins}W / {match.losses}L / {match.draws}D</p>
-            <p>95% Wilson interval: {interval(match.interval)}</p>
-            <a href={"/runs/" + match.run.id}>Session evidence →</a>{:else}<p
-              class="muted"
-            >
-              No results yet.
-            </p>{/if}
-        </div>{/each}
-    </div>
-    {#if baselineMatch?.winRate != null && editedMatch?.winRate != null}<p>
-        Observed difference: {(
-          (editedMatch.winRate - baselineMatch.winRate) *
-          100
-        ).toFixed(1)} percentage points. Check build, pilot, and settings before comparing.
-      </p>{/if}
-  </section>{/if}

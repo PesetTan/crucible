@@ -57,7 +57,7 @@ def digest(database, table):
     return {"count": len(rows), "sha256": result.hexdigest()}
 
 
-def normalized_game(slot, replays):
+def normalized_game(slot, replays, destination):
     result = {key: value for key, value in slot["result"].items() if key != "durationMs"}
     replay = replays / slot["attempts"][-1]["replay"]
     records = []
@@ -65,10 +65,42 @@ def normalized_game(slot, replays):
         for line in stream:
             record = json.loads(line)
             record.pop("attemptId", None)
+            if record.get("kind") == "game_finished" and str(record.get("detail", "")).startswith("DurationMs="):
+                record.pop("detail")  # Measured wall time, never a game decision/state.
             records.append(record)
     encoded = json.dumps(records, sort_keys=True, separators=(",", ":")).encode()
+    with gzip.open(destination, "wb") as saved:
+        saved.write(encoded)
     return {"seed": slot["seed"], "starter": slot["starter"], "index": slot["index"],
             "result": result, "normalizedReplaySha256": hashlib.sha256(encoded).hexdigest()}
+
+
+def contract_checks(address, decks):
+    token = json.loads(request(address, "/api/v1/session")[1])["instanceToken"]
+    headers = {"X-Instance-Token": token, "Idempotency-Key": "native-contract-rejected-run"}
+    note = dict(id="native-api-contract", scope="page", subject="integration-fixture", title="Fixture", body="Disposable API check.",
+                author="Integration fixture", model="Deterministic test", exactModelId=None,
+                writtenAt="2026-10-15T00:00:00Z", context=None, evidence="Temporary database only.")
+    assert request(address, "/api/v1/ai-notes", note, headers, "POST")[0] == 201
+    assert json.loads(request(address, "/api/v1/ai-notes?scope=page&subject=integration-fixture")[1])[0]["id"] == note["id"]
+    deck = next(row["manifest"] for row in decks if row["manifest"]["sourceType"] != "custom" and row["coverage"]["status"] != "blocked")
+    cards = [dict(arenaId=card["arenaId"], quantity=card["quantity"]) for card in deck["cards"] if card["zone"] == "MainDeck"]
+    custom = dict(name="Native API fixture", parentDeckId=deck["id"], cards=cards, sideboard=[])
+    for path in ["/api/v1/decks/validate", "/api/v1/decks/custom"]:
+        status, raw, _, _ = request(address, path, custom, headers, "POST")
+        assert status == 200, (path, status, raw[:2000])
+    paste = "Deck\n" + "\n".join(f"{card['quantity']} {card['name']}" for card in deck["cards"] if card["zone"] == "MainDeck")
+    status, raw, _, _ = request(address, "/api/v1/decks/resolve", {"text": paste}, headers, "POST")
+    assert status == 200 and not json.loads(raw)["issues"], (status, raw[:2000])
+    card_id = cards[0]["arenaId"]
+    status, raw, _, _ = request(address, f"/api/v1/cards/{card_id}/attributes", {"attributes": {"nativeContractFixture": True}}, headers, "POST")
+    assert status == 200 and json.loads(raw)["nativeContractFixture"], (status, raw[:2000])
+    assert json.loads(request(address, f"/api/v1/cards/{card_id}/attributes")[1])["nativeContractFixture"]
+    ids = [row["manifest"]["id"] for row in decks[:2]]
+    status, raw, _, _ = request(address, "/api/v1/runs", {"deckIds": ids, "workers": 0}, headers, "POST")
+    assert status == 409 and "message" in json.loads(raw), (status, raw[:2000])
+    assert request(address, "/api/v1/pilot-optimizations")[0] == 200
+    return True
 
 
 def main():
@@ -79,12 +111,14 @@ def main():
     parser.add_argument("--database", type=Path)
     parser.add_argument("--idle-seconds", type=float, default=12)
     parser.add_argument("--games", action="store_true", help="Run two matched complete Forge games per host.")
+    parser.add_argument("--api-contract", action="store_true", help="Exercise guarded mutations in each disposable fixture.")
     args = parser.parse_args()
     project = Path(__file__).resolve().parents[1]
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
     database = (args.database or project / "data/simulator.sqlite").resolve()
     runtimes = {"jit": args.jit_runtime.resolve(), "native-aot": args.native_runtime.resolve()}
     evidence = {"database": str(database), "cases": {}, "matchedGames": args.games}
+    evidence["replayNormalization"] = "Remove per-attempt IDs and terminal DurationMs only; retain every other record field and checkpoint hash."
     with tempfile.TemporaryDirectory(prefix="crucible-service-benchmark-") as temporary:
         base = Path(temporary)
         backup(database, base / "simulator.sqlite")
@@ -179,8 +213,11 @@ def main():
                         assert time.monotonic() < deadline, "Matched game run timed out"
                         time.sleep(.5)
                     assert run["status"] == "completed" and all(slot["status"] == "completed" for slot in state["slots"]), run
-                    games[kind] = sorted((normalized_game(slot, root / "data/replays") for slot in state["slots"]), key=lambda slot: slot["seed"])
+                    games[kind] = sorted((normalized_game(slot, root / "data/replays", output / f"{kind}-{slot['seed']}-replay.json.gz") for slot in state["slots"]), key=lambda slot: slot["seed"])
                     result["gameRunId"] = run_id; result["gameConfig"] = run["config"]
+                    result["games"] = games[kind]
+                if args.api_contract:
+                    result["apiContract"] = contract_checks(address, decks)
                 responses[kind] = current; evidence["cases"][kind] = result
                 (output / "summary.json").write_text(json.dumps(evidence, indent=2))
                 print(f"{kind}: ready in {startup:.3f}s; idle {result['idle']['rssMiB']:.1f} MiB, {result['idle']['cpuPercent']:.2f}% CPU", flush=True)
@@ -194,6 +231,8 @@ def main():
         assert responses["jit"] == responses["native-aot"], "JIT/AOT API evidence differs"
         evidence["apiParity"] = True
         if args.games:
+            evidence["games"] = games
+            (output / "summary.json").write_text(json.dumps(evidence, indent=2))
             assert games["jit"] == games["native-aot"], "Matched complete games differ"
             evidence["games"] = games; evidence["gameParity"] = True
         (output / "summary.json").write_text(json.dumps(evidence, indent=2))
