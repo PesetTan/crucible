@@ -197,19 +197,20 @@ public sealed partial class Store
             cmd.Parameters.AddWithValue("$payload",Json.Encode(note));cmd.ExecuteNonQuery();
         }finally{writer.Release();}
     }
-    public List<SessionTimingSample> SessionTimingSamples(string engineHash,string adapterHash)
+    public List<SessionTimingSample> SessionTimingSamples(string engineHash,string adapterHash,string providerId="forge")
     {
         using var db=Open();using var cmd=db.CreateCommand();
         cmd.CommandText="""
             SELECT r.payload,t.payload FROM session_timings t JOIN runs r ON r.id=t.run_id
             WHERE json_extract(t.payload,'$.status')='completed'
+                AND coalesce(json_extract(r.payload,'$.config.provider.id'),'forge')=$provider
                 AND json_extract(t.payload,'$.attemptCount')>=5
                 AND json_extract(r.payload,'$.config.optimizerPolicy.id') IS NULL
                 AND json_extract(r.payload,'$.config.engineHash')=$engine
                 AND json_extract(r.payload,'$.config.adapterHash')=$adapter
             ORDER BY json_extract(t.payload,'$.finishedAt') DESC LIMIT 200
             """;
-        cmd.Parameters.AddWithValue("$engine",engineHash);cmd.Parameters.AddWithValue("$adapter",adapterHash);
+        cmd.Parameters.AddWithValue("$engine",engineHash);cmd.Parameters.AddWithValue("$adapter",adapterHash);cmd.Parameters.AddWithValue("$provider",providerId);
         using var reader=cmd.ExecuteReader();var samples=new List<SessionTimingSample>();
         while(reader.Read()){
             var run=Json.Decode<SimulationRun>(reader.GetString(0));var timing=Json.Decode<SessionTiming>(reader.GetString(1));
@@ -329,7 +330,7 @@ public sealed partial class Store
         using var reader=cmd.ExecuteReader();
         return reader.Read()&&!reader.IsDBNull(2)?new(reader.GetInt32(0),reader.GetInt32(1),reader.GetInt32(2)):null;
     }
-    public List<TimingSample> TimingSamples(string engineHash,string adapterHash)
+    public List<TimingSample> TimingSamples(string engineHash,string adapterHash,string providerId="forge")
     {
         using var db=Open();using var cmd=db.CreateCommand();
         // Read only timing fields, rather than loading every stored game's turn samples.
@@ -344,6 +345,7 @@ public sealed partial class Store
                 coalesce(json_extract(r.payload,'$.config.performanceMode'),0)
             FROM slots s JOIN runs r ON r.id=s.run_id
             WHERE json_extract(r.payload,'$.config.engineHash')=$engine
+                AND coalesce(json_extract(r.payload,'$.config.provider.id'),'forge')=$provider
                 AND json_extract(r.payload,'$.config.adapterHash')=$adapter
                 AND json_extract(s.payload,'$.attempts[#-1].status') IN ('completed','failed')
                 AND json_extract(r.payload,'$.config.optimizerPolicy.id') IS NULL
@@ -351,7 +353,7 @@ public sealed partial class Store
                 AND json_extract(s.payload,'$.cachedFromRunId') IS NULL
             ORDER BY json_extract(s.payload,'$.attempts[#-1].finishedAt') DESC LIMIT 2000
             """;
-        cmd.Parameters.AddWithValue("$engine",engineHash);cmd.Parameters.AddWithValue("$adapter",adapterHash);
+        cmd.Parameters.AddWithValue("$engine",engineHash);cmd.Parameters.AddWithValue("$adapter",adapterHash);cmd.Parameters.AddWithValue("$provider",providerId);
         using var reader=cmd.ExecuteReader();var samples=new List<TimingSample>();
         while(reader.Read())if(!reader.IsDBNull(5))samples.Add(new(reader.GetString(0),reader.GetString(1),reader.GetInt32(2),reader.GetInt32(3),reader.GetInt32(4),reader.GetDouble(5),reader.GetBoolean(6),reader.IsDBNull(7)?null:reader.GetDouble(7),reader.GetBoolean(8)));
         return samples;

@@ -35,6 +35,7 @@ using(var coordinator=new RunCoordinator(store,forge,NullLogger<RunCoordinator>.
     Check(store.Run(id).Status=="completed"&&Metrics.Summarize(store.Run(id),store.Slots(id)).Valid==2,"shared coordinator durably commits complete native games");
     var accepted=store.Slots(id).First();var raw=store.PyreDeliveryForSlot(accepted)!;var config=Json.Decode<PyreInstallation>(installation);var receipt=await store.ImportPyreResult(raw,File.ReadAllText(config.Metrics),File.ReadAllText(config.ControllerMetrics),store.Run(id),accepted);
     Check(receipt.Duplicate&&store.Slots(id).Count==2,"coordinator raw redelivery does not change denominator");
+    Check(store.TimingSamples(store.Run(id).Config.EngineHash,store.Run(id).Config.AdapterHash).Count==0,"Forge estimate history excludes native timings even for explicitly supplied native hashes");
     Check(!pyre.Evidence(accepted).Available,"summary evidence explicitly reports replay unavailable");
     try{await store.ImportPyreResult(raw,File.ReadAllText(config.Metrics),File.ReadAllText(config.ControllerMetrics),store.Run(id),accepted with{Index=99});throw new Exception("Wrong slot accepted");}catch(InvalidDataException){}
     Check(true,"native delivery cannot commit to another slot");
