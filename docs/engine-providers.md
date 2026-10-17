@@ -6,7 +6,9 @@ and charts. The run pins its provider for every slot. Unsupported native request
 fail preflight; switching providers requires a new selection.
 
 `GET /api/v1/providers` reports availability, supported capture, native evidence
-modes and registered cohort names. Configure a local native installation in
+modes and registered cohort names. `GET /api/v1/providers/pyre/cohorts/{cohort}/coverage`
+resolves exact matching saved deck IDs and the dated pilot selections. Setup disables
+decks outside the selected cohort. Configure a local native installation in
 `data/pyre-provider.json` with absolute `executable`, its SHA-256 `executableHash`,
 `metrics` and `controllerMetrics` definition files, a `cohorts` map of names to
 native draft files, and a 32–2048 MiB `workerRssMiB` limit. Registration is local
@@ -22,7 +24,9 @@ the native manifest. Existing imported records without an executable run lock
 remain readable and cannot dispatch through either engine.
 
 One native worker executes one whole game at a time and reuses only immutable
-prepared inputs. Framed requests/responses, handshake identity, attempt
+prepared inputs. Pool initialization publishes its immutable manifest atomically and occurs once
+even when slots start together. A worker returns to the pool only after full
+result and coordinate validation. Framed requests/responses, handshake identity, attempt
 coordinates and output sizes are checked. Timeout and cancellation kill the
 isolated worker process tree. A sampled RSS watchdog rejects an over-budget
 worker; transient overshoot is possible. Failed attempts remain excluded, with

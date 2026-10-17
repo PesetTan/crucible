@@ -17,6 +17,7 @@ namespace DeckTester;
 [JsonSerializable(typeof(PyreEvidenceInfo))]
 [JsonSerializable(typeof(ProviderResources))]
 [JsonSerializable(typeof(NativeWorkerFailure))]
+[JsonSerializable(typeof(PyreCohortCoverage))]
 [JsonSerializable(typeof(ProviderDescriptor))]
 [JsonSerializable(typeof(List<ProviderDescriptor>))]
 [JsonSerializable(typeof(PyreIngestReceipt))]

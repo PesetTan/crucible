@@ -13,6 +13,7 @@ var prior=store.Runs().First(r=>r.Config.ProviderId=="pyre");
 var request=new RunRequest(prior.Config.DeckIds,2,1,30,150,42,true,StaggerStarts:false){ProviderId="pyre",PyreCohort="initial"};
 Check(providers.Discover().Single(p=>p.Id=="pyre").Capabilities.Available,"native discovery pins executable and contract");
 Check(providers.Preflight(request).Count==0,"exact frozen decks pass native preflight");
+Check(request.DeckIds.All(pyre.Coverage("initial").DeckIds.Contains),"cohort coverage exposes the exact selectable saved deck identities");
 var legacyDeck=store.Deck(request.DeckIds[0]);await store.SaveDeck(legacyDeck with{Cards=legacyDeck.Cards.Select(c=>c with{Zone="main"}).ToList()});
 Check(providers.Preflight(request).Count==0,"historical imported main-zone spelling remains selectable without rewriting history");await store.SaveDeck(legacyDeck);
 Check(providers.Preflight(request with{DeckIds=[request.DeckIds[0],"unsupported"]}).Count>0,"unsupported deck blocks before dispatch");
@@ -28,6 +29,9 @@ var slot=new GameSlot(Guid.NewGuid().ToString("N"),run.Id,locked.DeckIds[0],lock
 var first=await providers.Play(run,slot,1,CancellationToken.None);var second=await providers.Play(run,slot with{Index=1},1,CancellationToken.None);
 Check(first.Result is not null&&second.Result is not null&&first.Replay is null,"reused native worker returns actual complete metrics with unavailable summary replay");
 await providers.ReleaseWorkers(run.Id);
+var concurrentRun=run with{Id=Guid.NewGuid().ToString("N"),Config=locked with{Workers=2}};
+var concurrent=await Task.WhenAll(Enumerable.Range(0,8).Select(n=>providers.Play(concurrentRun,slot with{Id=Guid.NewGuid().ToString("N"),RunId=concurrentRun.Id,Index=n},1,CancellationToken.None)));
+Check(concurrent.Length==8&&pyre.Resources(concurrentRun.Id) is {Workers:2,CompletedGames:8},"simultaneous submissions share one bounded pool and immutable manifest publication");await providers.ReleaseWorkers(concurrentRun.Id);
 using(var coordinator=new RunCoordinator(store,forge,NullLogger<RunCoordinator>.Instance,paths,providers:providers)){
     await coordinator.StartAsync(CancellationToken.None);while(!coordinator.IsReady)await Task.Delay(10);
     var key="coordinator-fixtures";var id=await coordinator.Create(request,key);Check(await coordinator.Create(request,key)==id,"coordinator creation is idempotent");
@@ -105,6 +109,10 @@ try{
   var badConfig=pyre.Configure(request with{TimeoutSeconds=10},"fault-"+mode);var badRun=run with{Id=Guid.NewGuid().ToString("N"),Config=badConfig};var badSlot=slot with{RunId=badRun.Id};
   var timer=Stopwatch.StartNew();var rejected=false;
   try{await providers.Play(badRun,badSlot,1,CancellationToken.None);}catch(Exception error)when(error is IOException or InvalidDataException or OperationCanceledException or TimeoutException or KeyNotFoundException){rejected=true;}
+  if(mode=="result"){
+   try{await providers.Play(badRun,badSlot,1,CancellationToken.None);}catch(Exception error)when(error is IOException or InvalidDataException or KeyNotFoundException){}
+   Check(pyre.Resources(badRun.Id) is {Workers:2,CompletedGames:0},"malformed results retire their worker before reuse and never count as completed games");
+  }
   await providers.ReleaseWorkers(badRun.Id);Check(rejected&&timer.Elapsed.TotalSeconds<15,"bounded native worker fault: "+mode);
  }
 }finally{File.WriteAllText(installationPath,installation);}

@@ -12,13 +12,14 @@ public sealed record PyreInstallation(string Executable,string ExecutableHash,st
 public sealed record PyreEvidenceInfo(bool Available,string Capture,string? RecordId,string? Checksum,string? TraceUrl,string Description);
 public sealed record ProviderResources(string ProviderId,string RunId,string Measurement,int Workers,long PeakWorkerRssBytes,long PeakGroupRssBytes,int CompletedGames);
 public sealed record NativeWorkerFailure(string Slot,int Attempt,string ExecutableHash,string Error,string Diagnostics);
+public sealed record PyreCohortCoverage(string Cohort,string LegalityAsOf,List<string> DeckIds,List<string> Pilots);
 
 /// <summary>Native whole-game adapter. Installation paths are local configuration, never request arguments.</summary>
 public sealed class PyreEngine(AppPaths paths,Store store) : IAsyncDisposable
 {
     public const string ProviderVersion="convergence-native-v1";
     const int MaxManifest=4*1024*1024,MaxFrame=144*1024*1024;
-    readonly ConcurrentDictionary<string,Pool> pools=new();
+    readonly ConcurrentDictionary<string,Lazy<Pool>> pools=new();
     public static string Hash(string value)=>Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     public List<string> Cohorts(){try{return Installation().Installation.Cohorts.Keys.Order(StringComparer.Ordinal).ToList();}catch(IOException){return [];}}
     (PyreInstallation Installation,string Identity) Installation(){
@@ -61,6 +62,13 @@ public sealed class PyreEngine(AppPaths paths,Store store) : IAsyncDisposable
     }
     static Dictionary<string,int> Cards(DeckManifest deck)=>deck.Cards.Where(c=>c.Zone is "MainDeck" or "Main" or "main").GroupBy(c=>c.Name,StringComparer.Ordinal).ToDictionary(g=>g.Key,g=>g.Sum(c=>c.Quantity),StringComparer.Ordinal);
     static bool SameCards(Dictionary<string,int> actual,JsonElement list)=>actual.OrderBy(k=>k.Key,StringComparer.Ordinal).Select(k=>(k.Key,k.Value)).SequenceEqual(list.EnumerateArray().Select(c=>(c.GetProperty("name").GetString()!,c.GetProperty("count").GetInt32())).OrderBy(c=>c.Item1,StringComparer.Ordinal));
+    public PyreCohortCoverage Coverage(string cohort){
+        var installation=Installation().Installation;
+        if(!installation.Cohorts.TryGetValue(cohort,out var template))throw new ArgumentException("Unknown registered Pyre cohort.");
+        using var doc=JsonDocument.Parse(Invoke(installation,"preflight","--manifest",template));var root=doc.RootElement;
+        var lists=root.GetProperty("draft").GetProperty("decks").EnumerateArray().ToArray();
+        return new(cohort,root.GetProperty("legality_as_of").GetString()!,store.Decks().Where(d=>lists.Any(list=>SameCards(Cards(d),list))).Select(d=>d.Id).ToList(),root.GetProperty("pilots").EnumerateArray().Select(p=>p.GetProperty("id").GetString()!).ToList());
+    }
     public RunConfig Configure(RunRequest request,string key="preflight"){
         var(i,installationHash)=Installation();
         if(request.DeckIds.Count!=2||request.DeckIds.Distinct().Count()!=2)throw new InvalidDataException("Pyre requires two distinct exact frozen decks.");
@@ -107,24 +115,30 @@ public sealed class PyreEngine(AppPaths paths,Store store) : IAsyncDisposable
     public bool HasBundle(RunConfig config){try{var(i,id)=Installation();return config.Pyre is {} locked&&locked.InstallationHash==id&&Hash(locked.Manifest)==locked.ManifestHash&&config.EngineHash==i.ExecutableHash&&config.AdapterHash==Store.PyreAdapterHash;}catch(Exception error)when(error is IOException or InvalidDataException){return false;}}
     public async Task<ProviderExecution> Play(SimulationRun run,GameSlot slot,int attempt,CancellationToken token){
         if(!HasBundle(run.Config))throw new InvalidDataException("Pinned Pyre installation/run lock is unavailable.");
-        var pool=pools.GetOrAdd(run.Id,_=>new Pool(paths,run,Installation().Installation));
-        var response=await pool.Play(slot,attempt,token);var payload=response.GetProperty("canonical_result").GetString()!;
+        var pending=pools.GetOrAdd(run.Id,_=>new Lazy<Pool>(()=>new Pool(paths,run,Installation().Installation)));
+        Pool pool;try{pool=pending.Value;}catch{pools.TryRemove(new KeyValuePair<string,Lazy<Pool>>(run.Id,pending));throw;}
+        string? payload=null;PyreRecord? validated=null;
         var installation=Installation().Installation;
-        var parsed=PyreRecord.Parse(payload,File.ReadAllText(installation.Metrics),File.ReadAllText(installation.ControllerMetrics));
-        using var document=JsonDocument.Parse(payload);var root=document.RootElement;
-        if(root.GetProperty("manifest").GetProperty("experiment_id").GetString()!=run.Config.Provider!.ExperimentId||root.GetProperty("starter").GetInt32()!=(slot.Starter==run.Config.DeckIds[0]?0:1)||root.GetProperty("replicate").GetInt32()!=slot.Index||root.GetProperty("attempt").GetInt32()!=attempt-1)throw new InvalidDataException("Pyre response does not belong to the requested attempt.");
-        if(parsed.Slot.Result is null){
-            var failures=Path.Combine(paths.Data,"pyre-failures");Directory.CreateDirectory(failures);File.WriteAllText(Path.Combine(failures,parsed.RecordId+".json"),payload);
-            throw new InvalidDataException("Pyre returned an excluded rules/metric/pilot outcome; raw failure retained.");
+        void Verify(JsonElement frame){
+            payload=frame.GetProperty("canonical_result").GetString()!;
+            validated=PyreRecord.Parse(payload,File.ReadAllText(installation.Metrics),File.ReadAllText(installation.ControllerMetrics));
+            using var document=JsonDocument.Parse(payload);var root=document.RootElement;
+            if(root.GetProperty("manifest").GetProperty("experiment_id").GetString()!=run.Config.Provider!.ExperimentId||root.GetProperty("starter").GetInt32()!=(slot.Starter==run.Config.DeckIds[0]?0:1)||root.GetProperty("replicate").GetInt32()!=slot.Index||root.GetProperty("attempt").GetInt32()!=attempt-1)throw new InvalidDataException("Pyre response does not belong to the requested attempt.");
+            if(validated.Slot.Result is null){
+                var failures=Path.Combine(paths.Data,"pyre-failures");Directory.CreateDirectory(failures);File.WriteAllText(Path.Combine(failures,validated.RecordId+".json"),payload);
+                throw new InvalidDataException("Pyre returned an excluded rules/metric/pilot outcome; raw failure retained.");
+            }
         }
-        var result=parsed.Slot.Result;
+        var response=await pool.Play(slot,attempt,token,Verify);
+        var parsed=validated??throw new InvalidDataException("Native result was not validated.");
+        var result=parsed.Slot.Result!;
         var winner=result.Winner==parsed.Slot.DeckA?run.Config.DeckIds[0]:result.Winner==parsed.Slot.DeckB?run.Config.DeckIds[1]:null;
         if(response.TryGetProperty("trace",out var trace)&&trace.ValueKind!=JsonValueKind.Null){
             var evidence=Path.Combine(paths.Data,"pyre-evidence");Directory.CreateDirectory(evidence);
             var target=Path.Combine(evidence,parsed.RecordId+".json");var raw=trace.GetRawText();
             if(File.Exists(target)){if(Hash(File.ReadAllText(target))!=Hash(raw))throw new InvalidDataException("Conflicting immutable Pyre trace.");}else File.WriteAllText(target,raw);
         }
-        return new(result with{Winner=winner},null,null,payload);
+        return new(result with{Winner=winner},null,null,payload!);
     }
     public Task Commit(SimulationRun run,GameSlot slot,string payload){var i=Installation().Installation;return store.ImportPyreResult(payload,File.ReadAllText(i.Metrics),File.ReadAllText(i.ControllerMetrics),run,slot);}
     public PyreEvidenceInfo Evidence(GameSlot slot){
@@ -143,11 +157,11 @@ public sealed class PyreEngine(AppPaths paths,Store store) : IAsyncDisposable
         using var trace=JsonDocument.Parse(text);return trace.RootElement.Clone();
     }
     public ProviderResources? Resources(string run){
-        if(pools.TryGetValue(run,out var pool))return pool.Resources();
+        if(pools.TryGetValue(run,out var pool)&&pool.IsValueCreated)return pool.Value.Resources();
         var path=Path.Combine(paths.Data,"pyre-runs",run,"resources.json");return File.Exists(path)?Json.Decode<ProviderResources>(File.ReadAllText(path)):null;
     }
-    public async Task ReleaseWorkers(string run){if(pools.TryRemove(run,out var pool)){
-        var snapshot=pool.Resources();await pool.DisposeAsync();File.WriteAllText(Path.Combine(paths.Data,"pyre-runs",run,"resources.json"),Json.Encode(snapshot));
+    public async Task ReleaseWorkers(string run){if(pools.TryRemove(run,out var pending)&&pending.IsValueCreated){
+        var pool=pending.Value;var snapshot=pool.Resources();await pool.DisposeAsync();File.WriteAllText(Path.Combine(paths.Data,"pyre-runs",run,"resources.json"),Json.Encode(snapshot));
     }}
     public async ValueTask DisposeAsync(){foreach(var run in pools.Keys)await ReleaseWorkers(run);}
 
@@ -161,14 +175,20 @@ public sealed class PyreEngine(AppPaths paths,Store store) : IAsyncDisposable
         public Pool(AppPaths paths,SimulationRun run,PyreInstallation installation){
             this.run=run;this.installation=installation;capacity=new(run.Config.Workers);
             var folder=Path.Combine(paths.Data,"pyre-runs",run.Id);Directory.CreateDirectory(folder);manifest=Path.Combine(folder,"manifest.json");
-            var text=run.Config.Pyre!.Manifest;if(File.Exists(manifest)&&File.ReadAllText(manifest)!=text)throw new InvalidDataException("Pinned run manifest changed.");File.WriteAllText(manifest,text);
+            var text=run.Config.Pyre!.Manifest;
+            if(File.Exists(manifest)){if(File.ReadAllText(manifest)!=text)throw new InvalidDataException("Pinned run manifest changed.");}
+            else{
+                var temporary=Path.Combine(folder,".manifest-"+Guid.NewGuid().ToString("N")+".partial");
+                try{using(var file=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None)){file.Write(Encoding.UTF8.GetBytes(text));file.Flush(flushToDisk:true);}File.Move(temporary,manifest);}
+                finally{File.Delete(temporary);}
+            }
         }
-        public async Task<JsonElement> Play(GameSlot slot,int attempt,CancellationToken token){
+        public async Task<JsonElement> Play(GameSlot slot,int attempt,CancellationToken token,Action<JsonElement> verify){
             await capacity.WaitAsync(token);Worker? worker=null;var healthy=false;
             try{
                 ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed)!=0,this);
                 if(!idle.TryTake(out worker)){worker=new(installation,manifest,Sample);all.TryAdd(worker,0);Interlocked.Increment(ref launched);await worker.Handshake(run,token);}
-                var value=await worker.Simulate(slot.Starter==run.Config.DeckIds[0]?0:1,slot.Index,attempt-1,run.Config.TimeoutSeconds,token);Interlocked.Increment(ref completed);Sample();healthy=true;return value;
+                var value=await worker.Simulate(slot.Starter==run.Config.DeckIds[0]?0:1,slot.Index,attempt-1,run.Config.TimeoutSeconds,token);verify(value);Interlocked.Increment(ref completed);Sample();healthy=true;return value;
             }catch(Exception error){
                 var folder=Path.Combine(Path.GetDirectoryName(manifest)!,"failures");Directory.CreateDirectory(folder);
                 File.WriteAllText(Path.Combine(folder,slot.Id+"-"+attempt+".json"),Json.Encode(new NativeWorkerFailure(slot.Id,attempt,installation.ExecutableHash,error.Message,worker?.Diagnostics??"No worker was launched.")));

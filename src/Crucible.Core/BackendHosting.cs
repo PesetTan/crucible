@@ -42,6 +42,7 @@ public static class BackendHosting
         PilotOptimizer.MapEndpoints(app);
         app.MapGet("/api/v1/capabilities",(ForgeEngine engine)=>engine.Capabilities());
         app.MapGet("/api/v1/providers",(EngineProviders engines)=>engines.Discover());
+        app.MapGet("/api/v1/providers/pyre/cohorts/{cohort}/coverage",(string cohort,PyreEngine engine)=>engine.Coverage(cohort));
         app.MapGet("/api/v1/decks",(Store store,ForgeEngine engine)=>store.Decks().Select(d=>new DeckSnapshot(d,engine.Coverage(d))).ToList());
         app.MapGet("/api/v1/decks/{id}",(string id,Store store,ForgeEngine engine)=>new DeckSnapshot(store.Deck(id),engine.Coverage(store.Deck(id))));
         app.MapGet("/api/v1/cards/search",(string q,DeckWorkshop workshop)=>workshop.Search(q));

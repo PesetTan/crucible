@@ -37,7 +37,20 @@
     preview = $state("");
   let providers = $state<{id: string; capabilities: {available: boolean; blockers: string[]}; cohorts: string[]}[]>([]);
   let providerId = $state("forge"), pyreCohort = $state(""), capture = $state("summary");
-  const coverageBlocked = (id: string) => providerId === "forge" && snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status === "blocked";
+  type NativeCoverage = {deckIds: string[]; pilots: string[]; legalityAsOf: string};
+  let nativeCoverage = $state<NativeCoverage>();
+  let inventoryKey = $derived(snapshot?.decks.map((d) => d.manifest.id).sort().join("|") ?? "");
+  const coverageBlocked = (id: string) => providerId === "pyre" ? !nativeCoverage?.deckIds.includes(id) : snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status === "blocked";
+  $effect(() => {
+    const cohort = pyreCohort, engine = providerId, inventory = inventoryKey;
+    nativeCoverage = undefined;
+    if (engine !== "pyre" || !cohort || !inventory) return;
+    const controller = new AbortController();
+    void api<NativeCoverage>(`/api/v1/providers/pyre/cohorts/${encodeURIComponent(cohort)}/coverage`, {signal:controller.signal})
+      .then((value) => { nativeCoverage = value; })
+      .catch((e) => { if (e.name !== "AbortError") error = e.message; });
+    return () => controller.abort();
+  });
   let maximumDecks = $derived(providerId === "pyre" ? 2 : catalog?.maximumDecks ?? 10);
   let providerCapability = $derived(providerId === "forge" ? snapshot?.capabilities : providers.find((p) => p.id === providerId)?.capabilities);
   let expandedGroups = $state<Record<string, boolean>>({});
@@ -314,13 +327,13 @@
             <article
               class="deck-card"
               class:selected={selected.includes(deck.id)}
-              class:blocked={providerId === "forge" && row.coverage.status === "blocked"}
+              class:blocked={coverageBlocked(deck.id)}
             >
               <button class="deck-card-choice"
                   type="button"
                   aria-label={deckLabel(deck, catalog)}
                   aria-pressed={selected.includes(deck.id)}
-                  disabled={providerId === "forge" && row.coverage.status === "blocked" ||
+                  disabled={coverageBlocked(deck.id) ||
                     (!selected.includes(deck.id) &&
                       selected.length >= (maximumDecks))}
                   onclick={() => toggle(deck.id)}
@@ -338,8 +351,8 @@
               <SimulatedRate result={simulatedRates.get(deck.id)} />
               <div class="deck-bottom">
                 <span class="small"
-                  >{providerId === "forge" && row.coverage.status === "blocked"
-                    ? "Missing card support"
+                  >{coverageBlocked(deck.id)
+                    ? providerId === "pyre" ? pyreCohort ? "Outside the selected cohort" : "Choose a Pyre cohort first" : "Missing card support"
                     : providerId === "pyre" ? "Cohort pilot" : pilotLabel(catalog?.decks.find((d) => d.id === deck.id)?.profiles[
                           pilot || catalog.defaultPilotMode
                         ] ?? "forge-default", catalog)}</span
