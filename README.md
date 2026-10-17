@@ -4,6 +4,18 @@ Crucible is a local **Standard Bo1 deck-testing workspace**. It schedules head-t
 
 The interface is Svelte + TypeScript (`Crucible.Ui`), served by a small Native AOT host (`Crucible.UiHost`) and available in a Tauri desktop window or a self-hosted browser. The [solution](Crucible.slnx) also contains the shared backend (`Crucible.Core`), standalone backend host (`Crucible.Service`), and retained Blazor implementation (`DeckTester`) for rollback. Forge games run in Java workers. See [desktop and UI setup](docs/svelte-desktop.md) and the [documentation index](docs/README.md).
 
+## License
+
+Copyright (C) 2026 Crucible contributors.
+
+Crucible's original source code, documentation, and original assets are free software: you can redistribute and/or modify them under the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version (**GPL-3.0-or-later**). Crucible is distributed without any warranty; see [LICENSE](LICENSE) for the full terms.
+
+Third-party software and third-party content retain their own licenses and rights. This grant does not cover Wizards of the Coast card text, card data, artwork, trademarks, or third-party deck/source material, including such content in the starter catalog, examples, and screenshots. Crucible is unofficial and is not approved, endorsed, or sponsored by Wizards of the Coast. Portions of the materials used are property of Wizards of the Coast. © Wizards of the Coast LLC.
+
+See [third-party notices](THIRD_PARTY.md) and the [license review and distribution limits](docs/license-review.md). The software license does not establish permission to redistribute the bundled card catalog or public deck data.
+
+The owner has requested private repository visibility while Magic-content redistribution rights and Untapped-derived data restrictions are reviewed. The [privacy decision](docs/license-review.md#private-repository-decision) records the reasoning and verified visibility status. This is a precautionary decision; no infringement finding has been established.
+
 ## Supported operating systems
 
 **macOS on Apple Silicon is the currently supported and verified host platform.** The desktop app requires macOS 13 or later. Platform status refers to the current Svelte/Tauri and Native AOT implementation:

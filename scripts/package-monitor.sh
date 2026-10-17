@@ -13,6 +13,9 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/runtime"
 swift build --package-path "$project_root/macos/CrucibleMonitor" --scratch-path "$build_root" --configuration release --product CrucibleMonitor --disable-sandbox
 bin_path="$(swift build --package-path "$project_root/macos/CrucibleMonitor" --scratch-path "$build_root" --configuration release --show-bin-path --disable-sandbox)"
 cp "$bin_path/CrucibleMonitor" "$app/Contents/MacOS/CrucibleMonitor"
+cp "$project_root/LICENSE" "$project_root/THIRD_PARTY.md" "$app/Contents/Resources/"
+mkdir -p "$app/Contents/Resources/docs"
+cp "$project_root/docs/license-review.md" "$app/Contents/Resources/docs/"
 MTG_DOTNET="$dotnet_bin" "$project_root/scripts/publish-ui.sh" "$app/Contents/Resources/runtime"
 case "$(uname -m)" in
     arm64) service_rid=osx-arm64 ;;

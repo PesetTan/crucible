@@ -40,6 +40,8 @@ try {
     (Get-FileHash 'engine/ForgeBridge.java' -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content (Join-Path $assets 'engine/bridge.sha256')
     Copy-Item 'docs/archetype-tiers-2026-10-11.json' (Join-Path $assets 'docs')
     Copy-Item 'THIRD_PARTY.md' $assets
+    Copy-Item 'LICENSE' $assets
+    Copy-Item 'docs/license-review.md' (Join-Path $assets 'docs')
     Invoke-Checked npm.cmd @('--prefix', 'src/Crucible.Ui', 'run', 'tauri', '--', 'build', '--target', 'x86_64-pc-windows-msvc', '--bundles', 'nsis', '--config', 'src-tauri/tauri.windows.conf.json', '--ci')
     $bundle = Join-Path $project 'src/Crucible.Ui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
     $installers = @(Get-ChildItem $bundle -Filter '*-setup.exe')
