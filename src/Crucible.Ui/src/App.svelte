@@ -196,7 +196,7 @@
           <a href="/">Return to Deck Tester</a>{/if}{/key}
     </main>
     <footer>
-      Forge Rules Engine · London Mulligans · Automated Pilot Results
+      Local Rules Engines · London Mulligans · Automated Pilot Results
     </footer>
   </div>
 </div>

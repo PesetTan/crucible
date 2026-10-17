@@ -38,6 +38,7 @@
   let providers = $state<{id: string; capabilities: {available: boolean; blockers: string[]}; cohorts: string[]}[]>([]);
   let providerId = $state("forge"), pyreCohort = $state(""), capture = $state("summary");
   const coverageBlocked = (id: string) => providerId === "forge" && snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status === "blocked";
+  let maximumDecks = $derived(providerId === "pyre" ? 2 : catalog?.maximumDecks ?? 10);
   let providerCapability = $derived(providerId === "forge" ? snapshot?.capabilities : providers.find((p) => p.id === providerId)?.capabilities);
   let expandedGroups = $state<Record<string, boolean>>({});
   let simulatedRates = $derived(latestSimulatedRates(history?.sessions ?? []));
@@ -187,7 +188,7 @@
             (d) => d.manifest.id === id && !coverageBlocked(id),
           ),
         )
-        .slice(0, catalog?.maximumDecks ?? 10);
+        .slice(0, maximumDecks);
       if (filtered.join("|") !== selected.join("|")) selected = filtered;
       for (const row of snapshot.decks) {
         const name = group(row.manifest.sourceType, row.manifest.archetypeTier);
@@ -210,7 +211,7 @@
   function toggle(id: string) {
     if (locked || coverageBlocked(id)) return;
     if (selected.includes(id)) selected = selected.filter((d) => d !== id);
-    else if (selected.length < (catalog?.maximumDecks ?? 10))
+    else if (selected.length < (maximumDecks))
       selected = [...selected, id];
   }
   async function start() {
@@ -277,7 +278,7 @@
         <h2>Choose the Decks for a Round Robin</h2>
       </div>
       <span
-        >{selected.length} / {catalog?.maximumDecks ?? 10} decks selected</span
+        >{selected.length} / {maximumDecks} decks selected</span
       >
     </div>
     <p class="small muted">
@@ -292,7 +293,7 @@
           ></i>{color}</span
         >{/each}
     </div>
-    {#if selected.length === (catalog?.maximumDecks ?? 10)}<p role="status">
+    {#if selected.length === (maximumDecks)}<p role="status">
         Deselect a deck to choose another.
       </p>{/if}
     {#each groups as name}<details
@@ -321,7 +322,7 @@
                   aria-pressed={selected.includes(deck.id)}
                   disabled={providerId === "forge" && row.coverage.status === "blocked" ||
                     (!selected.includes(deck.id) &&
-                      selected.length >= (catalog?.maximumDecks ?? 10))}
+                      selected.length >= (maximumDecks))}
                   onclick={() => toggle(deck.id)}
                 ><DeckIdentity {deck} {catalog} /><span class="deck-selection-state">{selected.includes(deck.id) ? "Selected" : "Select deck"}</span></button
               >
