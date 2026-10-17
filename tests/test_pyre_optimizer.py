@@ -16,6 +16,7 @@ class PyreOptimizerChecks(unittest.TestCase):
         self.executable=self.root/'native-fixture';self.executable.write_text('not executable; unit boundary fixture only')
         self.runner=self.root/'ProviderRun.dll';self.runner.write_bytes(b'fixture')
         self.core=self.root/'Crucible.Core.dll';self.core.write_bytes(b'fixture-core')
+        (self.root/'runtimes').mkdir();self.native=self.root/'runtimes/libsqlite.dylib';self.native.write_bytes(b'fixture-native')
         self.metrics=self.root/'metrics.json';self.metrics.write_text('{}')
         def artifact(identifier,kind,policy):
             b=json.dumps(policy).encode();m=dict(id=identifier,kind=kind,version='1.0.0',payload=dict(sha256=hashlib.sha256(b).hexdigest()))
@@ -55,6 +56,11 @@ class PyreOptimizerChecks(unittest.TestCase):
         with self.assertRaises(ValueError):self.backend.verify_runtime(self.experiment)
         (self.backend.folder(self.experiment)/'baseline-draft.json').write_text('{}')
         with self.assertRaises(ValueError):self.backend.verify_frozen(self.experiment)
+
+    def test_nested_native_dependencies_are_pinned(self):
+        self.backend.verify_runtime(self.experiment)
+        self.native.write_bytes(b'changed native library')
+        with self.assertRaises(ValueError):self.backend.verify_runtime(self.experiment)
 
     def test_compute_budget_and_production_activation_guards(self):
         self.backend.stage(self.experiment,dict(tuning={}))

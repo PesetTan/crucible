@@ -85,7 +85,7 @@ def make_backend(base):
                     coordinates=(value,pair%2)
                     if coordinates in used:raise ValueError('Seed/start coordinate overlap')
                     used.add(coordinates);schedule.append(dict(phase=phase,pair=pair,deck='A',opponent='B',seed=value,starter=pair%2))
-            runtime={p.name:digest(p) for p in runner.parent.iterdir() if p.is_file() and p.suffix in ('.dll','.json')}
+            runtime={str(p.relative_to(runner.parent)):digest(p) for p in runner.parent.rglob('*') if p.is_file() and p.suffix in ('.dll','.json','.txt','.dylib','.so')}
             frozen=dict(providerId='pyre',profile=draft['pilots'][0]['id'],pyreCohort=cohort,installation=installation,
                 runnerFiles=runtime,schedule=schedule,rootSeed=seed,scope='Provider workflow conformance with immutable numeric Pilot Modules',
                 baselineTemplateHash=hashlib.sha256(canonical(draft)).hexdigest(),runtimeRatioLimit=2.0,settings=dict(turnLimit=150,timeoutSeconds=30),registry=dict(creature_weight=[0,100],aura_weight=[0,100],interaction_weight=[0,100],mulligan_floor=[0,7]))
