@@ -35,6 +35,10 @@
     loading = $state(true),
     estimate = $state<Estimate>(),
     preview = $state("");
+  let providers = $state<{id: string; capabilities: {available: boolean; blockers: string[]}; cohorts: string[]}[]>([]);
+  let providerId = $state("forge"), pyreCohort = $state(""), capture = $state("summary");
+  const coverageBlocked = (id: string) => providerId === "forge" && snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status === "blocked";
+  let providerCapability = $derived(providerId === "forge" ? snapshot?.capabilities : providers.find((p) => p.id === providerId)?.capabilities);
   let expandedGroups = $state<Record<string, boolean>>({});
   let simulatedRates = $derived(latestSimulatedRates(history?.sessions ?? []));
   const saved = loadSaved("home", {
@@ -75,6 +79,9 @@
   );
   let request = $derived<RunRequest>({
     deckIds: selected,
+    providerId,
+    pyreCohort: pyreCohort || undefined,
+    capture,
     gamesPerPair: games,
     workers,
     timeoutSeconds: Math.round(timeout),
@@ -85,7 +92,7 @@
     estimatedGameSeconds: 15,
     startLeadSeconds: 5,
     startupSpacingSeconds: 1,
-    performanceMode: performance,
+    performanceMode: providerId === "forge" && performance,
     pilotMode: pilot || catalog?.defaultPilotMode || "",
   });
   const group = (source: string, tier?: string) =>
@@ -144,7 +151,7 @@
       payload.deckIds.length < 2 ||
       !validSettings ||
       locked ||
-      !payload.pilotMode
+      (payload.providerId === "forge" && !payload.pilotMode)
     )
       return;
     const controller = new AbortController();
@@ -168,15 +175,16 @@
   });
   async function load() {
     try {
-      [snapshot, resources, history] = await Promise.all([
+      [snapshot, resources, history, providers] = await Promise.all([
         api<Snapshot>("/api/v1/ui-state"),
         api<Resource>("/api/v1/resources"),
         api<History>("/api/v1/run-history"),
+        api<typeof providers>("/api/v1/providers").catch(() => []),
       ]);
       const filtered = selected
         .filter((id) =>
           snapshot?.decks.some(
-            (d) => d.manifest.id === id && d.coverage.status !== "blocked",
+            (d) => d.manifest.id === id && !coverageBlocked(id),
           ),
         )
         .slice(0, catalog?.maximumDecks ?? 10);
@@ -200,7 +208,7 @@
     return poll(load);
   });
   function toggle(id: string) {
-    if (locked || snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status === "blocked") return;
+    if (locked || coverageBlocked(id)) return;
     if (selected.includes(id)) selected = selected.filter((d) => d !== id);
     else if (selected.length < (catalog?.maximumDecks ?? 10))
       selected = [...selected, id];
@@ -236,14 +244,14 @@
 <AiNote subject="setup" />
 <div class="notice">
   <strong>Exploratory Mode</strong><span
-    >Forge resolves the games. These rates describe the automated pilots, not
+    >The selected engine resolves the games. These rates describe the automated pilots, not
     your Arena win rate.</span
   >
 </div>
 {#if error}<div class="error" role="alert">
     {error}<button onclick={load}>Reconnect</button>
   </div>{/if}{#if loading}<p role="status">Loading your local decks…</p>{/if}
-{#each snapshot?.capabilities.blockers ?? [] as blocker}<p class="error">
+{#each providerCapability?.blockers ?? [] as blocker}<p class="error">
     {blocker}
   </p>{/each}
 {#if locked}<section class="panel active-session-status">
@@ -305,13 +313,13 @@
             <article
               class="deck-card"
               class:selected={selected.includes(deck.id)}
-              class:blocked={row.coverage.status === "blocked"}
+              class:blocked={providerId === "forge" && row.coverage.status === "blocked"}
             >
               <button class="deck-card-choice"
                   type="button"
                   aria-label={deckLabel(deck, catalog)}
                   aria-pressed={selected.includes(deck.id)}
-                  disabled={row.coverage.status === "blocked" ||
+                  disabled={providerId === "forge" && row.coverage.status === "blocked" ||
                     (!selected.includes(deck.id) &&
                       selected.length >= (catalog?.maximumDecks ?? 10))}
                   onclick={() => toggle(deck.id)}
@@ -329,9 +337,9 @@
               <SimulatedRate result={simulatedRates.get(deck.id)} />
               <div class="deck-bottom">
                 <span class="small"
-                  >{row.coverage.status === "blocked"
+                  >{providerId === "forge" && row.coverage.status === "blocked"
                     ? "Missing card support"
-                    : pilotLabel(catalog?.decks.find((d) => d.id === deck.id)?.profiles[
+                    : providerId === "pyre" ? "Cohort pilot" : pilotLabel(catalog?.decks.find((d) => d.id === deck.id)?.profiles[
                           pilot || catalog.defaultPilotMode
                         ] ?? "forge-default", catalog)}</span
                 ><button
@@ -356,7 +364,7 @@
     <div class="eyebrow">02 / THE SESSION</div>
     <h2>Set Up the Run</h2>
     <p class="small muted">
-      {snapshot?.capabilities.engine ?? "Forge"} · Even play / draw split
+      {providerId === "pyre" ? "Pyre" : snapshot?.capabilities.engine ?? "Forge"} · Even play / draw split
     </p>
     <div class="config-grid">
       <label
@@ -379,7 +387,7 @@
             label: String(n),
           }))}
         /><small
-          >Allow about 1.2 GB per game, plus app and engine overhead. {resources?.logicalProcessors ??
+          >{providerId === "forge" ? "Allow about 1.2 GB per game, plus app and engine overhead." : "Native workers use the registered memory limit."} {resources?.logicalProcessors ??
             "—"} logical processors.</small
         >
       </div>
@@ -387,7 +395,22 @@
     <details>
       <summary>Advanced Options</summary>
       <div class="config-grid">
-        <div>
+        <div><label for="engine-provider">Engine</label><AppSelect id="engine-provider" label="Engine" value={providerId}
+          onchange={(v) => { providerId = v; selected = []; estimate = undefined; }}
+          options={[{value:"forge",label:"Forge"},{value:"pyre",label:"Pyre"}]} />
+          {#if providerId === "pyre"}
+            <small>{providers.find((p) => p.id === "pyre")?.capabilities.blockers.join(" ") || "Select an exact registered cohort and its two frozen decks."}</small>
+          {/if}
+        </div>
+        {#if providerId === "pyre"}
+          <div><label for="pyre-cohort">Supported cohort</label><AppSelect id="pyre-cohort" label="Supported cohort" value={pyreCohort}
+            onchange={(v) => (pyreCohort = v)} options={[{value:"",label:"Select a cohort"},...(providers.find((p) => p.id === "pyre")?.cohorts ?? []).map((value) => ({value,label:value}))]} />
+            <small>Pilots and Module versions are pinned by the cohort registration.</small></div>
+          <div><label for="pyre-capture">Evidence</label><AppSelect id="pyre-capture" label="Evidence" value={capture} onchange={(v) => (capture = v)}
+            options={[{value:"summary",label:"Summary metrics"},{value:"full",label:"Full Pyre trace"}]} />
+            <small>Summary games have no replay. Full capture uses Pyre diagnostics.</small></div>
+        {/if}
+        {#if providerId === "forge"}<div>
           <label for="pilot-policy">Pilot policy</label><AppSelect
             id="pilot-policy"
             label="Pilot policy"
@@ -399,7 +422,7 @@
               (m) => m.value === (pilot || catalog.defaultPilotMode),
             )?.description}</small
           >
-        </div>
+        </div>{/if}
         <label
           >Time limit per game (seconds)<input
             type="number"
@@ -415,12 +438,12 @@
             min="10"
             max="1000"
           /></label
-        ><label
+        >{#if providerId === "forge"}<label
           ><input type="checkbox" bind:checked={performance} /> Forge
           Performance Mode<small
             >Skips selected Forge checks. Stored and reused separately.</small
           ></label
-        >
+        >{/if}
       </div>
       <p class="small muted">
         London mulligans approximate Arena Bo1 opening hands. Timeouts and turn
@@ -446,7 +469,7 @@
           Advisory range from {estimate.runtime.observations} observed attempts. Conservative
           estimate includes scheduled games; cached results can finish sooner.
         </p>{:else}<p class="small muted">
-          Choose at least two decks to estimate runtime.
+          {providerId === "pyre" ? "Pyre runtime estimates are not yet calibrated. Preflight checks the selected cohort." : "Choose at least two decks to estimate runtime."}
         </p>{/if}{#each estimate?.preflight.blockers ?? [] as blocker}<p
           class="error"
         >
@@ -470,7 +493,7 @@
           busy ||
           !validSettings ||
           selected.length < 2 ||
-          snapshot?.capabilities.available !== true ||
+          providerCapability?.available !== true ||
           !estimate ||
           estimate.preflight.blockers.length > 0}
         onclick={start}

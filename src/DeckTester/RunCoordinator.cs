@@ -7,8 +7,9 @@ using System.Diagnostics;
 
 namespace DeckTester;
 
-public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoordinator> logger,AppPaths paths,CardAttributes? attributes = null,SimulationExecutionGate? executionGate = null) : BackgroundService
+public sealed class RunCoordinator(Store store,ForgeEngine forge,ILogger<RunCoordinator> logger,AppPaths paths,CardAttributes? attributes = null,SimulationExecutionGate? executionGate = null,EngineProviders? providers=null) : BackgroundService
 {
+    private readonly EngineProviders engine=providers??new(forge);
     private readonly Channel<string> queue=Channel.CreateUnbounded<string>();
     private readonly ConcurrentDictionary<string,byte> queued=new();
     private readonly ConcurrentDictionary<string,CancellationTokenSource> active=new();
@@ -31,8 +32,8 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             if(baseline.DeckId==baseline.OpponentId||!original.Config.DeckIds.Contains(baseline.DeckId)||!original.Config.DeckIds.Contains(baseline.OpponentId)||request.DeckIds.Count!=2||!request.DeckIds.Contains(baseline.OpponentId))
                 throw new ArgumentException("Workshop baseline must identify the original matchup and the retained opponent.");
         }
-        var capability=engine.Capabilities();var decks=request.DeckIds.Order(StringComparer.Ordinal).ToList();
-        var attributeSnapshot=attributes?.Snapshot(decks.Select(store.Deck));
+        var capability=engine.Capabilities(request.ProviderId);var decks=request.DeckIds.Order(StringComparer.Ordinal).ToList();
+        var attributeSnapshot=request.ProviderId=="forge"?attributes?.Snapshot(decks.Select(store.Deck)):null;
         var optimizerPolicy=engine.OptimizerPolicy(request);
         var config=new RunConfig(decks,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capability.EngineHash,capability.AdapterHash,
             Pilot:request.PilotMode,StaggerStarts:request.StaggerStarts,EstimatedGameSeconds:request.EstimatedGameSeconds,StartLeadSeconds:request.StartLeadSeconds,
@@ -40,6 +41,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             PilotProfiles:decks.ToDictionary(deck=>deck,deck=>ReanimatorPilots.Profile(store.Deck(deck) with{Cards=store.Deck(deck).Cards.Select(c=>c with{Attributes=attributeSnapshot?.Cards.GetValueOrDefault(c.Name)??c.Attributes}).ToList()},request.PilotMode)))
             {CardAttributes=attributeSnapshot?.Cards,AttributesHash=attributeSnapshot?.Hash,OptimizerPolicy=optimizerPolicy,
                 ProtocolSet=request.PilotMode==ReanimatorPilots.EngagementMode||optimizerPolicy is not null&&capability.Protocols?.SupportsOptimizerProfile(optimizerPolicy.Profile)==true?capability.Protocols:null};
+        config=engine.Configure(request,config,key);decks=config.DeckIds;
         var id=Guid.NewGuid().ToString("N");var slots=new List<GameSlot>();var seeds=new HashSet<long>();
         for(var a=0;a<decks.Count;a++)for(var b=a+1;b<decks.Count;b++)for(var starter=0;starter<2;starter++)for(var index=0;index<request.GamesPerPair/2;index++){
             var digest=SHA256.HashData(Encoding.UTF8.GetBytes(Json.Encode(new SeedFingerprint("sha256-v1",request.RootSeed,decks[a],decks[b],starter,index))));
@@ -91,8 +93,8 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     {
         await mutations.WaitAsync();try {
             var run=store.Run(id);if(active.ContainsKey(id)||run.Status is "running" or "queued" or "cancelling")throw new InvalidOperationException("Run is already active.");
-            if(run.Config.ProviderId!="forge")throw new InvalidOperationException("Imported Pyre runs must be continued through Pyre; selectable provider execution is not installed.");
-            if(!engine.HasBundle(run.Config))throw new InvalidOperationException("The run's pinned Forge bundle is unavailable.");
+            if(!engine.CanExecute(run.Config))throw new InvalidOperationException("Imported runs lack an executable provider lock; create a new provider-selected run.");
+            if(!engine.HasBundle(run.Config))throw new InvalidOperationException("The run's pinned engine installation is unavailable.");
             foreach(var slot in store.Slots(id))if(slot.Result is null&&(slot.Status is "pending" or "cancelled"||retryFailures&&slot.Status=="failed")) {
                 if(!AttemptPolicy.CanResume(slot))continue;await store.SaveSlot(slot with{Status="pending"});
             }
@@ -103,10 +105,13 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         foreach(var run in store.Runs()) {
-            if(run.Config.ProviderId!="forge")continue;
+            if(!engine.CanExecute(run.Config))continue;
             foreach(var timing in store.SessionTimings(run.Id).Where(t=>t.Status=="running"))
                 await store.SaveSessionTiming(timing with{Status="interrupted",FinishedAt=timing.UpdatedAt});
             var slots=store.Slots(run.Id);
+            if((run.Status is "running" or "cancelling" or "queued")&&slots.Count==run.Total&&slots.All(s=>s.Status=="completed"&&s.Result is not null)){
+                await store.SaveRun(run with{Status="completed",Error=null});continue;
+            }
             // A stale terminal run status must not hide abandoned work from recovery.
             if(run.Status is not ("running" or "cancelling" or "queued")&&!slots.Any(s=>s.Status=="running")&&
                 !(run.Status=="completed"&&(slots.Count!=run.Total||slots.Any(s=>s.Status!="completed"||s.Result is null))))continue;
@@ -123,7 +128,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
             await mutations.WaitAsync(stoppingToken);
             try{
                 var waiting=store.Runs().FirstOrDefault(run=>run.Id==id);
-                if(waiting is null||waiting.Config.ProviderId!="forge"||waiting.Status!="queued"){queued.TryRemove(id,out _);continue;}
+                if(waiting is null||!engine.CanExecute(waiting.Config)||waiting.Status!="queued"){queued.TryRemove(id,out _);continue;}
                 active[id]=cancellation;
                 await store.SaveRun(store.Run(id) with{Status="running"});
             }finally{mutations.Release();}
@@ -148,7 +153,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
                     while(await timer.WaitForNextTickAsync(timingStop.Token))await RecordTiming();
                 }
                 var run=store.Run(id);
-                if(!engine.HasBundle(run.Config))throw new InvalidOperationException("The run's pinned Forge bundle is unavailable.");
+                if(!engine.HasBundle(run.Config))throw new InvalidOperationException("The run's pinned engine installation is unavailable.");
                 async Task PlaySlot(GameSlot slot,CancellationToken ct){
                     var attemptOrder=Stopwatch.GetTimestamp();var attemptClock=Stopwatch.StartNew();
                     var attempts=slot.Attempts.ToList();var number=attempts.Count+1;
@@ -157,7 +162,7 @@ public sealed class RunCoordinator(Store store,ForgeEngine engine,ILogger<RunCoo
                     try {
                         var result=await engine.Play(run,slot,number,ct);
                         attempts[^1]=started with{Status="completed",FinishedAt=DateTimeOffset.UtcNow,Replay=result.Replay,ReplayHash=result.Hash};
-                        await store.SaveSlot(slot with{Status="completed",Attempts=attempts,Result=result.Result});
+                        await engine.Commit(store,run,slot with{Status="completed",Attempts=attempts,Result=result.Result},result);
                     }catch(OperationCanceledException)when(ct.IsCancellationRequested){
                         attempts[^1]=started with{Status="cancelled",FinishedAt=DateTimeOffset.UtcNow,Error="Administrative cancellation."};
                         await store.SaveSlot(slot with{Status="cancelled",Attempts=attempts});

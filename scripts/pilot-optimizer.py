@@ -33,12 +33,19 @@ def main():
         signal.signal(signal.SIGTERM, lambda *_: setattr(backend, "stop", True))
         try:
             request = json.load(sys.stdin)
+            pyre = request.get("providerId") == "pyre"
+            if request.get("id"):
+                pyre = backend.exp(request["id"]).get("providerId") == "pyre"
+            if pyre:
+                import pilot_optimizer as base_module
+                from pyre_optimizer import make_backend
+                backend = make_backend(base_module)(os.environ["MTG_PROJECT_ROOT"])
             # An experiment executes its verified backend snapshot across service upgrades.
             if request.get("id") and sys.argv[2] not in ("recover", "create", "inspect", "list"):
                 import importlib.util
                 from pilot_optimizer import digest, no_links
                 experiment=backend.exp(request["id"])
-                if sys.argv[2]=="promote":
+                if sys.argv[2]=="promote" and not pyre:
                     from pilot_optimizer import catalog_publication_supported
                     candidate=backend.candidate(request["id"],request["candidateId"])
                     catalog_path=backend.root/"data/engine-bundles"/backend.frozen(request["id"])["bundleId"]/"protocol-catalog.json"
@@ -51,7 +58,15 @@ def main():
                 module_spec=importlib.util.spec_from_file_location("frozen_pilot_optimizer",snapshot)
                 frozen_module=importlib.util.module_from_spec(module_spec)
                 module_spec.loader.exec_module(frozen_module)
-                backend=frozen_module.Backend(os.environ["MTG_PROJECT_ROOT"])
+                if pyre:
+                    adapter=no_links(backend.folder(request["id"])/"pyre-backend.py")
+                    if digest(adapter)!=experiment["evidenceHashes"]["pyre-backend.py"]:
+                        raise ValueError("Frozen Pyre adapter checksum mismatch")
+                    spec=importlib.util.spec_from_file_location("frozen_pyre_adapter",adapter)
+                    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+                    backend=module.make_backend(frozen_module)(os.environ["MTG_PROJECT_ROOT"])
+                else:
+                    backend=frozen_module.Backend(os.environ["MTG_PROJECT_ROOT"])
                 signal.signal(signal.SIGTERM, lambda *_: setattr(backend,"stop",True))
             result = backend.dispatch(sys.argv[2], request)
             print(json.dumps(dict(ok=True, result=result), ensure_ascii=False))

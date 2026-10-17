@@ -71,6 +71,12 @@ public sealed record ProtocolCatalog(string Version,string Profile,string Hash,J
 public sealed record RunRequest(List<string> DeckIds, int GamesPerPair = 200, int Workers = 2, int TimeoutSeconds = 180, int TurnLimit = 150, long RootSeed = 42, bool Diagnostic = true,
     bool StaggerStarts = true, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = 1, bool PerformanceMode = false, string PilotMode = ReanimatorPilots.CurrentAggroMode)
 {
+    private string? providerId;
+    private string? capture;
+    public string ProviderId { get=>providerId??"forge"; init=>providerId=value; }
+    public string Capture { get=>capture??"summary"; init=>capture=value; }
+    public string? PyreCohort { get; init; }
+    public string? PyrePilotPolicyId { get; init; }
     public string? OptimizerPolicyId { get; init; }
     public WorkshopBaseline? WorkshopBaseline { get; init; }
     public string? WorkshopDeckId { get; init; }
@@ -81,6 +87,8 @@ public sealed record RunConfig(List<string> DeckIds, int GamesPerPair, int Worke
     Dictionary<string,string>? PilotProfiles = null)
 {
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public PyreRunLock? Pyre { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
     public EngineProviderIdentity? Provider { get; init; }
     [JsonIgnore]
     public string ProviderId => Provider?.Id ?? "forge";
@@ -90,6 +98,8 @@ public sealed record RunConfig(List<string> DeckIds, int GamesPerPair, int Worke
     public string? AttributesHash { get; init; }
 }
 public sealed record EngineProviderIdentity(string Id,string AdapterVersion,string MetricDefinitionHash,string ControllerDefinitionHash,string ExperimentId);
+public sealed record PyreRunLock(string InstallationHash,string Manifest,string ManifestHash,string Capture){public string? PolicyId{get;init;}}
+public sealed record PublishedPyrePolicy(int Version,string Id,string ProviderId,string Cohort,string EngineHash,string SourceHash,string BaselineTemplateHash,string GraphHash,string ExperimentId);
 public sealed record PyreIngestReceipt(string RecordId,string PayloadHash,string RunId,string SlotId,bool Duplicate);
 public sealed record OptimizerPolicy(int Version,string Id,string Profile,Dictionary<string,int> Tuning,string TuningHash,string EngineHash,string AdapterHash);
 public sealed record SimulationRun(string Id, DateTimeOffset CreatedAt, string Status, RunConfig Config, int Total, string? Error = null, List<RunExtension>? Extensions = null, DateTimeOffset? UpdatedAt = null)

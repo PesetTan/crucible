@@ -35,6 +35,7 @@
     this evidence.
   </p>
   <dl class="metadata">
+    <dt>Provider</dt><dd>{run.config.provider?.id ?? "forge"}</dd>
     <dt>Policy</dt>
     <dd>
       {catalog?.modes.find((m) => m.value === run.config.pilot)?.label ??

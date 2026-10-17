@@ -517,13 +517,13 @@
               ><td><code>{s.seed}</code></td><td
                 >{#if s.result}<a
                     href={`/runs/${id}/games/${s.id}?fromRun=${id}&fromLog=games`}
-                    >Replay →</a
-                  ><a
+                    >{snapshot?.runs.find((r) => r.id === id)?.config.provider?.id === "pyre" ? "Evidence →" : "Replay →"}</a
+                  >{#if snapshot?.runs.find((r) => r.id === id)?.config.provider?.id !== "pyre"}<a
                     class="small"
                     download
                     href={`/api/v1/runs/${id}/games/${s.id}/replay-export`}
                     >Download replay</a
-                  >{/if}
+                  >{/if}{/if}
                 <details>
                   <summary>Attempts · {s.attempts.length}</summary
                   >{#each s.attempts as a}<p>

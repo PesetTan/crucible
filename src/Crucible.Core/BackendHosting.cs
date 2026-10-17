@@ -8,6 +8,7 @@ public static class BackendHosting
     public static void Register(IServiceCollection services)
     {
         services.AddSingleton<CardAttributes>();services.AddSingleton<Store>();services.AddSingleton<DeckImporter>();services.AddSingleton<ForgeEngine>();
+        services.AddSingleton<PyreEngine>();services.AddSingleton<EngineProviders>();
         services.AddSingleton<SimulationExecutionGate>();services.AddSingleton<DeckWorkshop>();services.AddSingleton<ResourceCapacity>();
         services.AddSingleton<RunCoordinator>();services.AddHostedService(p=>p.GetRequiredService<RunCoordinator>());
         services.AddSingleton<PilotOptimizer>();services.AddHostedService(p=>p.GetRequiredService<PilotOptimizer>());
@@ -40,6 +41,7 @@ public static class BackendHosting
         app.MapGet("/api/v1/session",()=>new InstanceSession(instanceToken));
         PilotOptimizer.MapEndpoints(app);
         app.MapGet("/api/v1/capabilities",(ForgeEngine engine)=>engine.Capabilities());
+        app.MapGet("/api/v1/providers",(EngineProviders engines)=>engines.Discover());
         app.MapGet("/api/v1/decks",(Store store,ForgeEngine engine)=>store.Decks().Select(d=>new DeckSnapshot(d,engine.Coverage(d))).ToList());
         app.MapGet("/api/v1/decks/{id}",(string id,Store store,ForgeEngine engine)=>new DeckSnapshot(store.Deck(id),engine.Coverage(store.Deck(id))));
         app.MapGet("/api/v1/cards/search",(string q,DeckWorkshop workshop)=>workshop.Search(q));
@@ -50,7 +52,8 @@ public static class BackendHosting
         app.MapPost("/api/v1/decks/custom",async(CustomDeckRequest request,DeckWorkshop workshop)=>await workshop.Save(request));
         app.MapGet("/api/v1/runs/{id}/workshop",(string id,string deckId,string opponentId,DeckWorkshop workshop)=>workshop.Matchup(id,deckId,opponentId));
         app.MapPost("/api/v1/imports",async(DeckImporter importer)=>await importer.Import());
-        app.MapPost("/api/v1/runs/preflight",(RunRequest request,ForgeEngine engine,Store store,CardAttributes attributes)=>{
+        app.MapPost("/api/v1/runs/preflight",(RunRequest request,ForgeEngine engine,EngineProviders engines,Store store,CardAttributes attributes)=>{
+            if(request.ProviderId!="forge")return new PreflightResponse(engines.Preflight(request),engines.Capabilities(request.ProviderId).Limitations,0,null,null);
             var capabilities=engine.Capabilities();
             var attributeSnapshot=attributes.Snapshot(request.DeckIds.Select(store.Deck));
             var config=new RunConfig(request.DeckIds,request.GamesPerPair,request.Workers,request.TimeoutSeconds,request.TurnLimit,request.RootSeed,request.Diagnostic,capabilities.EngineHash,capabilities.AdapterHash,
@@ -67,6 +70,7 @@ public static class BackendHosting
         app.MapGet("/api/v1/runs",(Store store,int offset=0,int limit=50)=>{if(offset<0||limit is <1 or >100)throw new ArgumentException("Invalid page range.");return store.Runs().Skip(offset).Take(limit).ToList();});
         app.MapGet("/api/v1/runs/{id}",(string id,Store store)=>store.Run(id));
         app.MapGet("/api/v1/runs/{id}/timings",(string id,Store store)=>{_ = store.Run(id);return store.SessionTimings(id);});
+        app.MapGet("/api/v1/runs/{id}/provider-resources",(string id,Store store,PyreEngine engine)=>{var run=store.Run(id);return run.Config.ProviderId=="pyre"?engine.Resources(id):null;});
         app.MapGet("/api/v1/runs/{id}/notes",(string id,Store store)=>store.RunMatchupNotes(id));
         app.MapDelete("/api/v1/runs/{id}",async(string id,RunCoordinator coordinator)=>Reply(new DeletedRun(await coordinator.Delete(id))));
         app.MapPost("/api/v1/runs/{id}/cancel",async(string id,RunCoordinator coordinator)=>{await coordinator.Cancel(id);return Results.Accepted();});
@@ -90,6 +94,8 @@ public static class BackendHosting
         });
         app.MapGet("/api/v1/runs/{run}/games/{id}/replay-turns",async(string run,string id,Store store,ForgeEngine engine)=>
             await engine.ReplayTurns(store.Slot(run,id)));
+        app.MapGet("/api/v1/runs/{run}/games/{id}/evidence",(string run,string id,Store store,PyreEngine engine)=>engine.Evidence(store.Slot(run,id)));
+        app.MapGet("/api/v1/runs/{run}/games/{id}/pyre-trace",(string run,string id,Store store,PyreEngine engine)=>Results.Json(engine.ReadTrace(store.Slot(run,id)),Json.Info<System.Text.Json.JsonElement>()));
         app.MapGet("/api/v1/runs/{id}/trigger-summaries",async(string id,Store store,ForgeEngine engine)=>{
             return await engine.TriggerSummaries(store.Slots(id).Where(s=>s.Status=="completed"&&s.Result is not null));
         });

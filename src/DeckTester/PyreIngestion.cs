@@ -18,9 +18,23 @@ public sealed partial class Store
         return Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
     });
     public static string PyreAdapterHash=>pyreAdapterHash.Value;
-    public async Task<PyreIngestReceipt> ImportPyreResult(string payload,string metricDefinitions,string controllerDefinitions)
+    public async Task<PyreIngestReceipt> ImportPyreResult(string payload,string metricDefinitions,string controllerDefinitions,SimulationRun? destinationRun=null,GameSlot? destinationSlot=null)
     {
         var parsed=PyreRecord.Parse(payload,metricDefinitions,controllerDefinitions);
+        var coordinated=destinationRun is not null;
+        if(coordinated){
+            var run=destinationRun!;var slot=destinationSlot??throw new InvalidDataException("Missing coordinator slot.");
+            using var raw=JsonDocument.Parse(payload);using var locked=JsonDocument.Parse(run.Config.Pyre?.Manifest??throw new InvalidDataException("Missing provider run lock."));
+            if(run.Config.ProviderId!="pyre"||run.Config.Provider?.ExperimentId!=parsed.ExperimentId||
+                !PyreRecord.Canonical(raw.RootElement.GetProperty("manifest")).AsSpan().SequenceEqual(PyreRecord.Canonical(locked.RootElement))||
+                slot.RunId!=run.Id||slot.DeckA!=run.Config.DeckIds[0]||slot.DeckB!=run.Config.DeckIds[1]||
+                slot.Index!=parsed.Slot.Index||(slot.Starter==slot.DeckA)!=(parsed.Slot.Starter==parsed.Slot.DeckA)||
+                slot.Attempts.Last().Number!=parsed.Slot.Attempts.Single().Number)throw new InvalidDataException("Coordinator/Pyre delivery binding mismatch.");
+            var result=parsed.Slot.Result??throw new InvalidDataException("Ineligible coordinated Pyre result.");
+            result=result with{Winner=result.Winner==parsed.Slot.DeckA?slot.DeckA:result.Winner==parsed.Slot.DeckB?slot.DeckB:null};
+            if(slot.Status!="completed"||Json.Encode(slot.Result)!=Json.Encode(result))throw new InvalidDataException("Projected coordinator result differs from raw Pyre facts.");
+            parsed=parsed with{Run=run,Slot=slot};
+        }
         await writer.WaitAsync();
         try {
             using var db=Open(); using var tx=db.BeginTransaction(); using var cmd=db.CreateCommand();cmd.Transaction=tx;
@@ -42,7 +56,7 @@ public sealed partial class Store
                 if(cmd.ExecuteScalar() is string existing && existing!=definition.Item2)throw new InvalidDataException("Definition identity conflict.");
                 cmd.CommandText="INSERT OR IGNORE INTO pyre_definitions VALUES($hash,$payload)";cmd.Parameters.AddWithValue("$payload",definition.Item2);cmd.ExecuteNonQuery();
             }
-            foreach(var deck in parsed.Decks){
+            foreach(var deck in coordinated?[]:parsed.Decks){
                 cmd.Parameters.Clear();cmd.CommandText="SELECT payload FROM decks WHERE id=$id";cmd.Parameters.AddWithValue("$id",deck.Id);
                 if(cmd.ExecuteScalar() is string existing){if(Json.Decode<DeckManifest>(existing).ListHash!=deck.ListHash)throw new InvalidDataException("Pyre deck identity conflict.");}
                 else {
@@ -52,11 +66,15 @@ public sealed partial class Store
             cmd.Parameters.Clear();cmd.CommandText="SELECT payload FROM runs WHERE id=$id";cmd.Parameters.AddWithValue("$id",parsed.Run.Id);
             var priorRun=cmd.ExecuteScalar() as string;
             if(priorRun is not null && Json.Decode<SimulationRun>(priorRun).Config.Provider?.ExperimentId!=parsed.ExperimentId)throw new InvalidDataException("Provider/experiment identity conflict.");
+            if(coordinated&&(priorRun is null||Json.Encode(Json.Decode<SimulationRun>(priorRun).Config)!=Json.Encode(parsed.Run.Config)))throw new InvalidDataException("Coordinated run lock changed before commit.");
             cmd.CommandText="INSERT OR IGNORE INTO runs(id,payload) VALUES($id,$payload)";cmd.Parameters.AddWithValue("$payload",Json.Encode(parsed.Run));cmd.ExecuteNonQuery();
             cmd.Parameters.Clear();cmd.CommandText="SELECT payload FROM slots WHERE id=$id";cmd.Parameters.AddWithValue("$id",parsed.Slot.Id);
             var previousSlot=cmd.ExecuteScalar() as string;
             var normalizedSlot=parsed.Slot;
-            if(previousSlot is not null){var oldSlot=Json.Decode<GameSlot>(previousSlot);normalizedSlot=(oldSlot.Status=="completed"?oldSlot:parsed.Slot) with{Attempts=oldSlot.Attempts.Concat(parsed.Slot.Attempts).OrderBy(a=>a.Number).ToList()};}
+            if(coordinated){
+                var priorSlot=previousSlot is null?throw new InvalidDataException("Unknown coordinator slot."):Json.Decode<GameSlot>(previousSlot);
+                if(priorSlot.RunId!=parsed.Run.Id||priorSlot.DeckA!=parsed.Slot.DeckA||priorSlot.DeckB!=parsed.Slot.DeckB||priorSlot.Seed!=parsed.Slot.Seed||priorSlot.Index!=parsed.Slot.Index||priorSlot.Starter!=parsed.Slot.Starter||priorSlot.Status!="running")throw new InvalidDataException("Coordinator slot changed before commit.");
+            }else if(previousSlot is not null){var oldSlot=Json.Decode<GameSlot>(previousSlot);normalizedSlot=(oldSlot.Status=="completed"?oldSlot:parsed.Slot) with{Attempts=oldSlot.Attempts.Concat(parsed.Slot.Attempts).OrderBy(a=>a.Number).ToList()};}
             cmd.Parameters.Clear();cmd.CommandText="INSERT INTO slots(id,run_id,payload) VALUES($id,$run,$payload) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload";
             cmd.Parameters.AddWithValue("$id",parsed.Slot.Id);cmd.Parameters.AddWithValue("$run",parsed.Run.Id);cmd.Parameters.AddWithValue("$payload",Json.Encode(normalizedSlot));cmd.ExecuteNonQuery();
             cmd.Parameters.Clear();cmd.CommandText="INSERT INTO pyre_records VALUES($record,$attempt,$slot,$experiment,$hash,$payload,$eligible)";
@@ -66,12 +84,18 @@ public sealed partial class Store
             cmd.Parameters.Clear();cmd.CommandText="SELECT COUNT(*) FROM pyre_records WHERE experiment_id=$experiment AND eligible=1";cmd.Parameters.AddWithValue("$experiment",parsed.ExperimentId);
             var validCount=Convert.ToInt32(cmd.ExecuteScalar(),CultureInfo.InvariantCulture);
             var original=priorRun is null?parsed.Run:Json.Decode<SimulationRun>(priorRun);
-            var updated=original with{CreatedAt=original.CreatedAt<parsed.Run.CreatedAt?original.CreatedAt:parsed.Run.CreatedAt,UpdatedAt=DateTimeOffset.UtcNow,Total=slotCount,Status=validCount==slotCount?"completed":"failed",Config=original.Config with{GamesPerPair=slotCount}};
+            var updated=coordinated?original:original with{CreatedAt=original.CreatedAt<parsed.Run.CreatedAt?original.CreatedAt:parsed.Run.CreatedAt,UpdatedAt=DateTimeOffset.UtcNow,Total=slotCount,Status=validCount==slotCount?"completed":"failed",Config=original.Config with{GamesPerPair=slotCount}};
             cmd.Parameters.Clear();cmd.CommandText="UPDATE runs SET payload=$payload WHERE id=$id";cmd.Parameters.AddWithValue("$payload",Json.Encode(updated));cmd.Parameters.AddWithValue("$id",parsed.Run.Id);cmd.ExecuteNonQuery();
             tx.Commit();return new(parsed.RecordId,parsed.PayloadHash,parsed.Run.Id,parsed.Slot.Id,false);
         } finally {writer.Release();}
     }
     public string? PyreRawRecord(string recordId){using var db=Open();using var cmd=db.CreateCommand();cmd.CommandText="SELECT payload FROM pyre_records WHERE record_id=$id";cmd.Parameters.AddWithValue("$id",recordId);return cmd.ExecuteScalar() as string;}
+    public string? PyreDeliveryForSlot(GameSlot slot){
+        var run=Run(slot.RunId);if(run.Config.ProviderId!="pyre")return null;
+        using var db=Open();using var cmd=db.CreateCommand();cmd.CommandText="SELECT 1 FROM sqlite_master WHERE name='pyre_records'";if(cmd.ExecuteScalar() is null)return null;
+        cmd.CommandText="SELECT payload FROM pyre_records WHERE experiment_id=$experiment AND json_extract(payload,'$.replicate')=$replicate AND json_extract(payload,'$.starter')=$starter AND eligible=1";
+        cmd.Parameters.AddWithValue("$experiment",run.Config.Provider!.ExperimentId);cmd.Parameters.AddWithValue("$replicate",slot.Index);cmd.Parameters.AddWithValue("$starter",slot.Starter==slot.DeckA?0:1);return cmd.ExecuteScalar() as string;
+    }
 }
 
 public sealed record PyreRecord(string RecordId,string PayloadHash,string AttemptId,string SlotId,string ExperimentId,string MetricHash,string ControllerHash,SimulationRun Run,GameSlot Slot,List<DeckManifest> Decks)
@@ -159,11 +183,16 @@ public sealed record PyreRecord(string RecordId,string PayloadHash,string Attemp
                 var previous=-1L;foreach(var row in Prop(e,"turn_samples").EnumerateArray()){
                     var sequence=Prop(row,"sequence").GetInt64();if(sequence<=previous)throw new InvalidDataException("Nonmonotonic sample sequence.");previous=sequence;
                     var player=Str(row,"player");if(player is not ("A" or "B"))throw new InvalidDataException("Invalid sample player.");
+                    var point=Str(row,"point");var gameTurn=Int(row,"game_turn_number");var ownTurn=Int(row,"player_turn_number");
+                    if(point is not ("Initial" or "TurnEnd" or "Terminal" or "Stopped")||gameTurn<0||gameTurn>turns||ownTurn<0||ownTurn>personal[player=="A"?0:1]||ownTurn>gameTurn)throw new InvalidDataException("Invalid sample point/turn axes.");
+                    foreach(var field in new[]{"hand_cards","hand_lands","hand_nonlands","lands","creatures","graveyard_cards","library_cards","artifacts","enchantments"})if(Int(row,field)<0)throw new InvalidDataException("Negative card count.");
+                    if((long)Int(row,"hand_lands")+Int(row,"hand_nonlands")!=Int(row,"hand_cards"))throw new InvalidDataException("Inconsistent hand composition.");
                     if(Str(row,"point")=="Initial")continue;
                     samples.Add(new(Int(row,"game_turn_number"),Int(row,"player_turn_number"),player,Int(row,"life"),Int(row,"hand_cards"),Int(row,"lands"),Int(row,"creatures"),checked((int)Prop(row,"total_creature_power").GetInt64()),Int(row,"graveyard_cards"),Int(row,"library_cards"),Int(row,"artifacts"),Int(row,"enchantments"),Int(row,"hand_lands"),Int(row,"hand_nonlands")));
                 }
                 var opening=Prop(facts,"opening");var mulligans=Prop(opening,"mulligans").EnumerateArray().ToArray();var kept=Prop(opening,"kept_hand_size").EnumerateArray().ToArray();
                 for(var i=0;i<2;i++)if(Observed(mulligans[i]) is int mull&&Observed(kept[i]) is int size)openings.Add(new(i==0?"A":"B",mull,size,null,"Pyre committed opening metrics; no inferred policy-acceptance flag."));
+                if(valid&&openings.Count!=2)throw new InvalidDataException("Complete analysis requires both opening measurements.");
             }else if(valid)throw new InvalidDataException("Valid result lacks observed metric data.");
         }else if(valid)throw new InvalidDataException("Valid result lacks gameplay metrics.");
         // Existing chart records have one row per player/turn. Keep the last actual

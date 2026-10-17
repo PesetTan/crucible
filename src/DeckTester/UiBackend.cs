@@ -50,7 +50,7 @@ public interface IUiBackend
 
 }
 
-public sealed class LocalUiBackend(Store store,ForgeEngine engine,RunCoordinator coordinator,DeckImporter importer,ResourceCapacity resources,DeckWorkshop workshop):IUiBackend
+public sealed class LocalUiBackend(Store store,ForgeEngine engine,RunCoordinator coordinator,DeckImporter importer,ResourceCapacity resources,DeckWorkshop workshop,EngineProviders? providers=null):IUiBackend
 {
     private readonly Lazy<Dictionary<int,int>> manaValues=new(importer.ReadManaValues);
     private Capabilities SnapshotCapabilities()=>engine.Capabilities();
@@ -121,11 +121,12 @@ public sealed class LocalUiBackend(Store store,ForgeEngine engine,RunCoordinator
             // Results, logs and replay pages need only this session. Setup cache keys,
             // timing calibration and other sessions must not be loaded on this path.
             var run=store.Run(runId);var slots=store.Slots(runId);
+            if(run.Config.ProviderId=="pyre"&&providers is not null)capability=providers.Capabilities("pyre");
             return UiSnapshot.ForSession(run,run.Config.DeckIds.Select(store.Deck).Select(d=>new DeckSnapshot(d,engine.Coverage(d))).ToList(),
                 capability,slots,store.SessionTimings(runId));
         }
         var runs=store.Runs();
-        var caches=runs.GroupBy(r=>(r.Config.RootSeed,r.Config.EngineHash,r.Config.AdapterHash,r.Config.PerformanceMode,r.Config.Pilot,r.Config.OpeningPolicy,r.Config.SeedScheme,r.Config.AttributesHash))
+        var caches=runs.GroupBy(r=>(r.Config.ProviderId,r.Config.Provider?.ExperimentId,r.Config.Provider?.MetricDefinitionHash,r.Config.Provider?.ControllerDefinitionHash,r.Config.RootSeed,r.Config.EngineHash,r.Config.AdapterHash,r.Config.PerformanceMode,r.Config.Pilot,r.Config.OpeningPolicy,r.Config.SeedScheme,r.Config.AttributesHash))
             .Select(g=>new CacheSnapshot(g.First().Config,store.CachedGameKeys(g.First().Config).ToList())).ToList();
         return new(1,store.Decks().Select(d=>new DeckSnapshot(d,engine.Coverage(d))).ToList(),capability,runs,
             runs.ToDictionary(r=>r.Id,r=>store.SessionTimings(r.Id)),store.ActiveSessionProgress(),store.SessionTurnStatistics(),

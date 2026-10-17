@@ -236,11 +236,18 @@ public sealed partial class Store
         using var db=Open();using var cmd=db.CreateCommand();
         cmd.CommandText="SELECT payload FROM pilot_optimizer_published WHERE id=$id";cmd.Parameters.AddWithValue("$id",id);
         var payload=cmd.ExecuteScalar() as string??throw new KeyNotFoundException("Optimizer policy has not been published.");
+        using(var document=System.Text.Json.JsonDocument.Parse(payload))if(document.RootElement.TryGetProperty("providerId",out var provider)&&provider.GetString()!="forge")throw new InvalidDataException("This published policy belongs to another engine provider.");
         var policy=Json.Decode<OptimizerPolicy>(payload);
         if(policy.Version!=1||policy.Id!=id)throw new InvalidDataException("Optimizer policy identity mismatch.");
         return policy;
     }
     public SimulationRun? ExistingSession(RunConfig config)=>Runs().Where(run=>CompatibleSession(run.Config,config)).OrderByDescending(run=>run.Config.GamesPerPair).FirstOrDefault();
+    public PublishedPyrePolicy PublishedPyrePolicy(string id){
+        if(id.Length!=64||id.Any(c=>!char.IsAsciiHexDigit(c)))throw new ArgumentException("Invalid Pyre pilot policy ID.");
+        using var db=Open();using var cmd=db.CreateCommand();cmd.CommandText="SELECT payload FROM pilot_optimizer_published WHERE id=$id";cmd.Parameters.AddWithValue("$id",id);
+        var policy=Json.Decode<PublishedPyrePolicy>(cmd.ExecuteScalar() as string??throw new KeyNotFoundException("Pyre policy has not been published."));
+        if(policy.Version!=1||policy.ProviderId!="pyre"||policy.Id!=id)throw new InvalidDataException("Published Pyre policy identity mismatch.");return policy;
+    }
     public static CachedGameKey CacheKey(GameSlot slot) => new(slot.DeckA,slot.DeckB,slot.Starter,slot.Seed,slot.Index);
     private static SqliteCommand CacheQuery(SqliteConnection db, RunConfig config, bool keysOnly)
     {
@@ -249,6 +256,8 @@ public sealed partial class Store
         cmd.CommandText=$"""
             SELECT {fields} FROM slots s JOIN runs r ON r.id=s.run_id
             WHERE json_extract(r.payload,'$.config.rootSeed')=$seed
+                AND coalesce(json_extract(r.payload,'$.config.provider.id'),'forge')=$provider
+                AND coalesce(json_extract(r.payload,'$.config.provider.experimentId'),'none')=$experiment
                 AND json_extract(r.payload,'$.config.engineHash')=$engine
                 AND json_extract(r.payload,'$.config.adapterHash')=$adapter
                 AND coalesce(json_extract(r.payload,'$.config.performanceMode'),0)=$performance
@@ -270,6 +279,7 @@ public sealed partial class Store
             ORDER BY json_extract(r.payload,'$.createdAt') DESC
             """;
         cmd.Parameters.AddWithValue("$seed",config.RootSeed);cmd.Parameters.AddWithValue("$engine",config.EngineHash);
+        cmd.Parameters.AddWithValue("$provider",config.ProviderId);cmd.Parameters.AddWithValue("$experiment",config.Provider?.ExperimentId??"none");
         cmd.Parameters.AddWithValue("$adapter",config.AdapterHash);cmd.Parameters.AddWithValue("$performance",config.PerformanceMode?1:0);cmd.Parameters.AddWithValue("$pilot",config.Pilot);
         cmd.Parameters.AddWithValue("$profiles",config.PilotProfiles is null?"null":Json.Encode(config.PilotProfiles));
         cmd.Parameters.AddWithValue("$attributes",config.AttributesHash??"none");cmd.Parameters.AddWithValue("$opening",config.OpeningPolicy);cmd.Parameters.AddWithValue("$scheme",config.SeedScheme);

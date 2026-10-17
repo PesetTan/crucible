@@ -64,7 +64,7 @@ static async Task Run(string[] args)
         var preflight = await proxy.Post<PreflightResponse>("/api/v1/runs/preflight", Json.Encode(request), c.RequestAborted);
         var snapshot = await proxy.Read<UiSnapshot>("/api/v1/ui-state", c.RequestAborted);
         // Exact cache eligibility comes from backend preflight. The estimate is advisory only.
-        var range = RuntimeEstimate.Calculate(request.DeckIds, request.GamesPerPair, request.Workers, request.TimeoutSeconds, request.TurnLimit, request.StaggerStarts, request.EstimatedGameSeconds, request.StartLeadSeconds, snapshot.TimingSamples, request.StartupSpacingSeconds, null, snapshot.SessionSamples, request.PerformanceMode);
+        var range = request.ProviderId=="forge"?RuntimeEstimate.Calculate(request.DeckIds, request.GamesPerPair, request.Workers, request.TimeoutSeconds, request.TurnLimit, request.StaggerStarts, request.EstimatedGameSeconds, request.StartLeadSeconds, snapshot.TimingSamples, request.StartupSpacingSeconds, null, snapshot.SessionSamples, request.PerformanceMode):null;
         return Results.Json(new EstimateReply(preflight, range), UiJsonContext.Default.EstimateReply);
     });
     app.MapMethods("/api/v1/{**path}", ["GET", "HEAD", "POST", "DELETE"], (HttpContext c, BackendProxy proxy) => proxy.Forward(c));

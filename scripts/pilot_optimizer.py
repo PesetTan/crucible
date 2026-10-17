@@ -777,6 +777,9 @@ class Backend:
                 self.play(eid, candidate, slot, arm)
         return compare_pairs(self.games(eid, candidate["id"], phase), self.exp(eid)[phase + "Pairs"])
 
+    def verify_runtime(self,eid):
+        return validate_bundle(self.root,self.frozen(eid)["bundleId"])
+
     def work(self, eid):
         e = self.exp(eid)
         if e["status"] != "queued" or e.get("pauseRequested"):
@@ -784,7 +787,7 @@ class Backend:
         self.update(eid, status="running")
         try:
             frozen = self.verify_frozen(eid)
-            validate_bundle(self.root, frozen["bundleId"])
+            self.verify_runtime(eid)
             baseline = self.fixture_run(eid)
             if not baseline["cases"] or not all(g["passed"] for g in baseline["guards"]):
                 raise ValueError("Baseline required guards are not healthy")
@@ -808,7 +811,9 @@ class Backend:
                 save(self.folder(eid) / "report.json", report)
                 return report
             if finalists:
-                best = sorted(finalists, key=lambda c: (-c["screen"]["gains"], c["screen"]["medianElapsedRatio"], c["id"]))[0]
+                pinned=self.exp(eid).get("finalist")
+                best = self.candidate(eid,pinned) if pinned else sorted(finalists, key=lambda c: (-c["screen"]["gains"], c["screen"]["medianElapsedRatio"], c["id"]))[0]
+                self.update(eid,finalist=best["id"],holdoutStarted=True)
                 best["holdout"] = self.evaluate_games(eid, best, "holdout")
                 best["status"] = "eligible" if best["holdout"]["acceptable"] and not self.exp(eid)["diagnosticOnly"] else "holdout-rejected"
                 self.put_candidate(eid, best)

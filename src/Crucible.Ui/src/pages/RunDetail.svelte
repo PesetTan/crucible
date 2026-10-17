@@ -282,8 +282,7 @@
   <p><strong>{runtime(snapshot?.timings[id] ?? [])}</strong></p>
   <div class="notice">
     <strong>Exploratory Pilot Results</strong><span
-      >{run.config.openingPolicy}. Rules and pilot gates remain unvalidated.
-      Extra/skipped turn grouping and mana-pool replay are unavailable.</span
+      >{run.config.openingPolicy}. {run.config.provider?.id === "pyre" ? "Results apply to these exact decks and baseline policies. They do not forecast Arena performance." : "Rules and pilot gates remain unvalidated. Extra/skipped turn grouping and mana-pool replay are unavailable."}</span
     >
   </div>
   {#if run.error}<p class="error">{run.error}</p>{/if}

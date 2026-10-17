@@ -83,6 +83,8 @@ export interface Capability {
   protocols?: ProtocolSet;
 }
 export interface RunConfig {
+  provider?: {id: string; experimentId: string};
+  pyre?: {capture: string; policyId?: string};
   deckIds: string[];
   gamesPerPair: number;
   workers: number;
@@ -315,6 +317,10 @@ export interface Resource {
   [key: string]: unknown;
 }
 export interface RunRequest {
+  providerId?: string;
+  pyreCohort?: string;
+  pyrePilotPolicyId?: string;
+  capture?: string;
   deckIds: string[];
   gamesPerPair: number;
   workers: number;

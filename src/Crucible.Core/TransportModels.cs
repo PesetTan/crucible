@@ -12,7 +12,7 @@ public sealed record ForgeGameRequest(string AttemptId,long Seed,int Starter,int
     OptimizerPolicy? OptimizerPolicyA,OptimizerPolicy? OptimizerPolicyB,string PilotVersion,string PilotA,string PilotB,
     List<ForgeDeckCard> DeckA,List<ForgeDeckCard> DeckB);
 public sealed record OptimizerCatalogEntry(DeckManifest Manifest,string Profile,string Coverage);
-public sealed record OptimizerInspect(List<OptimizerCatalogEntry> Catalog);
+public sealed record OptimizerInspect(List<OptimizerCatalogEntry> Catalog){public string ProviderId{get;init;}="forge";}
 public sealed record OptimizerId(string Id);
 public sealed record OptimizerCandidate(string Id,string CandidateId);
 public sealed record OptimizerEvidence(string Id,int Limit);

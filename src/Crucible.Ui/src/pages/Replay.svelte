@@ -30,6 +30,7 @@
     error = $state(""),
     scrub = $state(0),
     ended = $state(false);
+  let nativeEvidence = $state<{available: boolean; capture: string; traceUrl?: string; description: string}>();
   let beforePage: ReplayState | undefined;
   let revision = 0,
     disposed = false;
@@ -109,6 +110,10 @@
     void (async () => {
       try {
         snapshot = await api(`/api/v1/runs/${runId}/state`);
+        if (snapshot?.runs[0]?.config.provider?.id === "pyre") {
+          nativeEvidence = await api(`/api/v1/runs/${runId}/games/${id}/evidence`);
+          return;
+        }
         positions = await api(`/api/v1/runs/${runId}/games/${id}/replay-turns`);
         await load();
       } catch (e) {
@@ -158,6 +163,11 @@
     Seed {slot.seed} · {slot.result?.actualTurns ?? "—"} actual player turns · Read-only
     saved evidence
   </p>{/if}{#if error}<p class="error" role="alert">{error}</p>{/if}
+{#if nativeEvidence}
+  <section class="panel"><h2>Pyre Evidence</h2><p>{nativeEvidence.description}</p>
+    {#if nativeEvidence.available && nativeEvidence.traceUrl}<a class="button" href={nativeEvidence.traceUrl} download="pyre-trace.json">Download Verified Pyre Trace</a>{/if}
+  </section>
+{:else}
 <div class="replay-toolbar">
   <button disabled={loading || (offset === 0 && index === 0)} onclick={previous}
     >Previous Event</button
@@ -344,3 +354,4 @@
       >{/each}
   </div>
 </details>
+{/if}

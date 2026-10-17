@@ -64,14 +64,14 @@ public sealed class PilotOptimizer(AppPaths paths, Store store, CardAttributes a
         return await Invoke(action, request, cancellation);
     }
 
-    public async Task<JsonElement> Inspect(CancellationToken cancellation) => await Read("inspect", new OptimizerInspect(Catalog()), cancellation);
+    public async Task<JsonElement> Inspect(CancellationToken cancellation,string providerId="forge") => await Read("inspect", new OptimizerInspect(providerId=="forge"?Catalog():[]){ProviderId=providerId}, cancellation);
 
     public async Task<JsonElement> Create(JsonElement request, string key, CancellationToken cancellation)
     {
         await ready.Task.WaitAsync(cancellation);
         var body = Json.Decode<Dictionary<string, JsonElement>>(request.GetRawText()) ?? throw new ArgumentException("Provide an optimizer request.");
         body["key"] = Json.Element(key);
-        body["catalog"] = Json.Element(Catalog());
+        body["catalog"] = Json.Element(body.TryGetValue("providerId",out var provider)&&provider.GetString()=="pyre"?new List<OptimizerCatalogEntry>():Catalog());
         return await Invoke("create", body, cancellation);
     }
 
@@ -143,7 +143,7 @@ public sealed class PilotOptimizer(AppPaths paths, Store store, CardAttributes a
     public static void MapEndpoints(WebApplication app)
     {
         const string prefix = "/api/v1/pilot-optimizations";
-        app.MapGet(prefix + "/inspect", (PilotOptimizer optimizer, HttpContext context) => optimizer.Inspect(context.RequestAborted));
+        app.MapGet(prefix + "/inspect", (PilotOptimizer optimizer, HttpContext context,string? providerId) => optimizer.Inspect(context.RequestAborted,providerId??"forge"));
         app.MapGet(prefix, (PilotOptimizer optimizer, HttpContext context) => optimizer.Read("list", new EmptyRequest(), context.RequestAborted));
         app.MapPost(prefix, (JsonElement request, PilotOptimizer optimizer, HttpContext context) => optimizer.Create(request, context.Request.Headers["Idempotency-Key"].ToString(), context.RequestAborted));
         app.MapGet(prefix + "/{id}", (string id, PilotOptimizer optimizer, HttpContext context) => optimizer.Read("status", new OptimizerId(id), context.RequestAborted));
@@ -158,6 +158,7 @@ public sealed class PilotOptimizer(AppPaths paths, Store store, CardAttributes a
         app.MapPost(prefix + "/{id}/pause", (string id, PilotOptimizer optimizer, HttpContext context) => optimizer.Read("pause", new OptimizerId(id), context.RequestAborted));
         app.MapPost(prefix + "/{id}/promote", (string id, OptimizerPromotion request, PilotOptimizer optimizer, HttpContext context) => optimizer.Promote(id, request.CandidateId, context.RequestAborted));
         app.MapPost(prefix + "/{id}/profile", (string id, OptimizerPromotion request, PilotOptimizer optimizer, HttpContext context) => optimizer.Profile(id, request.CandidateId, context.RequestAborted));
+        app.MapPost(prefix + "/{id}/rollback",(string id,PilotOptimizer optimizer,HttpContext context)=>optimizer.Read("rollback",new OptimizerId(id),context.RequestAborted));
     }
 }
 
