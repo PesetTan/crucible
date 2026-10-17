@@ -193,14 +193,22 @@ public sealed class PyreEngine(AppPaths paths,Store store) : IAsyncDisposable
                 var folder=Path.Combine(Path.GetDirectoryName(manifest)!,"failures");Directory.CreateDirectory(folder);
                 File.WriteAllText(Path.Combine(folder,slot.Id+"-"+attempt+".json"),Json.Encode(new NativeWorkerFailure(slot.Id,attempt,installation.ExecutableHash,error.Message,worker?.Diagnostics??"No worker was launched.")));
                 throw;
-            }finally{if(worker is not null){if(healthy&&Volatile.Read(ref disposed)==0)idle.Add(worker);else{all.TryRemove(worker,out _);await worker.DisposeAsync();}}capacity.Release();}
+            }finally{
+                try{if(worker is not null){if(healthy&&Volatile.Read(ref disposed)==0)idle.Add(worker);else{all.TryRemove(worker,out _);await Retire(worker);}}}
+                finally{capacity.Release();}
+            }
         }
-        public async ValueTask DisposeAsync(){Interlocked.Exchange(ref disposed,1);foreach(var worker in all.Keys)await worker.DisposeAsync();all.Clear();}
+        async Task Retire(Worker worker){
+            await worker.DisposeAsync();
+            if(worker.TeardownError is {} error){var folder=Path.Combine(Path.GetDirectoryName(manifest)!,"failures");Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"teardown-"+Guid.NewGuid().ToString("N")+".log"),error);}
+        }
+        public async ValueTask DisposeAsync(){Interlocked.Exchange(ref disposed,1);foreach(var worker in all.Keys)await Retire(worker);all.Clear();}
     }
     sealed class Worker : IAsyncDisposable
     {
         readonly Process process;readonly PyreInstallation installation;readonly Task<string> errors;readonly CancellationTokenSource stop=new();readonly Task watchdog;string? resourceFailure;
         public long CurrentRss;public long PeakRss;readonly Action sampled;
+        public string? TeardownError {get;private set;}
         public string Diagnostics=>errors.IsCompletedSuccessfully?errors.Result:errors.IsFaulted?"Worker stderr exceeded its bound or failed to decode.":"Worker stderr was still open at failure.";
         public Worker(PyreInstallation installation,string manifest,Action sampled){
             this.sampled=sampled;
@@ -231,6 +239,13 @@ public sealed class PyreEngine(AppPaths paths,Store store) : IAsyncDisposable
             }catch(OperationCanceledException)when(!token.IsCancellationRequested){throw new TimeoutException("Native Pyre attempt time limit.");}
             catch(Exception error)when(error is IOException or EndOfStreamException){throw new IOException(resourceFailure??"Native worker ended before terminal response.",error);}
         }
-        public async ValueTask DisposeAsync(){Kill(process);stop.Cancel();try{await process.WaitForExitAsync();await watchdog;await errors;}catch(OperationCanceledException){}finally{process.Dispose();stop.Dispose();}}
+        public async ValueTask DisposeAsync(){
+            Kill(process);stop.Cancel();
+            try{
+                await process.WaitForExitAsync();await watchdog;
+                try{await errors;}catch(Exception error)when(error is IOException or InvalidDataException){TeardownError=error.Message;}
+            }catch(OperationCanceledException){}
+            finally{process.Dispose();stop.Dispose();}
+        }
     }
 }

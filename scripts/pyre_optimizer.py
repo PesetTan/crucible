@@ -86,7 +86,7 @@ def make_backend(base):
                     if coordinates in used:raise ValueError('Seed/start coordinate overlap')
                     used.add(coordinates);schedule.append(dict(phase=phase,pair=pair,deck='A',opponent='B',seed=value,starter=pair%2))
             runtime={str(p.relative_to(runner.parent)):digest(p) for p in runner.parent.rglob('*') if p.is_file() and p.suffix in ('.dll','.json','.txt','.dylib','.so')}
-            frozen=dict(providerId='pyre',profile=draft['pilots'][0]['id'],pyreCohort=cohort,installation=installation,
+            frozen=dict(providerId='pyre',candidateIdentityVersion=2,profile=draft['pilots'][0]['id'],pyreCohort=cohort,installation=installation,
                 runnerFiles=runtime,schedule=schedule,rootSeed=seed,scope='Provider workflow conformance with immutable numeric Pilot Modules',
                 baselineTemplateHash=hashlib.sha256(canonical(draft)).hexdigest(),runtimeRatioLimit=2.0,settings=dict(turnLimit=150,timeoutSeconds=30),registry=dict(creature_weight=[0,100],aura_weight=[0,100],interaction_weight=[0,100],mulligan_floor=[0,7]))
             save(folder/'frozen.json',frozen)
@@ -134,13 +134,19 @@ def make_backend(base):
                 self.stage(eid,dict(label='higher creature priority',tuning={'creature_weight':4.0}))
                 self.stage(eid,dict(label='higher Aura priority',tuning={'aura_weight':3.0}))
 
+        def candidate_bytes(self,eid,candidate,path=None):
+            path=base.no_links(path or self.folder(eid)/'candidates'/candidate['id']/'draft.json')
+            content=path.read_bytes()
+            if hashlib.sha256(content).hexdigest()!=candidate['sourceHash']:raise ValueError('Immutable candidate content changed')
+            return content
+
         def compile(self,eid,candidate):
-            self.verify_runtime(eid);path=self.folder(eid)/'candidates'/candidate['id']/'draft.json'
-            if digest(path)!=candidate['sourceHash']:raise ValueError('Immutable candidate content changed')
+            self.verify_runtime(eid);self.candidate_bytes(eid,candidate)
             return candidate
 
         def fixture_run(self,eid,candidate=None):
             f=self.verify_runtime(eid);folder=self.folder(eid);path=folder/'baseline-draft.json' if candidate is None else folder/'candidates'/candidate['id']/'draft.json'
+            if candidate is not None:self.candidate_bytes(eid,candidate)
             name='baseline' if candidate is None else candidate['id'];out=folder/('preflight-'+name+'.json');log=folder/('preflight-'+name+'.log')
             rc,_=self.run_process(eid,[f['installation']['executable'],'preflight','--manifest',str(path)],folder,out,log,15)
             if rc:raise ValueError('Native typed candidate preflight failed')
@@ -152,14 +158,20 @@ def make_backend(base):
 
         def play(self,eid,candidate,slot,arm,bundle_override=None,phase_override=None,profile=False):
             if profile:raise ValueError('Native profiling uses separate engine instrumentation, not JVM JFR')
-            self.verify_runtime(eid);f=self.frozen(eid);phase=phase_override or slot['phase'];evaluation_id=identity([eid,candidate['id'],phase,slot['pair'],arm])
+            self.verify_runtime(eid);content=self.candidate_bytes(eid,candidate)
+            if bundle_override is not None:content=self.candidate_bytes(eid,candidate,Path(bundle_override))
+            f=self.frozen(eid);phase=phase_override or slot['phase'];evaluation_id=identity([eid,candidate['id'],phase,slot['pair'],arm])
             with self.db() as db:old=db.execute('SELECT payload FROM pilot_optimizer_evaluations WHERE id=?',(evaluation_id,)).fetchone()
             if old:
                 g=json.loads(old[0])
                 if g['status']!='completed' or digest(self.root/g['evidence'])!=g['evidenceHash']:raise ValueError('Retained evaluation failed or changed')
                 return g
             folder=self.folder(eid)/'candidates'/candidate['id']/phase/(str(slot['pair']//2)+'-'+arm);(folder/'docs/specs').mkdir(parents=True,exist_ok=True);(folder/'data').mkdir(exist_ok=True)
-            template=Path(bundle_override) if bundle_override else self.folder(eid)/'baseline-draft.json' if arm=='baseline' else self.folder(eid)/'candidates'/candidate['id']/'draft.json'
+            if arm=='baseline':content=(self.folder(eid)/'baseline-draft.json').read_bytes()
+            template=folder/'draft.json'
+            if template.exists():
+                if template.read_bytes()!=content:raise ValueError('Immutable evaluation input changed')
+            else:template.write_bytes(content)
             installation=dict(f['installation'],metrics=str(self.folder(eid)/'metrics.json'),controllerMetrics=str(self.folder(eid)/'controller-metrics.json'),cohorts={'frozen':str(template)})
             save(folder/'data/pyre-provider.json',installation)
             request=dict(deckIds=[],providerId='pyre',pyreCohort='frozen',gamesPerPair=2,workers=1,staggerStarts=False,timeoutSeconds=f['settings']['timeoutSeconds'],turnLimit=f['settings']['turnLimit'],rootSeed=slot['seed'],capture='summary')
@@ -218,7 +230,7 @@ def make_backend(base):
             return dict(providerId='pyre',games=[g for c in self.candidates(eid) for g in self.games(eid,c['id'])][:limit])
 
         def audit_games(self,eid,cid):
-            self.verify_runtime(eid)
+            self.verify_runtime(eid);self.candidate_bytes(eid,self.candidate(eid,cid))
             for game in self.games(eid,cid):
                 if game['status']!='completed' or digest(self.root/game['evidence'])!=game['evidenceHash']:raise ValueError('Evaluation audit failed')
                 result=json.loads((self.root/game['evidence']).read_text())
@@ -228,22 +240,24 @@ def make_backend(base):
         def promote(self,eid,cid):
             # The phase exercises pointer mechanics only in explicitly marked disposable roots.
             if not (self.root/'.pyre-optimizer-sandbox').is_file():raise ValueError('Production Pyre activation requires a separately authorized registry operation')
-            e=self.exp(eid);c=self.candidate(eid,cid)
+            e=self.exp(eid);c=self.candidate(eid,cid);self.verify_runtime(eid);content=self.candidate_bytes(eid,c)
             with self.db() as db:prior=db.execute('SELECT payload FROM pilot_optimizer_published WHERE id=?',(cid,)).fetchone()
             if prior:
                 policy=json.loads(prior[0]);published=self.root/'data/pyre-optimizer-publications'/(cid+'.json')
-                if digest(published)!=policy['sourceHash']:raise ValueError('Published immutable content changed')
+                if digest(published)!=policy['sourceHash'] or policy['sourceHash']!=c['sourceHash']:raise ValueError('Published immutable content changed')
                 return policy
             if e['status']!='completed' or e['diagnosticOnly'] or c['status']!='eligible':raise ValueError('Candidate lacks complete promotion gates')
             self.audit_games(eid,cid);folder=self.root/'data/pyre-optimizer-publications';folder.mkdir(exist_ok=True)
             pointer=folder/'active.json';previous=json.loads(pointer.read_text()) if pointer.exists() else None
-            candidate=self.folder(eid)/'candidates'/cid/'draft.json';published=folder/(cid+'.json')
+            published=folder/(cid+'.json')
             if published.exists() and digest(published)!=c['sourceHash']:raise ValueError('Immutable publication conflict')
-            if not published.exists():shutil.copyfile(candidate,published)
+            if not published.exists():
+                with published.open('xb') as output:output.write(content)
             try:
                 for slot in self.frozen(eid)['schedule'][:2]:self.play(eid,c,slot,'candidate',published,'publication-smoke')
+                self.candidate_bytes(eid,c);self.candidate_bytes(eid,c,published)
                 f=self.frozen(eid);graph=json.loads(published.read_text())['modules']['sha256']
-                policy=dict(version=1,id=cid,providerId='pyre',cohort=f['pyreCohort'],engineHash=f['installation']['executableHash'],sourceHash=digest(published),baselineTemplateHash=f['baselineTemplateHash'],graphHash=graph,experimentId=eid)
+                policy=dict(version=1,id=cid,providerId='pyre',cohort=f['pyreCohort'],engineHash=f['installation']['executableHash'],sourceHash=c['sourceHash'],baselineTemplateHash=f['baselineTemplateHash'],graphHash=graph,experimentId=eid)
                 with self.db() as db:db.execute('INSERT INTO pilot_optimizer_published VALUES(?,?)',(cid,encoded(policy)))
                 save(pointer,dict(candidateId=cid,sha256=digest(published),previous=previous));self.update(eid,status='promoted',publishedPolicyId=cid)
                 return policy

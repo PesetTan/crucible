@@ -4,6 +4,9 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+import os
+import subprocess
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import pilot_optimizer as base
@@ -68,5 +71,53 @@ class PyreOptimizerChecks(unittest.TestCase):
         with self.assertRaises(ValueError):self.backend.prepare(self.experiment,dict(search=False))
         with self.assertRaisesRegex(ValueError,'Production Pyre activation'):self.backend.promote(self.experiment,'anything')
         self.assertFalse((self.root/'data/pyre-optimizer-publications').exists())
+
+    def mutate_candidate(self,candidate):
+        path=self.backend.folder(self.experiment)/'candidates'/candidate['id']/'draft.json'
+        base.save(path,graph_candidate(json.loads(path.read_text()),dict(creature_weight=100),99))
+
+    def test_changed_screened_candidate_blocks_resumed_evaluation(self):
+        candidate=self.backend.stage(self.experiment,dict(tuning={}))
+        candidate['status']='screened';self.backend.put_candidate(self.experiment,candidate)
+        self.mutate_candidate(candidate)
+        for phase in ['screen','holdout']:
+            with self.subTest(phase=phase),patch.object(self.backend,'run_process',side_effect=AssertionError('Changed candidate dispatched')):
+                slot=next(s for s in self.backend.frozen(self.experiment)['schedule'] if s['phase']==phase)
+                with self.assertRaisesRegex(ValueError,'Immutable candidate content changed'):
+                    self.backend.play(self.experiment,candidate,slot,'candidate')
+
+    def test_changed_holdout_candidate_blocks_publication_before_copy(self):
+        candidate=self.backend.stage(self.experiment,dict(tuning={}))
+        candidate['status']='eligible';self.backend.put_candidate(self.experiment,candidate)
+        self.backend.update(self.experiment,status='completed',holdoutStarted=True)
+        (self.root/'.pyre-optimizer-sandbox').touch();self.mutate_candidate(candidate)
+        with patch.object(self.backend,'run_process',side_effect=AssertionError('Changed candidate dispatched')):
+            with self.assertRaisesRegex(ValueError,'Immutable candidate content changed'):
+                self.backend.promote(self.experiment,candidate['id'])
+        self.assertFalse((self.root/'data/pyre-optimizer-publications').exists())
+
+    def test_changed_candidate_blocks_retained_evaluation_reuse(self):
+        candidate=self.backend.stage(self.experiment,dict(tuning={}))
+        slot=self.backend.frozen(self.experiment)['schedule'][0]
+        evidence=self.root/'retained-result.json';evidence.write_text('{}')
+        evaluation=base.identity([self.experiment,candidate['id'],'screen',slot['pair'],'candidate'])
+        game=dict(status='completed',evidence=evidence.name,evidenceHash=base.digest(evidence))
+        with self.backend.db() as db:db.execute('INSERT INTO pilot_optimizer_evaluations VALUES(?,?,?,?)',(evaluation,self.experiment,candidate['id'],base.encoded(game)))
+        self.mutate_candidate(candidate)
+        with self.assertRaisesRegex(ValueError,'Immutable candidate content changed'):
+            self.backend.play(self.experiment,candidate,slot,'candidate')
+
+    def test_legacy_frozen_backend_cannot_execute_or_publish(self):
+        folder=self.backend.folder(self.experiment);frozen=self.backend.frozen(self.experiment)
+        frozen.pop('candidateIdentityVersion',None);base.save(folder/'frozen.json',frozen)
+        experiment=self.backend.exp(self.experiment)
+        experiment['frozenHash']=base.digest(folder/'frozen.json');experiment['evidenceHashes']['frozen.json']=experiment['frozenHash']
+        with self.backend.db() as db:db.execute('UPDATE pilot_optimizer_experiments SET payload=? WHERE id=?',(base.encoded(experiment),self.experiment))
+        cli=Path(__file__).resolve().parents[1]/'scripts/pilot-optimizer.py'
+        for action in ['prepare','work','promote']:
+            result=subprocess.run([sys.executable,str(cli),'--internal',action],input=json.dumps(dict(id=self.experiment,candidateId='unused')),text=True,capture_output=True,env=dict(os.environ,MTG_PROJECT_ROOT=str(self.root)))
+            with self.subTest(action=action):
+                self.assertEqual(result.returncode,1)
+                self.assertIn('predates immutable candidate validation',json.loads(result.stdout)['error'])
 
 if __name__=='__main__':unittest.main()

@@ -45,6 +45,8 @@ def main():
                 import importlib.util
                 from pilot_optimizer import digest, no_links
                 experiment=backend.exp(request["id"])
+                if pyre and sys.argv[2] in ("prepare","work","promote") and backend.verify_frozen(request["id"]).get("candidateIdentityVersion")!=2:
+                    raise ValueError("This frozen experiment predates immutable candidate validation. Preserve its evidence and create a new experiment before evaluation or promotion.")
                 if sys.argv[2]=="promote" and not pyre:
                     from pilot_optimizer import catalog_publication_supported
                     candidate=backend.candidate(request["id"],request["candidateId"])

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text.Json.Nodes;
 
 static void Check(bool ok,string message){if(!ok)throw new Exception(message);Console.WriteLine("PASS "+message);}
+static async Task Until(Func<bool> done){var deadline=Stopwatch.StartNew();while(!done()){if(deadline.Elapsed.TotalSeconds>5)throw new Exception("Native fault cleanup did not finish within five seconds.");await Task.Delay(10);}}
 if(args.Length!=1)throw new ArgumentException("Provide an isolated initialized root.");
 Check(Json.Decode<RunRequest>("{\"deckIds\":[\"A\",\"B\"]}") is {ProviderId:"forge",Capture:"summary"},"omitted provider/capture retain legacy defaults through source-generated JSON");
 var paths=new AppPaths(args[0]);var store=new Store(paths);var installationPath=Path.Combine(paths.Data,"pyre-provider.json");var installation=File.ReadAllText(installationPath);
@@ -97,6 +98,9 @@ elif mode=='truncated':sys.stdout.buffer.write(struct.pack('>I',100)+b'bad');sys
 elif mode=='memory':ballast=bytearray(80*1024*1024);time.sleep(30)
 elif mode=='timeout':time.sleep(30)
 elif mode=='result':send(dict(protocol='furnace-worker-v1',canonical_result='{}'))
+elif mode=='stderr':
+ sys.stderr.write('x'*72000);sys.stderr.flush();time.sleep(.05)
+ send(dict(protocol='furnace-worker-v1',canonical_result='{}'))
 sys.exit(41)
 """.Replace("__NATIVE__",System.Text.Json.JsonSerializer.Serialize(nativeInstallation.Executable));
 File.WriteAllText(fakePath,fakeSource);
@@ -104,16 +108,34 @@ if(!OperatingSystem.IsWindows())File.SetUnixFileMode(fakePath,UnixFileMode.UserR
 var fakeInstallation=nativeInstallation with{Executable=fakePath,ExecutableHash=ForgeEngine.FileHash(fakePath),WorkerRssMiB=32};
 File.WriteAllText(installationPath,Json.Encode(fakeInstallation));
 try{
- foreach(var mode in new[]{"protocol","identity","oversize","truncated","memory","timeout","result"}){
+ foreach(var mode in new[]{"protocol","identity","oversize","truncated","memory","timeout","result","stderr"}){
   File.WriteAllText(Path.Combine(paths.Data,"fault-mode.txt"),mode);
   var badConfig=pyre.Configure(request with{TimeoutSeconds=10},"fault-"+mode);var badRun=run with{Id=Guid.NewGuid().ToString("N"),Config=badConfig};var badSlot=slot with{RunId=badRun.Id};
   var timer=Stopwatch.StartNew();var rejected=false;
   try{await providers.Play(badRun,badSlot,1,CancellationToken.None);}catch(Exception error)when(error is IOException or InvalidDataException or OperationCanceledException or TimeoutException or KeyNotFoundException){rejected=true;}
-  if(mode=="result"){
+  if(mode is "result" or "stderr"){
    try{await providers.Play(badRun,badSlot,1,CancellationToken.None);}catch(Exception error)when(error is IOException or InvalidDataException or KeyNotFoundException){}
    Check(pyre.Resources(badRun.Id) is {Workers:2,CompletedGames:0},"malformed results retire their worker before reuse and never count as completed games");
   }
   await providers.ReleaseWorkers(badRun.Id);Check(rejected&&timer.Elapsed.TotalSeconds<15,"bounded native worker fault: "+mode);
+ }
+ using(var faults=new RunCoordinator(store,forge,NullLogger<RunCoordinator>.Instance,paths,providers:providers)){
+  await faults.StartAsync(CancellationToken.None);await Until(()=>faults.IsReady);
+  foreach(var mode in new[]{"stderr","result"}){
+   File.WriteAllText(Path.Combine(paths.Data,"fault-mode.txt"),mode);
+   var id=await faults.Create(request with{TimeoutSeconds=10},"coordinator-cleanup-"+mode);
+   await Until(()=>store.Run(id).Status=="failed"&&faults.ActiveCount==0);
+   Check(store.Slots(id).All(s=>s.Status=="failed"&&s.Attempts.Count==1)&&pyre.Resources(id) is {Workers:2,CompletedGames:0},"coordinator "+mode+" failure releases capacity, retires both workers and terminates without cancellation");
+   if(mode=="stderr"){
+    var logs=Directory.GetFiles(Path.Combine(paths.Data,"pyre-runs",id,"failures"),"teardown-*.log");
+    Check(logs.Length==2&&logs.All(p=>new FileInfo(p).Length<2048),"stderr teardown faults retain bounded diagnostics");
+   }
+  }
+  File.WriteAllText(installationPath,installation);
+  var healthyId=await faults.Create(request with{RootSeed=2026101711},"native-after-stderr-failure");
+  await Until(()=>store.Run(healthyId).Status=="completed"&&faults.ActiveCount==0);
+  Check(Metrics.Summarize(store.Run(healthyId),store.Slots(healthyId)).Valid==2,"healthy native work completes on the same coordinator after stderr failure");
+  await faults.StopAsync(CancellationToken.None);
  }
 }finally{File.WriteAllText(installationPath,installation);}
 Check(pyre.HasBundle(locked),"restoring registration preserves exact prior native installation");

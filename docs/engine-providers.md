@@ -73,6 +73,14 @@ owned disposable roots, including two smoke games through the published bytes.
 Published policies are immutable and opt in through `pyrePilotPolicyId` on a new
 native run. A default selection or historical run never changes implicitly.
 
+Candidate bytes are checked against their evaluated identity before fixtures,
+each evaluation (including cached results), audits and publication. Dispatch uses
+verified per-block input snapshots, and publication copies the verified bytes.
+Older frozen Pyre experiments without candidate identity version 2 remain readable;
+evaluation and promotion require a fresh experiment with the corrected guards.
+Worker teardown always releases pool capacity. Bounded stderr-drain failures are
+retained as diagnostics and cannot strand the next scheduled game.
+
 Phase acceptance and private gameplay evidence belong to the separate Pyre
 repository. This document and source changes do not deploy hosts, change provider
 defaults, or establish general Magic coverage, competitive pilot quality, native
