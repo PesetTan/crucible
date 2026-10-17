@@ -11,7 +11,7 @@ namespace DeckTester;
 /// <summary>Narrow Spark importer; no service startup, Forge dispatch or engine database writes.</summary>
 public sealed partial class Store
 {
-    public const string PyreAdapterVersion="spark-ingestion-v1";
+    public const string PyreAdapterVersion="spark-ingestion-v2";
     private static readonly Lazy<string> pyreAdapterHash=new(()=>{
         var path=Path.Combine(AppContext.BaseDirectory,"Crucible.Core.dll");
         if(!File.Exists(path))path=Environment.ProcessPath??throw new InvalidOperationException("Adapter artifact unavailable.");
@@ -94,7 +94,7 @@ public sealed record PyreRecord(string RecordId,string PayloadHash,string Attemp
         var experiment=Str(e,"experiment_id");var manifestNode=JsonNode.Parse(m.GetRawText())!.AsObject();manifestNode["experiment_id"]="";
         using(var md=JsonDocument.Parse(manifestNode.ToJsonString()))if(SemanticHash("spark-experiment-v1",Canonical(md.RootElement))!=experiment||Str(m,"experiment_id")!=experiment)throw new InvalidDataException("Experiment identity mismatch.");
         var metricHash=Str(m,"metric_definition_hash");var controllerHash=Str(m,"controller_definition_hash");
-        if(metricHash!="93f9a3ecca5db0f4eead790ba17bcb405e312caa75d9d2d59decec004976e204"||controllerHash!="06b078a6a5e8898e46c74a29712d39f8320d8dba3b8eeba47871709817f057d1"||SemanticHash("k27-standard-metrics-v1",Encoding.UTF8.GetBytes(metricDefinitions))!=metricHash||SemanticHash("spark-controller-attempts-v1",Encoding.UTF8.GetBytes(controllerDefinitions))!=controllerHash)throw new InvalidDataException("Metric definition mismatch.");
+        if(metricHash is not ("93f9a3ecca5db0f4eead790ba17bcb405e312caa75d9d2d59decec004976e204" or "98868ac750ab63a1b4113b3ff02374679d05a024ccc699aa639dfea5fd236895")||controllerHash!="06b078a6a5e8898e46c74a29712d39f8320d8dba3b8eeba47871709817f057d1"||SemanticHash("k27-standard-metrics-v1",Encoding.UTF8.GetBytes(metricDefinitions))!=metricHash||SemanticHash("spark-controller-attempts-v1",Encoding.UTF8.GetBytes(controllerDefinitions))!=controllerHash)throw new InvalidDataException("Metric definition mismatch.");
         using(var defs=JsonDocument.Parse(metricDefinitions))if(Str(defs.RootElement,"semanticVersion")!="k27-standard-metrics-v1")throw new InvalidDataException("Unsupported gameplay metric semantics.");
         using(var defs=JsonDocument.Parse(controllerDefinitions))if(Str(defs.RootElement,"semanticVersion")!="spark-controller-attempts-v1")throw new InvalidDataException("Unsupported controller metric semantics.");
         var draft=Prop(m,"draft");var selections=Prop(m,"pilots").EnumerateArray().ToArray();var lists=Prop(draft,"decks").EnumerateArray().ToArray();if(lists.Length!=2||selections.Length!=2)throw new InvalidDataException("Two players required.");
@@ -123,13 +123,26 @@ public sealed record PyreRecord(string RecordId,string PayloadHash,string Attemp
         var valid=Prop(e,"valid_for_analysis").GetBoolean();var complete=Str(e,"metric_capture_status")=="complete";
         if(valid&&(!(status is "rules_win" or "rules_draw")||failure||!complete))throw new InvalidDataException("Invalid analysis eligibility.");
         var turns=Int(e,"game_turn_number");var personal=Prop(e,"player_turn_number").EnumerateArray().Select(v=>v.GetInt32()).ToArray();if(personal.Length!=2||personal.Sum()!=turns||turns<0)throw new InvalidDataException("Invalid turn axes.");
-        var ids=lists.Select(DeckId).ToArray();var names=new[]{"White Aggro","Boros Aggro"};
-        var decks=new List<DeckManifest>();var provenance=Prop(m,"deck_provenance").EnumerateArray().ToArray();
+        var ids=lists.Select(DeckId).ToArray();
+        var decks=new List<DeckManifest>();var provenanceRoot=Prop(m,"deck_provenance");
+        var wildfire=Str(m,"cohort")=="wildfire-white-auras-four-color-reanimator-2026-10-16";
+        if(wildfire){
+            // This exact dated source was independently verified against official
+            // legality records. Unknown cohorts do not inherit its legality claim.
+            var provenanceHash=Convert.ToHexStringLower(SHA256.HashData(Canonical(provenanceRoot)));
+            if(provenanceHash!="cd940a1ea86bde898638bb9b221bb65db8cf8f9572353bacea88a5eb95f563e5"||Str(m,"deck_provenance_sha256")!=provenanceHash||Str(m,"legality_as_of")!="2026-10-16"||Str(m,"legality_sha256")!="423a2029b395784fabde44dd1ff1686c53cf5ff48ca55e8c8570ebe5c4de68e7")throw new InvalidDataException("Unsupported Wildfire source or legality identity.");
+        }else if(Str(m,"cohort")!="survey-white-boros-2026-10-15")throw new InvalidDataException("Unsupported frozen Pyre cohort.");
+        var provenance=(wildfire?Prop(provenanceRoot,"decks"):provenanceRoot).EnumerateArray().ToArray();
         if(provenance.Length!=2)throw new InvalidDataException("Missing frozen deck provenance.");
         for(var i=0;i<2;i++){
-            var cards=Json.Decode<List<CardEntry>>(Prop(provenance[i],"cards").GetRawText());
+            // The new provenance contract contains exact names/quantities but no
+            // Arena metadata. Keep unavailable fields empty rather than inventing
+            // Arena IDs, printings, costs or rules text. Raw source stays retained.
+            var cards=wildfire?Prop(provenance[i],"cards").EnumerateArray().Select(c=>new CardEntry(0,Str(c,"name"),Int(c,"quantity"),"Main","","","","",true,"")).ToList():Json.Decode<List<CardEntry>>(Prop(provenance[i],"cards").GetRawText());
             if(cards.Sum(c=>c.Quantity)!=60||!cards.All(c=>c.LocallyLegal)||cards.GroupBy(c=>c.Name).ToDictionary(g=>g.Key,g=>g.Sum(c=>c.Quantity)).OrderBy(k=>k.Key,StringComparer.Ordinal).Select(k=>(k.Key,k.Value)).SequenceEqual(lists[i].EnumerateArray().Select(c=>(Str(c,"name"),Int(c,"count"))).OrderBy(k=>k.Item1,StringComparer.Ordinal))==false)throw new InvalidDataException("Deck provenance differs from frozen list.");
-            decks.Add(new(ids[i],names[i],"pyre-frozen","snapshot-2026-10-15",ids[i],"2026-10-11",null,ids[i],SemanticHash("spark-deck-provenance-v1",Canonical(provenance[i])),DateTimeOffset.UnixEpoch,cards,"Frozen Pyre cohort; legality snapshot 2026-10-15, not current Arena ownership."));
+            var date=wildfire?"2026-10-16":"2026-10-15";
+            var name=wildfire?Str(provenance[i],"name"):i==0?"White Aggro":"Boros Aggro";
+            decks.Add(new(ids[i],name,"pyre-frozen","snapshot-"+date,ids[i],wildfire?date:"2026-10-11",wildfire?Str(provenance[i],"source_url"):null,ids[i],SemanticHash("spark-deck-provenance-v1",Canonical(provenance[i])),DateTimeOffset.UnixEpoch,cards,"Frozen Pyre cohort; legality snapshot "+date+", not current Arena ownership."+(wildfire?" Arena IDs, printings and card metadata are unavailable in this provenance contract.":"")));
         }
         var samples=new List<TurnSample>();var openings=new List<OpeningHand>();
         if(raw.ValueKind==JsonValueKind.Object){

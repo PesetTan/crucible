@@ -8,6 +8,17 @@ var root=Path.Combine(Path.GetTempPath(),"crucible-pyre-"+Guid.NewGuid().ToStrin
 var paths=new AppPaths(root);var store=new Store(paths);
 var parsed=PyreRecord.Parse(payload,defs,controllers);var receipt=await store.ImportPyreResult(payload,defs,controllers);var duplicate=await store.ImportPyreResult(payload,defs,controllers);
 Check(!receipt.Duplicate&&duplicate.Duplicate,"Exact duplicate must acknowledge without inserting another game.");
+using(var source=JsonDocument.Parse(payload)){
+    var manifest=source.RootElement.GetProperty("manifest");
+    var wildfire=manifest.GetProperty("cohort").GetString()=="wildfire-white-auras-four-color-reanimator-2026-10-16";
+    if(wildfire){
+        Check(parsed.Decks.Select(d=>d.Name).SequenceEqual(new[]{"Mono-White Auras","4-Color Reanimator"}),"New cohort must not inherit old White/Boros labels.");
+        Check(parsed.Decks.All(d=>d.Snapshot=="2026-10-16"&&d.Variant=="snapshot-2026-10-16"&&d.SourceUrl?.StartsWith("https://mtga.untapped.gg/")==true),"Dated Wildfire provenance was lost.");
+        Check(parsed.Decks.All(d=>d.Cards.Sum(c=>c.Quantity)==60&&d.Cards.All(c=>c.ArenaId==0&&c.Type==""&&c.Text=="")),"Unknown Arena/card metadata must not be invented.");
+    }else Check(parsed.Decks.Select(d=>d.Name).SequenceEqual(new[]{"White Aggro","Boros Aggro"}),"Original cohort labels changed.");
+}
+try{PyreRecord.Parse(payload,defs+" ",controllers);throw new Exception("Unregistered metric bytes accepted.");}catch(InvalidDataException error){Check(error.Message.Contains("Metric definition mismatch"),"Definition rejection must retain the exact hash check.");}
+
 Check(store.Slots(receipt.RunId).Count==1,"Duplicate inflates denominator.");
 Check(store.PyreRawRecord(receipt.RecordId)==payload,"Original raw values not retained byte for byte.");
 Check(store.Run(receipt.RunId).Config.ProviderId=="pyre","Provider provenance missing.");
@@ -35,6 +46,14 @@ static string Variant(string original,uint attempt,bool failed,bool otherExperim
     n["record_id"]=Hash("spark-record-v1",new JsonArray(n["attempt_id"]!.GetValue<string>(),"spark-result-v1"));
     if(failed){n["valid_for_analysis"]=false;n["had_pilot_failure"]=true;n["controller_metrics"]!["had_pilot_failure"]=true;var counters=n["controller_metrics"]!["players"]![0]!["selected"]!;counters["illegal_play_attempts"]=1;counters["submitted"]=counters["submitted"]!.GetValue<ulong>()+1;}
     n["payload_hash"]="";n["payload_hash"]=Hash("spark-result-payload-v1",n);return n.ToJsonString();
+}
+if(parsed.Decks[0].Name=="Mono-White Auras"){
+    var changed=JsonNode.Parse(payload)!.AsObject();var changedManifest=changed["manifest"]!.AsObject();
+    changedManifest["deck_provenance"]!["decks"]![0]!["name"]="Forged deck label";
+    changedManifest["experiment_id"]="";changedManifest["experiment_id"]=Hash("spark-experiment-v1",changedManifest);changed["experiment_id"]=changedManifest["experiment_id"]!.GetValue<string>();
+    changed["attempt_id"]=Hash("spark-attempt-v1",new JsonArray(changed["experiment_id"]!.GetValue<string>(),changed["slot_id"]!.GetValue<string>(),changed["attempt"]!.GetValue<uint>()));
+    changed["record_id"]=Hash("spark-record-v1",new JsonArray(changed["attempt_id"]!.GetValue<string>(),"spark-result-v1"));changed["payload_hash"]="";changed["payload_hash"]=Hash("spark-result-payload-v1",changed);
+    try{PyreRecord.Parse(changed.ToJsonString(),defs,controllers);throw new Exception("Rehashed provenance forgery accepted.");}catch(InvalidDataException error){Check(error.Message.Contains("Unsupported Wildfire source"),"Wildfire provenance pin was not checked.");}
 }
 var otherPayload=Variant(payload,0,false,true);var otherRecord=await store.ImportPyreResult(otherPayload,defs,controllers);
 Check(otherRecord.RunId!=receipt.RunId&&otherRecord.SlotId!=receipt.SlotId,"Paired slots from different experiments collided in the global Store.");
