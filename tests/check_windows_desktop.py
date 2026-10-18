@@ -82,6 +82,19 @@ class Native:
         else:self.ui.EnumWindows(cb,0)
         return result
     def main(self):return next((h for h in self.windows() if self.text(h)=='Crucible · Windows Beta'),None)
+    def dialog(self,process_id,title):
+        for h in self.windows():
+            owner=wt.DWORD();self.ui.GetWindowThreadProcessId(h,ctypes.byref(owner))
+            if owner.value!=process_id or self.text(h)!=title:continue
+            # TaskDialog body text can be a DirectUI accessibility node rather
+            # than a child HWND. Read the visible dialog's UI Automation tree.
+            powershell=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result=subprocess.run([str(powershell),'-NoProfile','-NonInteractive','-File',str(Path(__file__).with_name('read_windows_dialog.ps1')),'-WindowHandle',str(h)],capture_output=True,timeout=15)
+            assert result.returncode==0,result.stderr.decode(errors='replace')
+            value=json.loads(result.stdout.decode('utf-8-sig'))
+            assert value['processId']==process_id,value
+            return '\n'.join(value['names'])
+        return ''
     def close(self):
         h=wait(self.main);self.ui.PostMessageW(h,0x10,0,0)
     def choose(self,text):
@@ -219,12 +232,19 @@ def main():
                     owner_health=http(owner_origin+'/api/v1/health')[1]
                     blocker=subprocess.Popen([str(executable)],env=dict(env,MTG_PROJECT_ROOT=str(lock_root)))
                     def ownership_dialog():
-                        return any('already owns this data directory' in native.text(control) for top in native.windows() if native.text(top)=='Crucible Could Not Start' for control in native.windows(top))
+                        if blocker.poll() is not None:raise StartupFailure(f'Ownership-conflict app exited: {blocker.returncode}')
+                        text=native.dialog(blocker.pid,'Crucible Could Not Start')
+                        if text:(output/'ownership-dialog.txt').write_text(text,encoding='utf-8')
+                        return 'already owns this data directory' in text
                     wait(ownership_dialog,30)
                     after=http(owner_origin+'/api/v1/health')[1]
                     assert existing.poll() is None and after['ready'] and after['instanceId']==owner_health['instanceId']
                     assert not (lock_root/'data/engine-bundles/active.json').exists()
                     record('database ownership conflict is visible; external native host remains untouched')
+                except Exception:
+                    capture_desktop('ownership-failure.png')
+                    (output/'ownership-windows.json').write_text(json.dumps({'windows':[{'title':native.text(h),'children':[native.text(c) for c in native.windows(h)]} for h in native.windows() if native.text(h).startswith('Crucible')]},indent=2)+'\n')
+                    raise
                 finally:
                     if blocker:stop_fixture(blocker)
                     if existing.poll() is None:
