@@ -133,7 +133,9 @@ class PersistenceChecks(unittest.TestCase):
         (self.root/"tests").mkdir()
         for name in m.FIXTURES:shutil.copyfile(ROOT/"tests"/(name+".java"),self.root/"tests"/(name+".java"))
         folder=self.root/"data/reports/subtype-pilots-v001";folder.mkdir(parents=True)
-        shutil.copyfile(ROOT/"data/reports/subtype-pilots-v001/registry.json",folder/"registry.json")
+        # Persistence tests freeze opaque fixture inputs; they must not depend on
+        # a private evaluation report in the developer's ignored data directory.
+        (folder/"registry.json").write_text(json.dumps([dict(profile="fixture-policy-v1",cards=["Example"])]))
         bundle=self.root/"data/engine-bundles/staging";(bundle/"bridge").mkdir(parents=True)
         (bundle/"bridge/ForgeBridge.class").write_bytes(b"fixture class identity")
         (bundle/"forge.jar").write_bytes(b"fixture engine identity")
