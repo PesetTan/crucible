@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,7 +56,7 @@ class BoundaryChecks(unittest.TestCase):
             database = root / 'fixture.sqlite'
             starter = root / 'resources/starter'
             database.write_bytes(gzip.decompress((starter / 'catalog.sqlite.gz').read_bytes()))
-            with sqlite3.connect(database) as db:
+            with closing(sqlite3.connect(database)) as db, db:
                 db.execute('CREATE TABLE source_decks(name TEXT)')
                 db.execute("INSERT INTO source_decks VALUES('private fixture')")
             raw = database.read_bytes()
