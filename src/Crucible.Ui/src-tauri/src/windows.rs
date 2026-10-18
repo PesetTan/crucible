@@ -157,9 +157,11 @@ fn startup_failure(log: &Path, offset: u64, fallback: &str) -> String {
     let detail = (|| -> std::io::Result<String> {
         let mut file = fs::File::open(log)?;
         file.seek(SeekFrom::Start(offset.max(file.metadata()?.len().saturating_sub(65536))))?;
-        let mut text = String::new();
-        file.read_to_string(&mut text)?;
-        Ok(text)
+        // Redirected Windows stderr can contain OEM-encoded paths. Preserve the
+        // ASCII error message even when a path or a bounded seek is not UTF-8.
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
     })().unwrap_or_default();
     if detail.contains("already owns this data directory") {
         "Another Crucible host or engine setup already owns this data directory. Close that host before retrying. No external process was stopped.".into()
@@ -701,6 +703,8 @@ mod tests {
         use std::io::Write;
         fs::OpenOptions::new().append(true).open(&path).unwrap().write_all(prior.as_bytes()).unwrap();
         assert!(startup_failure(&path,prior.len() as u64,"generic failure").contains("No external process was stopped"));
+        fs::write(&path,b"already owns this data directory: C:\\Windows \xea\\service.lock\n").unwrap();
+        assert!(startup_failure(&path,0,"generic failure").contains("No external process was stopped"));
         fs::remove_file(path).unwrap();
     }
     #[test]

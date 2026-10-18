@@ -317,7 +317,7 @@ def main():
             assert sentinel.read_text()=='user data' and hashlib.sha256(catalog.read_bytes()).hexdigest()==catalog_hash
             assert replay_hashes=={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
             record('uninstall retains catalog, simulation database, and replay bytes')
-            (output/'summary.json').write_text(json.dumps({'checks':checks,'target':'Windows x64 hosted runner','humanWindows11Validation':False},indent=2)+'\n')
+            (output/'summary.json').write_text(json.dumps({'passed':True,'checks':checks,'target':'Windows x64 hosted runner','humanWindows11Validation':False},indent=2)+'\n')
             succeeded=True
             print('Windows installed desktop checks passed: '+', '.join(checks))
         finally:
