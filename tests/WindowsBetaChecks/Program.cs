@@ -30,6 +30,10 @@ try{
     // Legacy checkout paths and roots remain independent of installed mode.
     var checkout=Path.Combine(sandbox,"checkout");Directory.CreateDirectory(Path.Combine(checkout,"docs","specs"));
     Check(new AppPaths(checkout).Source==Path.GetFullPath(Path.Combine(checkout,"..","..","standard_cards.sqlite")),"Legacy catalog path changed.");
+    var javaFixture=Path.Combine(sandbox,"java.exe");File.WriteAllText(javaFixture,"same executable");
+    var javaLaunch=AppPaths.JavaExecutable(javaFixture);
+    Check(File.ReadAllText(javaLaunch)=="same executable","Java launch alias must refer to the exact existing executable.");
+    Check(OperatingSystem.IsWindows()?javaLaunch.All(char.IsAscii):javaLaunch==javaFixture,"Java runtime paths must be ASCII on Windows and unchanged on other platforms.");
     using var ownership=HostControl.AcquireDataOwnership(paths);
     try{using var duplicate=HostControl.AcquireDataOwnership(paths);throw new Exception("Duplicate lock accepted.");}catch(InvalidOperationException error){Check(error.Message.Contains("already owns this data directory"),"Ownership conflict must explain the existing owner.");}
     var compressed=Path.Combine(sandbox,"engine Ω.tar.bz2");
@@ -47,7 +51,7 @@ try{
     Check(File.ReadAllBytes(destination).SequenceEqual(bytes)&&!File.Exists(destination+".partial"),"Interrupted download damaged existing archive.");
     try{await EngineSetup.DownloadVerified(valid,"https://fixture.invalid/archive",destination,new string('0',64));throw new Exception("Bad checksum accepted.");}catch(InvalidDataException){}
     Check(!File.Exists(destination+".partial"),"Bad checksum left partial archive.");
-    Console.WriteLine("Windows beta shared checks passed: starter privacy/integrity, Unicode paths, legacy defaults, upgrade retention, exclusive lock, Unicode bzip2/tar extraction, interrupted downloads, checksums.");
+    Console.WriteLine("Windows beta shared checks passed: starter privacy/integrity, Unicode paths, Java launch alias, legacy defaults, upgrade retention, exclusive lock, Unicode bzip2/tar extraction, interrupted downloads, checksums.");
 }finally{SqliteConnection.ClearAllPools();Directory.Delete(sandbox,true);}
 
 sealed class FixtureHandler(byte[] bytes,bool interrupted=false):HttpMessageHandler{

@@ -38,6 +38,8 @@ The default program folder is `%LOCALAPPDATA%\Crucible Desktop`. Mutable data li
 
 The installer includes the WebView2 bootstrapper. Initial engine setup needs an internet connection; it downloads and verifies Forge and Java, compiles the packaged bridge, and publishes an immutable bundle. Forge bzip2 decompression is bundled in the native host; .NET extracts its tar entries and the Java ZIP archive. Users do not install .NET, Node, Rust, Python, or Java separately. Once setup completes, normal simulation use is local.
 
+Java 17's Windows launcher requires an ASCII-compatible executable path. For Unicode data-folder names, Crucible launches the same downloaded Java executable through its NTFS short name. If that volume has no usable short names, setup reports the limitation: choose an ASCII-only writable folder with `MTG_PROJECT_ROOT`. Crucible does not relocate saved data or change system-wide filesystem settings.
+
 Closing the window exits Crucible. During active or queued work, choose **Keep Open** or **Stop And Exit**. Completed games and replays remain saved; interrupted work requires explicit resume after reopening. The launcher stops only hosts it started. Externally managed compatible hosts remain externally managed. There is no Windows tray app or launch-at-login setting in this beta.
 
 Setup displays progress and offers retry or access to logs when it fails. A changed packaged bridge is activated before starting an absent backend on the next launch, retaining older engine bundles. Catalog updates never replace an existing user catalog. Close Crucible before upgrading. Uninstall removes the application and retains the separate user-data folder.
