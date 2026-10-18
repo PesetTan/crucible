@@ -30,10 +30,16 @@ try{
     // Legacy checkout paths and roots remain independent of installed mode.
     var checkout=Path.Combine(sandbox,"checkout");Directory.CreateDirectory(Path.Combine(checkout,"docs","specs"));
     Check(new AppPaths(checkout).Source==Path.GetFullPath(Path.Combine(checkout,"..","..","standard_cards.sqlite")),"Legacy catalog path changed.");
-    var javaFixture=Path.Combine(sandbox,"java.exe");File.WriteAllText(javaFixture,"same executable");
+    var javaFixture=Path.Combine(sandbox,"jdk Ω","bin","java.exe");Directory.CreateDirectory(Path.GetDirectoryName(javaFixture)!);File.WriteAllText(javaFixture,"same executable");
     var javaLaunch=AppPaths.JavaExecutable(javaFixture);
     Check(File.ReadAllText(javaLaunch)=="same executable","Java launch alias must refer to the exact existing executable.");
     Check(OperatingSystem.IsWindows()?javaLaunch.All(char.IsAscii):javaLaunch==javaFixture,"Java runtime paths must be ASCII on Windows and unchanged on other platforms.");
+    if(OperatingSystem.IsWindows()){
+        Check(AppPaths.JavaExecutable(javaFixture)==javaLaunch,"Java aliases must be reused within a host.");
+        var privateContainer=new DirectoryInfo(Path.GetDirectoryName(Path.GetDirectoryName(javaLaunch)!)!);
+        var access=privateContainer.Parent!.GetAccessControl();
+        Check(access.AreAccessRulesProtected,"Java alias container must not inherit shared temporary-folder permissions.");
+    }
     using var ownership=HostControl.AcquireDataOwnership(paths);
     try{using var duplicate=HostControl.AcquireDataOwnership(paths);throw new Exception("Duplicate lock accepted.");}catch(InvalidOperationException error){Check(error.Message.Contains("already owns this data directory"),"Ownership conflict must explain the existing owner.");}
     var compressed=Path.Combine(sandbox,"engine Ω.tar.bz2");
