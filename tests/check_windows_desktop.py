@@ -99,13 +99,19 @@ class Native:
         h=wait(self.main);self.ui.PostMessageW(h,0x10,0,0)
     def choose(self,text):
         main=wait(self.main);pid=wt.DWORD();self.ui.GetWindowThreadProcessId(main,ctypes.byref(pid))
+        last_close=time.monotonic()
         def find():
+            nonlocal last_close
             for top in self.windows():
                 owner=wt.DWORD();self.ui.GetWindowThreadProcessId(top,ctypes.byref(owner))
-                if owner.value!=pid.value:continue
+                if owner.value!=pid.value or self.text(top)!='Stop Simulations And Exit?':continue
                 for child in self.windows(top):
                     if self.text(child).replace('&','')==text:
                         self.ui.PostMessageW(child,0xF5,0,0);return True
+            # A preceding Keep Open click is asynchronous. The launcher's close
+            # guard can still be resetting when another WM_CLOSE is posted.
+            if time.monotonic()-last_close>=1:
+                self.ui.PostMessageW(main,0x10,0,0);last_close=time.monotonic()
             return False
         wait(find,15)
 
