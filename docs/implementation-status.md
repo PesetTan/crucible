@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated October 15, 2026 (America/Los_Angeles). This describes the current source and recorded local evidence. The [specifications](specs/README.md) also contain validation targets that have not passed; their presence is not a release certification.
+Updated October 17, 2026 (America/Los_Angeles). This describes the current source and recorded local evidence. The [specifications](specs/README.md) also contain validation targets that have not passed; their presence is not a release certification.
 
 ## Runtime and operation
 
@@ -24,6 +24,8 @@ Immutable Forge bundles pin engine resources and compiled pilots per session. Wo
 | Forge Pilots | Assignment preview, exact and historical profiles, frozen fixture scorecards/source, per-session measured rates, and protocol inspection |
 | Editorial notes | Attributed, append-only saved commentary, seeded from an authored catalog; no automatic per-game model calls |
 | Optimizer | CLI/API experiments with frozen inputs, bounded search/revisions, distinct holdout evidence, profiling, and explicit immutable opt-in promotion |
+
+A clean installation starts with an empty deck library. Optional private packs and Workshop imports supply decks; card metadata remains a separate catalog. See [private data](private-data.md). Existing local manifests and sessions are preserved.
 
 The source catalog and saved library can grow independently of the run limit. Ten selected decks produce 45 pairings and 9,000 games at the 200-game default. Older five/six/twelve-deck planning examples do not set the current selection cap.
 

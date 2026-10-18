@@ -7,6 +7,8 @@ public sealed class AppPaths
     public bool Installed { get; }
     public string Data => Path.Combine(Root, "data");
     public string Source => Path.GetFullPath(Environment.GetEnvironmentVariable("MTG_CARD_DB") ?? (Installed ? Path.Combine(Root,"catalog.sqlite") : Path.Combine(Root, "..", "..", "standard_cards.sqlite")));
+    // Explicit opt-in only. The path may live outside the checkout and is never packaged.
+    public string? DeckPack => Environment.GetEnvironmentVariable("CRUCIBLE_DECK_PACK") is {} pack ? Path.GetFullPath(pack) : null;
     public string Vendor => Path.Combine(Root, "vendor");
     public string Jar => Path.Combine(Vendor, "forge-gui-desktop-2.0.15-jar-with-dependencies.jar");
     public string Bridge => Path.Combine(Root, "engine", "build");

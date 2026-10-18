@@ -1,6 +1,7 @@
 using DeckTester;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text;
 static void Check(bool value,string message){if(!value)throw new Exception(message);}
 if(args.Length<3)throw new ArgumentException("result.json metric-definitions.json controller-metrics.json [second-starter.json]");
 var payload=File.ReadAllText(args[0]);var defs=File.ReadAllText(args[1]);var controllers=File.ReadAllText(args[2]);
@@ -11,6 +12,24 @@ Check(!receipt.Duplicate&&duplicate.Duplicate,"Exact duplicate must acknowledge 
 Check(store.Slots(receipt.RunId).Count==1,"Duplicate inflates denominator.");
 Check(store.PyreRawRecord(receipt.RecordId)==payload,"Original raw values not retained byte for byte.");
 Check(store.Run(receipt.RunId).Config.ProviderId=="pyre","Provider provenance missing.");
+Check(store.Run(receipt.RunId).Config.Provider!.MetricDefinitionHash==parsed.MetricHash,"Accepted metric definition identity lost.");
+static void RejectDefinition(string result,string metrics,string controller,string message){
+    try{PyreRecord.Parse(result,metrics,controller);throw new Exception(message);}
+    catch(InvalidDataException error){Check(error.Message.Contains("Metric definition mismatch"),"Expected the definition identity guard: "+error.Message);}
+}
+RejectDefinition(payload,defs+" ",controllers,"Modified metric bytes accepted.");
+RejectDefinition(payload,defs,controllers+" ","Modified controller bytes accepted.");
+// Rehash all enclosing identities as well as the definitions. Consistency alone
+// must not admit unreviewed semantics under an existing version label.
+var unknownDefinitions=defs+" ";
+var unknownHash=PyreRecord.SemanticHash("k27-standard-metrics-v1",Encoding.UTF8.GetBytes(unknownDefinitions));
+var unknown=JsonNode.Parse(WithManifestChange(payload,m=>m["metric_definition_hash"]=unknownHash))!;
+unknown["raw_metrics"]!["definition_set_hash"]=new JsonArray(Convert.FromHexString(unknownHash).Select(b=>JsonValue.Create(b) as JsonNode).ToArray());
+unknown["payload_hash"]="";unknown["payload_hash"]=Hash("spark-result-payload-v1",unknown);
+RejectDefinition(unknown.ToJsonString(),unknownDefinitions,controllers,"Self-consistent unreviewed definition accepted.");
+var unknownCohort=WithManifestChange(payload,m=>m["cohort"]="unreviewed-cohort");
+try{PyreRecord.Parse(unknownCohort,defs,controllers);throw new Exception("Unknown cohort inherited White/Boros metadata.");}
+catch(InvalidDataException error){Check(error.Message.Contains("Unsupported frozen Pyre cohort"),"Expected explicit unsupported cohort guard.");}
 var summary=Metrics.Summarize(store.Run(receipt.RunId),store.Slots(receipt.RunId));Check(summary.Valid==1&&summary.Matchups[0].Valid==1,"Existing summary mapping failed.");
 Check(summary.Mulligans.All(m=>m.RecordedPlayers==1),"Opening metrics not available to existing analyzer.");
 var slot=store.Slots(receipt.RunId).Single();Check(slot.Result!.Samples.Any(s=>s.Artifacts>=0&&s.HandLands is not null&&s.HandSpells is not null),"Chart field mapping incomplete.");
@@ -28,6 +47,13 @@ if(args.Length>3){var other=await store.ImportPyreResult(File.ReadAllText(args[3
 // Contract fixtures use rehashed synthetic identities to exercise delivery behavior;
 // the baseline records above are actual native Pyre output.
 static string Hash(string domain,JsonNode node){using var d=JsonDocument.Parse(node.ToJsonString());return PyreRecord.SemanticHash(domain,PyreRecord.Canonical(d.RootElement));}
+static string WithManifestChange(string original,Action<JsonObject> change){
+    var n=JsonNode.Parse(original)!.AsObject();var m=n["manifest"]!.AsObject();change(m);
+    m["experiment_id"]="";m["experiment_id"]=Hash("spark-experiment-v1",m);n["experiment_id"]=m["experiment_id"]!.GetValue<string>();
+    n["attempt_id"]=Hash("spark-attempt-v1",new JsonArray(n["experiment_id"]!.GetValue<string>(),n["slot_id"]!.GetValue<string>(),n["attempt"]!.GetValue<uint>()));
+    n["record_id"]=Hash("spark-record-v1",new JsonArray(n["attempt_id"]!.GetValue<string>(),"spark-result-v1"));
+    n["payload_hash"]="";n["payload_hash"]=Hash("spark-result-payload-v1",n);return n.ToJsonString();
+}
 static string Variant(string original,uint attempt,bool failed,bool otherExperiment=false){
     var n=JsonNode.Parse(original)!.AsObject();var m=n["manifest"]!.AsObject();
     if(otherExperiment){m["artifact_sha256"]=new string('a',64);m["experiment_id"]="";m["experiment_id"]=Hash("spark-experiment-v1",m);n["experiment_id"]=m["experiment_id"]!.GetValue<string>();}

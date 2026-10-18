@@ -21,6 +21,7 @@ namespace DeckTester;
 [JsonSerializable(typeof(CreatedRun))]
 [JsonSerializable(typeof(DeckChoice))]
 [JsonSerializable(typeof(DeckManifest))]
+[JsonSerializable(typeof(DeckPack))]
 [JsonSerializable(typeof(DeckMulliganSummary))]
 [JsonSerializable(typeof(DeckSnapshot))]
 [JsonSerializable(typeof(DeletedRun))]

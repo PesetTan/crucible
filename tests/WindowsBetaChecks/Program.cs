@@ -17,6 +17,8 @@ try{
     Check(File.Exists(paths.Source)&&paths.Source.StartsWith(root),"Catalog must live in writable state.");
     using(var db=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=paths.Source}.ToString())){
         db.Open();using var cmd=db.CreateCommand();cmd.CommandText="SELECT count(*) FROM decks";Check(Convert.ToInt32(cmd.ExecuteScalar())==0,"No personal decks in starter.");
+        cmd.CommandText="SELECT count(*) FROM sqlite_schema WHERE type='table' AND name NOT IN ('cards','card_catalog','decks','deck_cards')";Check(Convert.ToInt32(cmd.ExecuteScalar())==0,"Starter must contain only card metadata and empty compatibility tables.");
+        cmd.CommandText="SELECT count(*) FROM deck_cards";Check(Convert.ToInt32(cmd.ExecuteScalar())==0,"No source deck-card rows in starter.");
         cmd.CommandText="CREATE TABLE user_sentinel(value TEXT); INSERT INTO user_sentinel VALUES('keep')";cmd.ExecuteNonQuery();
     }
     var before=ForgeEngine.FileHash(paths.Source);

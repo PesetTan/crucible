@@ -12,9 +12,9 @@ Crucible's original source code, documentation, and original assets are free sof
 
 Third-party software and third-party content retain their own licenses and rights. This grant does not cover Wizards of the Coast card text, card data, artwork, trademarks, or third-party deck/source material, including such content in the starter catalog, examples, and screenshots. Crucible is unofficial and is not approved, endorsed, or sponsored by Wizards of the Coast. Portions of the materials used are property of Wizards of the Coast. © Wizards of the Coast LLC.
 
-See [third-party notices](THIRD_PARTY.md) and the [license review and distribution limits](docs/license-review.md). The software license does not establish permission to redistribute the bundled card catalog or public deck data.
+See [third-party notices](THIRD_PARTY.md) and the [license review and distribution limits](docs/license-review.md). The software license does not establish permission to redistribute the bundled card catalog. Optional source packs are private inputs; see [private data and public source export](docs/private-data.md).
 
-The owner has requested private repository visibility while Magic-content redistribution rights and Untapped-derived data restrictions are reviewed. The [privacy decision](docs/license-review.md#private-repository-decision) records the reasoning and verified visibility status. This is a precautionary decision; no infringement finding has been established.
+Source deck lists, published statistics, tier snapshots, and source-derived screenshots are supplied separately from this source tree. Existing Git history and old release artifacts may still contain earlier bundles. Use the [public source export](docs/private-data.md#public-source-export) for a new publication without that history. Card-content and binary-distribution limits remain recorded in the [license review](docs/license-review.md).
 
 ## Supported operating systems
 
@@ -29,27 +29,19 @@ The owner has requested private repository visibility while Magic-content redist
 
 Phones, tablets, and other computers can use the self-hosted browser UI over a private network; simulations run on the host computer. There is no native iOS/iPadOS or Android app. Crucible Monitor is macOS-only. Desktop packaging produces a local macOS build and has a Windows beta installer workflow; Linux desktop releases are not provided. See [build prerequisites and platform limits](docs/svelte-desktop.md#build-and-run).
 
-## Screenshots
+## Interface
 
 **Native desktop** — The Svelte/Tauri interface keeps Crucible's graphite, gold, and silver theme and measured pilot evidence.
 
-![Crucible's native desktop window with the compact Forge Pilots layout, two-tone logo, and recorded win rates](docs/screenshots/svelte-pilots.png)
-
 **Matchup explorer** — Compare head-to-head results across a ten-deck field, including per-deck averages. The rates shown describe local Forge pilot games.
-
-![Crucible in dark theme showing a completed ten-deck field, head-to-head win rates, and per-deck averages](docs/screenshots/matchup-explorer.jpg)
 
 **Deck Workshop** — Edit card quantities, preview assigned pilots, and configure a matchup rerun.
 
-![Crucible Deck Workshop in dark theme with a grouped Reanimator decklist, assigned pilots, and matchup rerun controls](docs/screenshots/deck-workshop.jpg)
-
 **Forge Pilots** — Browse pilot profiles and inspect Reanimator's opt-in Engagement Protocols, driven by public opponent observations.
-
-![Crucible Forge Pilots in dark theme showing Reanimator v012 and its five Engagement Protocols](docs/screenshots/engagement-protocols.jpg)
 
 ## Start
 
-You need the .NET 10 SDK selected by [`global.json`](global.json), Node 22.12+ for building the interface, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS, Linux, and the Windows desktop beta and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A development clone alone does not include your local card catalog or account data. Windows desktop packages include a separate clean starter catalog; see [Windows setup and validation](docs/windows-beta.md).
+You need the .NET 10 SDK selected by [`global.json`](global.json), Node 22.12+ for building the interface, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS, Linux, and the Windows desktop beta and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A development clone alone does not include your local card catalog or account data. Windows desktop packages include a separate card-only starter catalog and an empty deck library; see [Windows setup and validation](docs/windows-beta.md).
 
 The owner can obtain a private catalog snapshot from [static-data](docs/static-data.md), including Codex Cloud setup through `MTG_CARD_DB`. The existing local catalog stays at its current path.
 

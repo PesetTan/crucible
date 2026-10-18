@@ -71,20 +71,6 @@ public sealed partial class Store
         cmd.Parameters.Clear();
         cmd.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS decks_friendly_name ON decks(friendly_name)";
         cmd.ExecuteNonQuery();
-        var tierPath = Path.Combine(paths.Assets, "docs", "archetype-tiers-2026-10-11.json");
-        if (File.Exists(tierPath)) {
-            using var snapshot = System.Text.Json.JsonDocument.Parse(File.ReadAllText(tierPath));
-            var root = snapshot.RootElement;
-            foreach (var rating in root.GetProperty("ratings").EnumerateObject()) {
-                cmd.Parameters.Clear();
-                cmd.CommandText = "UPDATE decks SET archetype_tier=$tier,tier_source_url=$url,tier_snapshot_date=$date WHERE json_extract(payload,'$.sourceType')='public' AND json_extract(payload,'$.name')=$name AND (tier_snapshot_date IS NULL OR tier_snapshot_date <= $date)";
-                cmd.Parameters.AddWithValue("$tier", rating.Value.GetString()!);
-                cmd.Parameters.AddWithValue("$url", root.GetProperty("sourceUrl").GetString()!);
-                cmd.Parameters.AddWithValue("$date", root.GetProperty("snapshotDate").GetString()!);
-                cmd.Parameters.AddWithValue("$name", rating.Name);
-                cmd.ExecuteNonQuery();
-            }
-        }
     }
     private SqliteConnection Open() { var db = new SqliteConnection(connection); db.Open(); using var cmd = db.CreateCommand(); cmd.CommandText = "PRAGMA foreign_keys=ON;"; cmd.ExecuteNonQuery(); return db; }
     private List<T> Read<T>(string table, string? runId = null)
@@ -371,11 +357,14 @@ public sealed partial class Store
     {
         await writer.WaitAsync(); try {
             using var db = Open(); using var cmd = db.CreateCommand();
-            cmd.CommandText = "INSERT INTO decks(id,payload,friendly_name,strategy,subtype) VALUES($id,$payload,$name,$strategy,$subtype) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload";
+            cmd.CommandText = "INSERT INTO decks(id,payload,friendly_name,strategy,subtype,archetype_tier,tier_source_url,tier_snapshot_date) VALUES($id,$payload,$name,$strategy,$subtype,$tier,$tierUrl,$tierDate) ON CONFLICT(id) DO NOTHING";
             cmd.Parameters.AddWithValue("$id", deck.Id); cmd.Parameters.AddWithValue("$payload", Json.Encode(deck));
             cmd.Parameters.AddWithValue("$name", NewFriendlyName(db));
             cmd.Parameters.AddWithValue("$strategy", (object?)DeckStrategy.ForName(deck.Name) ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$subtype", (object?)DeckStrategy.SubtypeForName(deck.Name) ?? DBNull.Value); cmd.ExecuteNonQuery();
+            cmd.Parameters.AddWithValue("$subtype", (object?)DeckStrategy.SubtypeForName(deck.Name) ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tier", (object?)deck.ArchetypeTier ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tierUrl", (object?)deck.TierSourceUrl ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tierDate", (object?)deck.TierSnapshotDate ?? DBNull.Value); cmd.ExecuteNonQuery();
         } finally { writer.Release(); }
     }
     public async Task SaveCustomDeck(DeckManifest deck)

@@ -6,13 +6,9 @@ Status: Design contract with outstanding validation gates. Parent: [specificatio
 
 ## Source handling
 
-Open `standard_cards.sqlite` with SQLite URI `mode=ro`. Inspect the actual schema before importing. Use `untapped_snapshots`, `untapped_decks`, and `untapped_deck_cards` for public candidates; use `decks` and `deck_cards` for the personal deck. Resolve display names through `card_catalog` and rules profiles through `cards`. Compare raw quantities against joined quantities so missing card joins cannot silently reduce a deck.
+The card catalog is read independently from optional source decks. Use SQLite read-only access to `cards` and `card_catalog`; do not require provider-specific tables. A clean installation has no source decks. Users can save Arena text through Workshop or explicitly configure a versioned private deck pack with `CRUCIBLE_DECK_PACK`.
 
-`reanimator.sqlite` is public archive data, not personal data. Backup databases are excluded as defaults. Importing a deck does not establish card ownership or permission to alter a saved Arena deck.
-
-Use the five exact lists in the [plan](../plans/2026-10-11-crucible-plan.md). Verify their fingerprints against the frozen October 11 snapshot; do not silently select newer or different highest-volume lists if the source database changes. A mismatch requires an explicit new deck version with its own provenance. Public Reanimator is specifically the selected 4-color list. A merged Sultai/4-color label cannot be used as a deck identity.
-
-The personal deck ID is `75c0271e-f980-47b3-bb01-a6b305f2430b`. Preserve its captured snapshot and flag the changed source-log evidence. Before using it as the current personal candidate, check current account evidence through the appropriate refresh workflow after implementation is authorized; never mutate the source database merely as a side effect of import.
+Packs contain complete immutable manifests, not provider queries or executable adapters. Validate the full batch's counts and SHA-256 identities before saving any deck. No pack means an empty import; an explicitly configured missing, unsupported, or invalid pack fails visibly. Never infer ownership or mutate the source catalog during import. Source-specific adapters, selection rules, account IDs, snapshots, and curated fingerprints remain outside this repository. See [private data](../private-data.md).
 
 ## Immutable manifest
 
@@ -38,7 +34,7 @@ Once referenced by a run, a manifest cannot change. Refreshing an import creates
 
 ## Validation and legality
 
-Check 60 cards for these exact MVP lists; positive quantities; valid identities; combined main/sideboard copy limits with card-text/basic-land exceptions; sideboard maximum; and complete joins. Standard generally permits decks larger than 60, but that does not change these fixed candidate lists.
+Check 60 main-deck cards for imported source packs; positive quantities; valid identities; combined main/sideboard copy limits with card-text/basic-land exceptions; sideboard maximum; and complete joins. Standard generally permits decks larger than 60, but that does not change these fixed candidate lists.
 
 Local legality flags are evidence, not the final legality oracle. Validate primary printings, linked faces, bans, and the pinned Standard period against official references. A prepared spell such as Reanimate does not legalize unrelated standalone printings. Retain reference URLs, capture/effective dates, and exact evidence used. Unknown or stale evidence produces a visible preflight issue rather than an automatic claim of current legality.
 
@@ -53,12 +49,12 @@ Coverage is per engine/adapter/rules revision and exact manifest. Inventory each
 
 Name matching alone is insufficient. Resolve punctuation variants and Universes Within mappings only with explicit identity evidence. Never map a missing card to a generic creature or a superficially similar card.
 
-Deck eligibility requires valid composition, accepted legality evidence, complete required coverage, and passed rules/pilot gates. Missing or known-incorrect support blocks the affected deck. The five-public-deck release cannot be declared complete by quietly dropping one of its decks. The personal deck may remain separately blocked without misrepresenting the public matrix's scope.
+Deck eligibility requires valid composition, accepted legality evidence, complete required coverage, and passed rules/pilot gates. Missing or known-incorrect support blocks the affected deck. A private experiment must define its own cohort and report blocked decks explicitly.
 
 ## Acceptance examples
 
-- All five public manifests reproduce the plan's quantities, counts, and fingerprints.
-- The personal snapshot imports as 60 main-deck cards, 21 lands, and 13 sideboard cards.
+- No configured pack imports no decks and requires no source-specific database tables.
+- An optional pack reproduces its own declared quantities, provenance, metadata, and fingerprints.
 - An unresolved card join rejects import with the exact missing identity.
 - A prepared face cannot be imported as an independently legal standalone spell without separate evidence.
 - Changing the source snapshot creates a new version and leaves completed runs unchanged.

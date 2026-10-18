@@ -22,3 +22,9 @@ node_modules/
 /src/Crucible.Ui/public/fonts/
 
 /src/Crucible.Ui/src/legacy.css
+
+# Optional local data; never ship source packs or account catalogs.
+/private/
+*.sqlite
+*.sqlite-*
+*.db

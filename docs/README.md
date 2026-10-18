@@ -1,10 +1,11 @@
 # Crucible documentation
 
-For setup and screenshots, start with the [project README](../README.md). [Implementation status](implementation-status.md) describes the current app, recorded evidence, and remaining validation limits.
+For setup, start with the [project README](../README.md). [Implementation status](implementation-status.md) describes the current app, recorded evidence, and remaining validation limits.
 
 | Guide | Use it for |
 | --- | --- |
-| [License review and privacy decision](license-review.md) | GPL scope, dependency obligations, Magic card text, Untapped data restrictions, and the decision to make the repository private |
+| [License review](license-review.md) | GPL scope, dependency obligations, and remaining card-content distribution limits |
+| [Private data and public source export](private-data.md) | Optional private packs, source separation, and publishing without historical data |
 | [Crucible Monitor](crucible-monitor.md) | macOS installation, login startup, health, ownership, recovery, builds, and rollback |
 | [Host separation](host-separation.md) | Service/UI launch commands, ports, focused API reads, outages, and immutable engine activation |
 | [Native backend](native-backend.md) | Native AOT publishing, runtime compatibility, and the recorded JIT comparison |

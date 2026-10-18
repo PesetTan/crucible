@@ -27,6 +27,12 @@ attempt/record identities, frozen deck provenance, raw/projected metric agreemen
 controller identity and failure flags, outcomes, turn axes and capture status.
 Raw JSON and exact definitions remain retained. Checksums establish consistency,
 not publisher authentication. Only the supported v1 metric semantics are mapped.
+The accepted gameplay definition identities are `93f9a3ec…976e204` (original)
+and `98868ac7…236895` (copied-source damage attribution clarification). The
+mapped snapshot/opening fields are unchanged; richer damage counters stay in
+raw evidence. Unknown definition bytes are rejected even with the same semantic
+version. This MVP 1 importer accepts only `survey-white-boros-2026-10-15`;
+Wildfire and coordinated Convergence ingestion require their separate consumers.
 
 Each experiment is a provider-pinned run. Paired slots share seed identity across
 experiments; their global Store IDs also include experiment identity. Attempts

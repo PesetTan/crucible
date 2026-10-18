@@ -111,7 +111,7 @@ def main():
         state.mkdir();ui_port,backend_port=port(),port();assert ui_port!=backend_port
         ui=f'http://127.0.0.1:{ui_port}';backend=f'http://127.0.0.1:{backend_port}'
         env=dict(os.environ,MTG_PROJECT_ROOT=str(state),CRUCIBLE_UI_PORT=str(ui_port),CRUCIBLE_BACKEND_PORT=str(backend_port))
-        for key in ['MTG_ASSET_ROOT','MTG_CARD_DB','MTG_JAVA','MTG_PYTHON','MTG_HOST_MODE','CRUCIBLE_HOST_OWNER','CRUCIBLE_LAUNCH_EVENT','DOTNET_ROOT','DOTNET_ROOT_X64']:
+        for key in ['CRUCIBLE_DECK_PACK','CRUCIBLE_NOTES_FILE','MTG_ASSET_ROOT','MTG_CARD_DB','MTG_JAVA','MTG_PYTHON','MTG_HOST_MODE','CRUCIBLE_HOST_OWNER','CRUCIBLE_LAUNCH_EVENT','DOTNET_ROOT','DOTNET_ROOT_X64']:
             env.pop(key,None)
         # Runtime proof: only Windows system utilities are on the app's PATH.
         env['PATH']=str(Path(os.environ['SystemRoot'])/'System32')+os.pathsep+os.environ['SystemRoot']
@@ -249,18 +249,21 @@ def main():
             assert [health(origin)['instanceId'] for origin in [ui,backend]]==before
             record('duplicate desktop launch adopts no new hosts')
             library=api('/api/v1/library-state')
-            assert library['decks'] and all(d['manifest']['sourceType']=='public' for d in library['decks'])
+            assert library['decks']==[], 'Clean installation must have an empty library'
+            for basic in ['Forest','Mountain']:
+                resolved=api('/api/v1/decks/resolve','POST',{'text':'Deck\n60 '+basic})
+                assert not resolved['issues'],resolved
+                cards=[{'arenaId':c['arenaId'],'quantity':c['quantity']} for c in resolved['cards']]
+                api('/api/v1/decks/custom','POST',{'name':'Synthetic '+basic,'cards':cards})
+            library=api('/api/v1/library-state')
             decks=[d['manifest'] for d in library['decks'] if d['coverage']['status']!='blocked']
-            # Prefer two fast interactive public lists, with a deterministic fallback.
-            decks.sort(key=lambda d:(0 if 'Mono-Red Burn' in d['name'] else 1 if 'Rakdos Aggro' in d['name'] else 2,d['id']))
-            decks=list({d['name']:d for d in reversed(decks)}.values())[::-1]
-            assert len(decks)>=2
+            assert len(decks)==2
             web.go('/workshop?deck='+decks[0]['id'])
             wait(lambda:'60 Main-Deck Cards' in web.text())
             web.value('Deck name','Windows Beta Saved Deck Ω')
             wait(lambda:web.button('Save to Library'))
             wait(lambda:'Saved to Deck Library.' in web.text());web.shot(output/'workshop.png')
-            record('Workshop edits and saves a real public deck')
+            record('Workshop edits and saves a synthetic deck')
             web.go('/')
             wait(lambda:'Choose the Decks' in web.text())
             assert web.js("document.querySelectorAll('details').forEach(d=>d.open=true);return true")

@@ -80,6 +80,6 @@ public final class SubtypePilotChecks {
             }
             check(count==60,"60 cards in exact manifest "+r.get("id"));
         }
-        System.out.println("Subtype integration checks passed: "+cases+" positions across 30 profiles; all 66 manifests loaded.");System.exit(0);
+        System.out.println("Subtype integration checks passed: "+cases+" positions across "+registry.size()+" profiles; "+inventory.size()+" supplied manifests loaded.");System.exit(0);
     }
 }

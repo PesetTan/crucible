@@ -94,9 +94,14 @@ public sealed record PyreRecord(string RecordId,string PayloadHash,string Attemp
         var experiment=Str(e,"experiment_id");var manifestNode=JsonNode.Parse(m.GetRawText())!.AsObject();manifestNode["experiment_id"]="";
         using(var md=JsonDocument.Parse(manifestNode.ToJsonString()))if(SemanticHash("spark-experiment-v1",Canonical(md.RootElement))!=experiment||Str(m,"experiment_id")!=experiment)throw new InvalidDataException("Experiment identity mismatch.");
         var metricHash=Str(m,"metric_definition_hash");var controllerHash=Str(m,"controller_definition_hash");
-        if(metricHash!="93f9a3ecca5db0f4eead790ba17bcb405e312caa75d9d2d59decec004976e204"||controllerHash!="06b078a6a5e8898e46c74a29712d39f8320d8dba3b8eeba47871709817f057d1"||SemanticHash("k27-standard-metrics-v1",Encoding.UTF8.GetBytes(metricDefinitions))!=metricHash||SemanticHash("spark-controller-attempts-v1",Encoding.UTF8.GetBytes(controllerDefinitions))!=controllerHash)throw new InvalidDataException("Metric definition mismatch.");
+        // Both reviewed definitions use the same fields mapped below. The newer
+        // definition clarifies copied-source damage attribution; those richer
+        // counters remain in the exact raw record, not Forge snapshot counters.
+        // Keep explicit byte identities: a matching semantic label alone is insufficient.
+        if(metricHash is not ("93f9a3ecca5db0f4eead790ba17bcb405e312caa75d9d2d59decec004976e204" or "98868ac750ab63a1b4113b3ff02374679d05a024ccc699aa639dfea5fd236895")||controllerHash!="06b078a6a5e8898e46c74a29712d39f8320d8dba3b8eeba47871709817f057d1"||SemanticHash("k27-standard-metrics-v1",Encoding.UTF8.GetBytes(metricDefinitions))!=metricHash||SemanticHash("spark-controller-attempts-v1",Encoding.UTF8.GetBytes(controllerDefinitions))!=controllerHash)throw new InvalidDataException("Metric definition mismatch.");
         using(var defs=JsonDocument.Parse(metricDefinitions))if(Str(defs.RootElement,"semanticVersion")!="k27-standard-metrics-v1")throw new InvalidDataException("Unsupported gameplay metric semantics.");
         using(var defs=JsonDocument.Parse(controllerDefinitions))if(Str(defs.RootElement,"semanticVersion")!="spark-controller-attempts-v1")throw new InvalidDataException("Unsupported controller metric semantics.");
+        if(Str(m,"cohort")!="survey-white-boros-2026-10-15")throw new InvalidDataException("Unsupported frozen Pyre cohort in this MVP 1 importer.");
         var draft=Prop(m,"draft");var selections=Prop(m,"pilots").EnumerateArray().ToArray();var lists=Prop(draft,"decks").EnumerateArray().ToArray();if(lists.Length!=2||selections.Length!=2)throw new InvalidDataException("Two players required.");
         var starter=Int(e,"starter");if(starter is not (0 or 1))throw new InvalidDataException("Invalid starter.");
         var replicate=Prop(e,"replicate").GetUInt64();var attempt=Prop(e,"attempt").GetUInt32();

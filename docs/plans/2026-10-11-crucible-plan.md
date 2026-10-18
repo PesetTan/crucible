@@ -14,42 +14,9 @@ Build a local app around an existing Magic rules engine to simulate hundreds of 
 
 Repeated games must make zero language-model calls. Simulation, aggregation, and replay storage happen locally. Chat receives compact summaries rather than full game logs. Opening-hand testing or unopposed goldfishing does not satisfy this objective.
 
-## Verified starting decks
+## Source decks
 
-Select the highest-volume exact public list for each requested archetype from the October 11, 2026 snapshot in `standard_cards.sqlite`: Standard Bo1, Bronze–Platinum, September 29–October 11. Keep personal saved decks distinct from public lists.
-
-| Candidate | Main deck | Lands | Approximate public sample | List fingerprint |
-|---|---:|---:|---:|---|
-| Mono-White Auras | 60 | 20 | 29,000 games | `51a64417db83` |
-| 4-Color Reanimator | 60 | 24 | 4,700 games | `7db2253158dc` |
-| Mono-White Lifegain | 60 | 20 | 5,800 games | `d79a6ecc8a28` |
-| Abzan Lifegain | 60 | 21 | 1,500 games | `0b27dc67ddd3` |
-| Jeskai Artifacts | 60 | 22 | 3,500 games | `85eb10944e9e` |
-| Personal saved Reanimator | 60 | 21 | Personal deck | Saved ID `75c0271e-f980-47b3-bb01-a6b305f2430b` |
-
-Fingerprints are the first 12 hexadecimal characters of SHA-256 over sorted main-deck `(card_name, quantity)` pairs, serialized as UTF-8 JSON with `ensure_ascii=False` and separators `(',', ':')`.
-
-All five public lists have complete card-data joins and locally legal flags. Before running, independently check current sets, bans, faces, and copy limits against the [official Standard reference](https://magic.wizards.com/en/formats/standard) and [banned list](https://magic.wizards.com/en/banned-restricted-list).
-
-Use the exact **4-Color Reanimator** variant for actual games. The previous statistical comparison combined Sultai and 4-color Reanimator, but that combined family is not a playable list. The chosen variant contains Superior Spider-Man, Bringer of the Last Gift, Ardyn, Terror of the Peaks, Balemurk, Deceit, and Wistfulness.
-
-The personal saved Reanimator remains a separate candidate. Its captured list includes three Seasoned Cryomancer and a 13-card sideboard. The account log changed after import, so check its latest contents before treating the captured deck as current. `reanimator.sqlite` is a public archetype archive, not personal deck data.
-
-### Exact main-deck quantities
-
-These lists were read from the local database during planning. Preserve source IDs and the full immutable manifest during import.
-
-**Mono-White Auras:** 4 Ethereal Armor; 4 Feather of Flight; 4 Optimistic Scavenger; 4 Origin of Spider-Man; 20 Plains; 4 Seam Rip; 4 Shardmage's Rescue; 4 Sheltered by Ghosts; 4 Skyward Spider; 4 Spellbook Vendor; 4 Veteran Survivor.
-
-**4-Color Reanimator:** 2 Ardyn, the Usurper; 4 Awaken the Honored Dead; 4 Breeding Pool; 4 Bringer of the Last Gift; 2 Cavern of Souls; 2 Deceit; 4 Formidable Speaker; 4 Gloomlake Verge; 2 Kiora, the Rising Tide; 4 Overgrown Tomb; 4 Overlord of the Balemurk; 4 Superior Spider-Man; 2 Terror of the Peaks; 4 Town Greeter; 2 Wastewood Verge; 4 Watery Grave; 4 Willowrush Verge; 4 Wistfulness.
-
-**Mono-White Lifegain:** 4 Ajani's Pridemate; 2 Banishing Light; 4 Essence Channeler; 2 Exemplar of Light; 4 Haliya, Guided by Light; 4 Healer's Hawk; 4 Hinterland Sanctifier; 4 Leonin Vanguard; 4 Leyline of Hope; 20 Plains; 4 Ruin-Lurker Bat; 4 Sheltered by Ghosts.
-
-**Abzan Lifegain:** 4 Amalia Benavides Aguirre; 4 Aunt May; 4 Case of the Uneaten Feast; 4 Essence Channeler; 4 Godless Shrine; 4 Haliya, Guided by Light; 4 Hinterland Sanctifier; 1 Leonardo, Cutting Edge; 4 Lunar Convocation; 4 Multiversal Passage; 1 Overgrown Tomb; 4 Plains; 4 Starscape Cleric; 4 Starting Town; 4 Temple Garden; 2 Tigra, Feline Fury; 4 Virulent Emissary.
-
-**Jeskai Artifacts:** 1 Adagia, Windswept Bastion; 4 Authority of the Consuls; 4 Clay-Fired Bricks; 4 Cryogen Relic; 4 Floodfarm Verge; 1 Fomori Vault; 5 Island; 2 Meticulous Archive; 4 Perilous Snare; 4 Pinnacle Starcage; 5 Plains; 4 Repurposing Bay; 4 Simulacrum Synthesizer; 4 Spring-Loaded Sawblades; 4 Starting Town; 1 The Enigma Jewel; 1 The Fire Crystal; 4 United Battlefront.
-
-**Personal saved Reanimator:** 2 Ardyn, the Usurper; 3 Breeding Pool; 4 Bringer of the Last Gift; 3 Broodspinner; 3 Cavern of Souls; 3 Deceit; 2 Forest; 3 Formidable Speaker; 2 Gloomlake Verge; 3 Ouroboroid; 3 Overgrown Tomb; 4 Overlord of the Balemurk; 3 Rapid Rescue; 3 Rubblebelt Maverick; 3 Seasoned Cryomancer; 4 Superior Spider-Man; 4 Wastewood Verge; 2 Watery Grave; 2 Willowrush Verge; 4 Wistfulness.
+The original source-specific deck selection, samples, fingerprints, and exact quantities are retained privately. They are not part of the application contract. Use immutable user-supplied manifests and declare the cohort for each experiment; a clean source tree contains no default cohort.
 
 ## Engine assessment
 
