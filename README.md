@@ -25,7 +25,7 @@ Source deck lists, published statistics, tier snapshots, and source-derived scre
 | **macOS 13+ · Apple Silicon (arm64)** | Supported. Native desktop, self-hosted browser UI, simulation backend, and Crucible Monitor have been built and tested locally. |
 | **macOS 13+ · Intel (x64)** | Source-build target exists, but has not been validated on an Intel Mac. |
 | **Linux · x64 / arm64** | Experimental self-hosting. Automatic Forge/Java setup supports Linux; the current UI/backend combination and desktop packaging have not been validated there. |
-| **Windows 11 · x64** | Desktop beta implementation and Windows CI pipeline are available. The first Windows installer/installed-app validation run is pending; human Windows 11 verification remains required. See [Windows beta](docs/windows-beta.md). |
+| **Windows 11 · x64** | Desktop beta with a versioned installer pipeline gated on automated installed-app checks. Human Windows 11 verification remains required. See [Windows beta](docs/windows-beta.md) and [release pipeline](docs/releases.md). |
 
 Phones, tablets, and other computers can use the self-hosted browser UI over a private network; simulations run on the host computer. There is no native iOS/iPadOS or Android app. Crucible Monitor is macOS-only. Desktop packaging produces a local macOS build and has a Windows beta installer workflow; Linux desktop releases are not provided. See [build prerequisites and platform limits](docs/svelte-desktop.md#build-and-run).
 

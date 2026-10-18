@@ -343,16 +343,21 @@ def main():
             wait(lambda:app_processes[-1].poll() is not None,45);web.dispose();web=None
             record('Keep Open / Stop And Exit, graceful owned-host shutdown, saved results, explicit resume')
             catalog=state/'catalog.sqlite';catalog_hash=hashlib.sha256(catalog.read_bytes()).hexdigest()
+            def database_files():
+                return {x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data').glob('simulator.sqlite*') if x.is_file()}
+            database_hashes=database_files();assert 'simulator.sqlite' in database_hashes
             replay_hashes={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
             assert replay_hashes
             sentinel=state/'keep-on-uninstall.txt';sentinel.write_text('user data')
             executable=install_app()
             assert hashlib.sha256(catalog.read_bytes()).hexdigest()==catalog_hash and sentinel.read_text()=='user data'
+            assert database_files()==database_hashes,'Upgrade must retain simulator database and WAL bytes'
             record('silent same-version upgrade preserves user catalog and state')
             uninstallers=list(install.glob('*uninstall*.exe'));assert len(uninstallers)==1,uninstallers
             assert subprocess.run([str(uninstallers[0]),'/S'],timeout=120).returncode==0
             wait(lambda:not executable.exists())
             assert sentinel.read_text()=='user data' and hashlib.sha256(catalog.read_bytes()).hexdigest()==catalog_hash
+            assert database_files()==database_hashes,'Uninstall must retain simulator database and WAL bytes'
             assert replay_hashes=={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
             record('uninstall retains catalog, simulation database, and replay bytes')
             (output/'summary.json').write_text(json.dumps({'passed':True,'checks':checks,'target':'Windows x64 hosted runner','humanWindows11Validation':False},indent=2)+'\n')
