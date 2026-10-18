@@ -130,5 +130,24 @@ class VersionChecks(unittest.TestCase):
                 release.version('v' + current, root)
 
 
+class IdentityChecks(unittest.TestCase):
+    def test_annotated_tag_object_resolves_to_the_tested_commit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            release.run('git','init','--quiet',cwd=root)
+            git=['git','-c','user.name=Release Fixture','-c','user.email=fixture@example.invalid']
+            release.run(*git,'commit','--quiet','--allow-empty','-m','fixture',cwd=root)
+            commit=release.run('git','rev-parse','HEAD',cwd=root)
+            release.run(*git,'tag','-a','v0.1.0','-m','fixture',cwd=root)
+            tag_object=release.run('git','rev-parse','refs/tags/v0.1.0',cwd=root)
+            self.assertNotEqual(tag_object,commit)
+            for event in [commit,tag_object]:
+                with patch.dict(os.environ,{'GITHUB_SHA':event}):
+                    self.assertEqual(release.identity(root),commit)
+            release.run(*git,'commit','--quiet','--allow-empty','-m','different commit',cwd=root)
+            with patch.dict(os.environ,{'GITHUB_SHA':tag_object}), self.assertRaisesRegex(ValueError,'workflow commit'):
+                release.identity(root)
+
+
 if __name__ == '__main__':
     unittest.main()

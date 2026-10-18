@@ -53,9 +53,10 @@ def version(tag, root=ROOT):
     return expected
 
 
-def identity():
-    commit = run('git', 'rev-parse', 'HEAD')
-    if os.environ.get('GITHUB_SHA', commit) != commit:
+def identity(root=ROOT):
+    commit = run('git', 'rev-parse', 'HEAD', cwd=root)
+    event = os.environ.get('GITHUB_SHA', commit)
+    if run('git', 'rev-parse', '--verify', f'{event}^{{commit}}', cwd=root) != commit:
         raise ValueError('Checkout differs from the workflow commit.')
     return commit
 

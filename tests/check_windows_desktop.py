@@ -124,7 +124,8 @@ def main():
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=True)
     installer=args.installer.resolve();checks=[];driver=None;web=None
     with installer.open('rb') as file:installer_hash=hashlib.file_digest(file,'sha256').hexdigest()
-    (output/'installer-provenance.json').write_text(json.dumps({'installer':installer.name,'sha256':installer_hash,'installerRunId':os.environ.get('CRUCIBLE_INSTALLER_RUN_ID',os.environ.get('GITHUB_RUN_ID')),'testCommit':os.environ.get('GITHUB_SHA')},indent=2)+'\n')
+    test_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=Path(__file__).resolve().parents[1],text=True).strip() if os.environ.get('GITHUB_SHA') else None
+    (output/'installer-provenance.json').write_text(json.dumps({'installer':installer.name,'sha256':installer_hash,'installerRunId':os.environ.get('CRUCIBLE_INSTALLER_RUN_ID',os.environ.get('GITHUB_RUN_ID')),'testCommit':test_commit},indent=2)+'\n')
     def record(message):
         checks.append(message);print('Passed: '+message,flush=True)
     with tempfile.TemporaryDirectory(prefix='Crucible Windows Ω ',ignore_cleanup_errors=True) as temporary:
