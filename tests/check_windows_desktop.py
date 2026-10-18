@@ -279,7 +279,7 @@ def main():
             decks=[d['manifest'] for d in library['decks'] if d['coverage']['status']!='blocked']
             assert len(decks)==2
             web.go('/workshop?deck='+decks[0]['id'])
-            wait(lambda:'60 Main-Deck Cards' in web.text())
+            wait(lambda:web.js("const list=document.querySelector('[aria-label=\"Deck List · Main deck\"]');return list&&[...list.querySelectorAll('input[type=number]')].reduce((n,e)=>n+Number(e.value),0)===60"))
             web.value('Deck name','Windows Beta Saved Deck Ω')
             wait(lambda:web.button('Save to Library'))
             wait(lambda:'Saved to Deck Library.' in web.text());web.shot(output/'workshop.png')
@@ -287,13 +287,23 @@ def main():
             web.go('/')
             wait(lambda:'Choose the Decks' in web.text())
             assert web.js("document.querySelectorAll('details').forEach(d=>d.open=true);return true")
+            labels={d['id']:d['label'] for d in api('/api/v1/presentation/catalog')['decks']}
+            assert len({labels[d['id']] for d in decks[:2]})==2
             for deck in decks[:2]:
-                assert web.js("const c=[...document.querySelectorAll('.deck-card')].find(c=>c.textContent.includes(arguments[0]));const e=c?.querySelector('input[type=checkbox]');if(!e||e.disabled)return false;if(!e.checked)e.click();return true",deck['name'])
+                wait(lambda:web.js("const e=[...document.querySelectorAll('button.deck-card-choice')].find(e=>e.getAttribute('aria-label')===arguments[0]);if(!e||e.disabled)return false;if(e.getAttribute('aria-pressed')!=='true')e.click();return true",labels[deck['id']]))
             web.value('Games per Matchup',2);web.value('Root Seed','9223372036854775807');web.value('Time limit per game',180)
             wait(lambda:web.button('Run Exploratory Games'))
             run_id=wait(lambda:web.js("return /^\\/runs\\/[a-f0-9]+$/.test(location.pathname)?location.pathname.split('/')[2]:null"))
-            wait(lambda:api('/api/v1/runs/'+run_id)['status']=='completed',900)
+            def completed():
+                run=api('/api/v1/runs/'+run_id)
+                if run['status'] in ('failed','cancelled'):
+                    detail={'run':run,'games':api('/api/v1/runs/'+run_id+'/games')}
+                    (output/'failed-run.json').write_text(json.dumps(detail,indent=2)+'\n')
+                    raise StartupFailure('Real-game validation failed: '+json.dumps(detail))
+                return run['status']=='completed'
+            wait(completed,900)
             finished=api('/api/v1/runs/'+run_id)
+            assert set(finished['config']['deckIds'])=={d['id'] for d in decks[:2]},finished['config']
             assert finished['config']['rootSeed']==9223372036854775807,finished['config']
             games=api('/api/v1/runs/'+run_id+'/games')
             assert len(games)==2 and all(g['status']=='completed' and g['result'] for g in games),games
