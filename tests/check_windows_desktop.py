@@ -309,7 +309,7 @@ def main():
             assert len(games)==2 and all(g['status']=='completed' and g['result'] for g in games),games
             web.shot(output/'results.png')
             web.go(f'/runs/{run_id}/games/{games[0]["id"]}')
-            wait(lambda:'Replay' in web.text());web.shot(output/'replay.png')
+            wait(lambda:web.js("return document.title.startsWith('Game Replay')&&[...document.querySelectorAll('.replay-toolbar button')].some(b=>b.textContent.trim()==='Next Event'&&!b.disabled)"));web.shot(output/'replay.png')
             assert api(f'/api/v1/runs/{run_id}/games/{games[0]["id"]}/replay?audit=true')
             record('two complete real Forge games, exact signed 64-bit seed, results, and replay')
             # Create enough new work to test native confirmation and explicit recovery.
