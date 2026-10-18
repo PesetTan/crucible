@@ -11,6 +11,7 @@ For setup, start with the [project README](../README.md). [Implementation status
 | [Native backend](native-backend.md) | Native AOT publishing, runtime compatibility, and the recorded JIT comparison |
 | [Svelte UI and desktop](svelte-desktop.md) | Native UI hosting, Tauri packaging, self-hosting, resource evidence, and rollback |
 | [Development and checks](development.md) | Project layout, verification entry points, and working with local data |
+| [Release pipeline](releases.md) | Version tags, required CI gates, matching source, checksums, dry runs, and draft Windows beta releases |
 | [Engagement Protocols](engagement-protocols.md) | Reanimator's opt-in public-observation rules and inspection |
 | [Subtype pilots](subtype-pilots.md) | Current opt-in assignments, bounded development behavior, and historical comparison |
 | [Aggro pilot](aggro-pilot.md) / [Control pilot](control-pilot.md) | Reviewed hooks and their diagnostic evidence |

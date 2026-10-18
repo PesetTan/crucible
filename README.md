@@ -29,6 +29,8 @@ Source deck lists, published statistics, tier snapshots, and source-derived scre
 
 Phones, tablets, and other computers can use the self-hosted browser UI over a private network; simulations run on the host computer. There is no native iOS/iPadOS or Android app. Crucible Monitor is macOS-only. Desktop packaging produces a local macOS build and has a Windows beta installer workflow; Linux desktop releases are not provided. See [build prerequisites and platform limits](docs/svelte-desktop.md#build-and-run).
 
+The [release pipeline](docs/releases.md) validates version tags, runs the complete automated checks, and assembles Windows beta installers with matching source, checksums, and provenance. Successful tag builds create a draft prerelease for distribution review.
+
 ## Interface
 
 **Native desktop** — The Svelte/Tauri interface keeps Crucible's graphite, gold, and silver theme and measured pilot evidence.

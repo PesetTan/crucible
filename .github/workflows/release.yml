@@ -1,0 +1,96 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/release.py'
+      - 'tests/test_release.py'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag matching the committed package versions (for example v0.1.0)
+        required: true
+        type: string
+      dry_run:
+        description: Build and validate release assets without creating a GitHub release
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate version and release commit
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+          RELEASE_DRY_RUN: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+          RELEASE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python scripts/release.py check
+  tests:
+    needs: prepare
+    uses: ./.github/workflows/tests.yml
+  windows:
+    needs: prepare
+    uses: ./.github/workflows/windows-beta.yml
+  package:
+    needs: [prepare, tests, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: crucible-windows-x64-beta
+          path: dist/windows
+      - name: Verify installer evidence and package matching source
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: python scripts/release.py bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crucible-release
+          path: dist/release/
+          retention-days: 30
+          if-no-files-found: error
+  draft:
+    needs: [prepare, package]
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: crucible-release
+          path: dist/release
+      - name: Create or refresh the draft Windows beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: python3 scripts/release.py publish
