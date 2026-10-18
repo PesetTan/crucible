@@ -70,6 +70,7 @@ class Native:
         self.callback=ctypes.WINFUNCTYPE(wt.BOOL,wt.HWND,wt.LPARAM)
         self.ui.GetWindowTextW.argtypes=[wt.HWND,wt.LPWSTR,ctypes.c_int]
         self.ui.GetWindowThreadProcessId.argtypes=[wt.HWND,ctypes.POINTER(wt.DWORD)]
+        self.ui.IsWindow.argtypes=[wt.HWND]
         self.ui.PostMessageW.argtypes=[wt.HWND,wt.UINT,wt.WPARAM,wt.LPARAM]
         self.ui.EnumWindows.argtypes=[self.callback,wt.LPARAM]
         self.ui.EnumChildWindows.argtypes=[wt.HWND,self.callback,wt.LPARAM]
@@ -107,13 +108,14 @@ class Native:
                 if owner.value!=pid.value or self.text(top)!='Stop Simulations And Exit?':continue
                 for child in self.windows(top):
                     if self.text(child).replace('&','')==text:
-                        self.ui.PostMessageW(child,0xF5,0,0);return True
+                        self.ui.PostMessageW(child,0xF5,0,0);return top
             # A preceding Keep Open click is asynchronous. The launcher's close
             # guard can still be resetting when another WM_CLOSE is posted.
             if time.monotonic()-last_close>=1:
                 self.ui.PostMessageW(main,0x10,0,0);last_close=time.monotonic()
             return False
-        wait(find,15)
+        dialog=wait(find,15)
+        wait(lambda:not self.ui.IsWindow(dialog),15)
 
 
 def main():
