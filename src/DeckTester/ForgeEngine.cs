@@ -53,7 +53,7 @@ public sealed class ForgeEngine(AppPaths paths, Store store, CardAttributes? att
     {
         return scriptCache.GetOrAdd(bundle.Id, _ => LoadScripts(bundle));
     }
-    public bool HasBundle(RunConfig config) => bundles.Find(config.EngineHash, config.AdapterHash) is not null && File.Exists(paths.Java);
+    public bool HasBundle(RunConfig config) => config.ProviderId=="forge" && bundles.Find(config.EngineHash, config.AdapterHash) is not null && File.Exists(paths.Java);
     public Capabilities Capabilities()
     {
         var blockers=new List<string>(); if(!File.Exists(paths.Java))blockers.Add("Project-local Java runtime is missing. See engine setup instructions.");
@@ -123,6 +123,7 @@ public sealed class ForgeEngine(AppPaths paths, Store store, CardAttributes? att
     }
     public async Task<(GameResult Result,string Replay,string Hash)> Play(SimulationRun run, GameSlot slot, int attemptNumber, CancellationToken cancellation)
     {
+        if(run.Config.ProviderId!="forge")throw new InvalidOperationException("A Pyre run cannot execute through the Forge adapter.");
         var bundle=bundles.Find(run.Config.EngineHash,run.Config.AdapterHash)??throw new InvalidOperationException("Pinned Forge bundle is unavailable.");
         var attemptId=$"{slot.Id}-{attemptNumber}";
         var outputPath=Path.Combine(paths.Replays,attemptId+".jsonl.gz");var temp=outputPath+".partial";

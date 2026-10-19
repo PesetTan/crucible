@@ -17,6 +17,8 @@ try{
     Check(File.Exists(paths.Source)&&paths.Source.StartsWith(root),"Catalog must live in writable state.");
     using(var db=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=paths.Source}.ToString())){
         db.Open();using var cmd=db.CreateCommand();cmd.CommandText="SELECT count(*) FROM decks";Check(Convert.ToInt32(cmd.ExecuteScalar())==0,"No personal decks in starter.");
+        cmd.CommandText="SELECT count(*) FROM sqlite_schema WHERE type='table' AND name NOT IN ('cards','card_catalog','decks','deck_cards')";Check(Convert.ToInt32(cmd.ExecuteScalar())==0,"Starter must contain only card metadata and empty compatibility tables.");
+        cmd.CommandText="SELECT count(*) FROM deck_cards";Check(Convert.ToInt32(cmd.ExecuteScalar())==0,"No source deck-card rows in starter.");
         cmd.CommandText="CREATE TABLE user_sentinel(value TEXT); INSERT INTO user_sentinel VALUES('keep')";cmd.ExecuteNonQuery();
     }
     var before=ForgeEngine.FileHash(paths.Source);
@@ -28,6 +30,16 @@ try{
     // Legacy checkout paths and roots remain independent of installed mode.
     var checkout=Path.Combine(sandbox,"checkout");Directory.CreateDirectory(Path.Combine(checkout,"docs","specs"));
     Check(new AppPaths(checkout).Source==Path.GetFullPath(Path.Combine(checkout,"..","..","standard_cards.sqlite")),"Legacy catalog path changed.");
+    var javaFixture=Path.Combine(sandbox,"jdk Ω","bin","java.exe");Directory.CreateDirectory(Path.GetDirectoryName(javaFixture)!);File.WriteAllText(javaFixture,"same executable");
+    var javaLaunch=AppPaths.JavaExecutable(javaFixture);
+    Check(File.ReadAllText(javaLaunch)=="same executable","Java launch alias must refer to the exact existing executable.");
+    Check(OperatingSystem.IsWindows()?javaLaunch.All(char.IsAscii):javaLaunch==javaFixture,"Java runtime paths must be ASCII on Windows and unchanged on other platforms.");
+    if(OperatingSystem.IsWindows()){
+        Check(AppPaths.JavaExecutable(javaFixture)==javaLaunch,"Java aliases must be reused within a host.");
+        var privateContainer=new DirectoryInfo(Path.GetDirectoryName(Path.GetDirectoryName(javaLaunch)!)!);
+        var access=privateContainer.Parent!.GetAccessControl();
+        Check(access.AreAccessRulesProtected,"Java alias container must not inherit shared temporary-folder permissions.");
+    }
     using var ownership=HostControl.AcquireDataOwnership(paths);
     try{using var duplicate=HostControl.AcquireDataOwnership(paths);throw new Exception("Duplicate lock accepted.");}catch(InvalidOperationException error){Check(error.Message.Contains("already owns this data directory"),"Ownership conflict must explain the existing owner.");}
     var compressed=Path.Combine(sandbox,"engine Ω.tar.bz2");
@@ -45,7 +57,7 @@ try{
     Check(File.ReadAllBytes(destination).SequenceEqual(bytes)&&!File.Exists(destination+".partial"),"Interrupted download damaged existing archive.");
     try{await EngineSetup.DownloadVerified(valid,"https://fixture.invalid/archive",destination,new string('0',64));throw new Exception("Bad checksum accepted.");}catch(InvalidDataException){}
     Check(!File.Exists(destination+".partial"),"Bad checksum left partial archive.");
-    Console.WriteLine("Windows beta shared checks passed: starter privacy/integrity, Unicode paths, legacy defaults, upgrade retention, exclusive lock, Unicode bzip2/tar extraction, interrupted downloads, checksums.");
+    Console.WriteLine("Windows beta shared checks passed: starter privacy/integrity, Unicode paths, Java launch alias, legacy defaults, upgrade retention, exclusive lock, Unicode bzip2/tar extraction, interrupted downloads, checksums.");
 }finally{SqliteConnection.ClearAllPools();Directory.Delete(sandbox,true);}
 
 sealed class FixtureHandler(byte[] bytes,bool interrupted=false):HttpMessageHandler{

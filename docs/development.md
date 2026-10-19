@@ -45,7 +45,7 @@ dotnet run --project tests/WorkshopChecks/WorkshopChecks.csproj
 | Optimizer | [Pilot Optimizer](pilot-optimizer.md) and its focused Python/smoke checks |
 | Native supervisor and published hosts | [Monitor checks](crucible-monitor.md#checks) |
 
-UI changes should also be checked in the running app at desktop and 390px: verify the serving build, controls, wrapping, overflow, and loading/empty/error states. A source diff or successful build does not establish rendered behavior. Existing screenshots in `docs/screenshots/` show the matchup explorer, Workshop, and protocol inspection; refresh them when those surfaces change.
+UI changes should also be checked in the running app at desktop and 390px: verify the serving build, controls, wrapping, overflow, and loading/empty/error states. A source diff or successful build does not establish rendered behavior. Source-derived screenshots are kept privately. New public screenshots must use deliberately constructed fixtures with no private source data.
 
 ## Windows beta
 
@@ -56,3 +56,18 @@ See [Windows desktop beta](windows-beta.md) for PowerShell builds, starter-catal
 `data/`, `vendor/`, compiled bridge classes, published apps, and local UI state are ignored. A fresh clone needs its own catalog and engine setup. Imports read the source catalog; explicit card-attribute tools can append annotations to it. Run fixtures against disposable databases rather than editing historical payloads. Preserve exact deck IDs, seeds, profiles, attributes, protocol/optimizer identities, and engine/adapter hashes in comparisons.
 
 Publish Forge changes with `scripts/activate-forge.sh`; never overwrite an already published bundle. Old sessions need their pinned bundles to resume. Inspect active work and lock ownership before changing service processes, and retain rollback artifacts. The experimental evidence guides describe required frozen inputs and artifact locations; tests and sample counts do not establish Arena performance.
+
+## GitHub Actions
+
+`Crucible Tests` runs on every push and pull request: all self-contained .NET suites
+(serially through `python scripts/check-dotnet.py`), Python and public-source guards,
+frontend tests/type checks/build, fresh Forge/Java fixtures, and macOS Monitor checks.
+`python scripts/check-forge.py` uses public policy annotations and a synthetic
+60-basic-land manifest, never a saved library or evaluation. It checks current
+v10/v11 value choices; legacy v9 decisions remain pinned for saved runs.
+
+The separate Windows Desktop Beta workflow retains native ownership, installer,
+real-game, upgrade and uninstall checks. Pyre import fixtures are private native
+records: the private Pyre repository checks out an exact Crucible revision and runs
+`PyreImportChecks` against original and current definitions. Public Crucible jobs
+need no private repository token, catalog, source pack, or evaluation artifact.

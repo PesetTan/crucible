@@ -21,8 +21,10 @@ public sealed class AiNoteStore
             CREATE INDEX IF NOT EXISTS ai_notes_subject ON ai_notes(scope,subject,written_at DESC);
             """;
         cmd.ExecuteNonQuery();
-        var seed=Path.Combine(paths.Assets,"src","DeckTester","notes","editorial.json");
-        if(!File.Exists(seed))seed=Path.Combine(AppContext.BaseDirectory,"notes","editorial.json");
+        var configured=Environment.GetEnvironmentVariable("CRUCIBLE_NOTES_FILE");
+        var seed=configured??Path.Combine(paths.Assets,"src","DeckTester","notes","editorial.json");
+        if(configured is null&&!File.Exists(seed))seed=Path.Combine(AppContext.BaseDirectory,"notes","editorial.json");
+        if(configured is not null&&!File.Exists(seed))throw new FileNotFoundException("Configured notes file is missing.",seed);
         if(File.Exists(seed)){
             var notes=Json.Decode<List<AiNoteRecord>>(File.ReadAllText(seed));
             // Validate the whole batch before publishing any of it.

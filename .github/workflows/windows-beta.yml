@@ -2,12 +2,13 @@ name: Windows Desktop Beta
 on:
   pull_request:
   push:
-    branches: [main, master, 'codex/windows-*']
+    branches: [main, master, 'codex/windows-*', 'codex/pyre-mvp1-ingestion']
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: windows-beta-${{ github.ref }}
+  group: windows-beta-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   windows:
@@ -38,9 +39,13 @@ jobs:
           cache-on-failure: true
       - name: Check starter, frontend, backend, and worker lifecycle
         run: |
+          python scripts/export-public-source.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tests/check_public_source.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/export-starter-catalog.py --verify
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          foreach ($project in @('SchedulingChecks','HostSeparationChecks','PilotIdentityChecks','WorkshopChecks','DeleteSessionChecks','WindowsBetaChecks','ForgeWorkerChecks')) {
+          foreach ($project in @('SchedulingChecks','HostSeparationChecks','PilotIdentityChecks','WorkshopChecks','DeckPackChecks','DeleteSessionChecks','WindowsBetaChecks','ForgeWorkerChecks')) {
             $extra = @()
             if ($project -eq 'WindowsBetaChecks') { $extra = @('--','resources/starter') }
             dotnet run --project "tests/$project/$project.csproj" @extra

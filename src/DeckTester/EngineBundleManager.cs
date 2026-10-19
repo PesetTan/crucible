@@ -87,7 +87,7 @@ public sealed class EngineBundleManager(string root, string? assets = null)
             var stagedSource=Path.Combine(Build,"ForgeBridge.java");File.Copy(source,stagedSource,true);source=stagedSource;
         }
         string ToolPath(string path)=>OperatingSystem.IsWindows()?Path.GetRelativePath(root,path):path;
-        var process = new ProcessStartInfo(javac) { WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,RedirectStandardOutput=true,RedirectStandardError=true };
+        var process = new ProcessStartInfo(AppPaths.JavaExecutable(javac)) { WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,RedirectStandardOutput=true,RedirectStandardError=true };
         foreach (var arg in new[] { "-J-Dfile.encoding=UTF-8", "-J-Dsun.stdout.encoding=UTF-8", "-J-Dsun.stderr.encoding=UTF-8", "-encoding", "UTF-8", "-cp", ToolPath(jar), "-d", ToolPath(Build), ToolPath(source) }) process.ArgumentList.Add(arg);
         using (var compiler = Process.Start(process) ?? throw new InvalidOperationException("Could not start javac.")) {
             var output=compiler.StandardOutput.ReadToEndAsync();var errors=compiler.StandardError.ReadToEndAsync();
@@ -96,7 +96,7 @@ public sealed class EngineBundleManager(string root, string? assets = null)
             if(!string.IsNullOrWhiteSpace(error))Console.Error.WriteLine(error);
             if (compiler.ExitCode != 0) throw new InvalidOperationException($"Forge bridge compilation failed ({compiler.ExitCode}): {error.Trim()} Active bundle was not changed.");
         }
-        var catalogProcess=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(javac)!,OperatingSystem.IsWindows()?"java.exe":"java")) {
+        var catalogProcess=new ProcessStartInfo(AppPaths.JavaExecutable(Path.Combine(Path.GetDirectoryName(javac)!,OperatingSystem.IsWindows()?"java.exe":"java"))) {
             WorkingDirectory=root,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true
         };
         foreach(var arg in new[]{"-Dfile.encoding=UTF-8","-Dsun.stdout.encoding=UTF-8","-Dsun.stderr.encoding=UTF-8","-cp",ToolPath(Build)+Path.PathSeparator+ToolPath(jar),"ForgeBridge","--protocol-catalog"})catalogProcess.ArgumentList.Add(arg);

@@ -4,6 +4,18 @@ Crucible is a local **Standard Bo1 deck-testing workspace**. It schedules head-t
 
 The interface is Svelte + TypeScript (`Crucible.Ui`), served by a small Native AOT host (`Crucible.UiHost`) and available in a Tauri desktop window or a self-hosted browser. The [solution](Crucible.slnx) also contains the shared backend (`Crucible.Core`), standalone backend host (`Crucible.Service`), and retained Blazor implementation (`DeckTester`) for rollback. Forge games run in Java workers. See [desktop and UI setup](docs/svelte-desktop.md) and the [documentation index](docs/README.md).
 
+## License
+
+Copyright (C) 2026 Crucible contributors.
+
+Crucible's original source code, documentation, and original assets are free software: you can redistribute and/or modify them under the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version (**GPL-3.0-or-later**). Crucible is distributed without any warranty; see [LICENSE](LICENSE) for the full terms.
+
+Third-party software and third-party content retain their own licenses and rights. This grant does not cover Wizards of the Coast card text, card data, artwork, trademarks, or third-party deck/source material, including such content in the starter catalog, examples, and screenshots. Crucible is unofficial and is not approved, endorsed, or sponsored by Wizards of the Coast. Portions of the materials used are property of Wizards of the Coast. © Wizards of the Coast LLC.
+
+See [third-party notices](THIRD_PARTY.md) and the [license review and distribution limits](docs/license-review.md). The software license does not establish permission to redistribute the bundled card catalog. Optional source packs are private inputs; see [private data and public source export](docs/private-data.md).
+
+Source deck lists, published statistics, tier snapshots, and source-derived screenshots are supplied separately from this source tree. Existing Git history and old release artifacts may still contain earlier bundles. Use the [public source export](docs/private-data.md#public-source-export) for a new publication without that history. Card-content and binary-distribution limits remain recorded in the [license review](docs/license-review.md).
+
 ## Supported operating systems
 
 **macOS on Apple Silicon is the currently supported and verified host platform.** The desktop app requires macOS 13 or later. Platform status refers to the current Svelte/Tauri and Native AOT implementation:
@@ -13,31 +25,25 @@ The interface is Svelte + TypeScript (`Crucible.Ui`), served by a small Native A
 | **macOS 13+ · Apple Silicon (arm64)** | Supported. Native desktop, self-hosted browser UI, simulation backend, and Crucible Monitor have been built and tested locally. |
 | **macOS 13+ · Intel (x64)** | Source-build target exists, but has not been validated on an Intel Mac. |
 | **Linux · x64 / arm64** | Experimental self-hosting. Automatic Forge/Java setup supports Linux; the current UI/backend combination and desktop packaging have not been validated there. |
-| **Windows 11 · x64** | Desktop beta implementation and Windows CI pipeline are available. The first Windows installer/installed-app validation run is pending; human Windows 11 verification remains required. See [Windows beta](docs/windows-beta.md). |
+| **Windows 11 · x64** | Desktop beta with a versioned installer pipeline gated on automated installed-app checks. Human Windows 11 verification remains required. See [Windows beta](docs/windows-beta.md) and [release pipeline](docs/releases.md). |
 
 Phones, tablets, and other computers can use the self-hosted browser UI over a private network; simulations run on the host computer. There is no native iOS/iPadOS or Android app. Crucible Monitor is macOS-only. Desktop packaging produces a local macOS build and has a Windows beta installer workflow; Linux desktop releases are not provided. See [build prerequisites and platform limits](docs/svelte-desktop.md#build-and-run).
 
-## Screenshots
+The [release pipeline](docs/releases.md) validates version tags, runs the complete automated checks, and assembles Windows beta installers with matching source, checksums, and provenance. Successful tag builds create a draft prerelease for distribution review.
+
+## Interface
 
 **Native desktop** — The Svelte/Tauri interface keeps Crucible's graphite, gold, and silver theme and measured pilot evidence.
 
-![Crucible's native desktop window with the compact Forge Pilots layout, two-tone logo, and recorded win rates](docs/screenshots/svelte-pilots.png)
-
 **Matchup explorer** — Compare head-to-head results across a ten-deck field, including per-deck averages. The rates shown describe local Forge pilot games.
-
-![Crucible in dark theme showing a completed ten-deck field, head-to-head win rates, and per-deck averages](docs/screenshots/matchup-explorer.jpg)
 
 **Deck Workshop** — Edit card quantities, preview assigned pilots, and configure a matchup rerun.
 
-![Crucible Deck Workshop in dark theme with a grouped Reanimator decklist, assigned pilots, and matchup rerun controls](docs/screenshots/deck-workshop.jpg)
-
 **Forge Pilots** — Browse pilot profiles and inspect Reanimator's opt-in Engagement Protocols, driven by public opponent observations.
-
-![Crucible Forge Pilots in dark theme showing Reanimator v012 and its five Engagement Protocols](docs/screenshots/engagement-protocols.jpg)
 
 ## Start
 
-You need the .NET 10 SDK selected by [`global.json`](global.json), Node 22.12+ for building the interface, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS, Linux, and the Windows desktop beta and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A development clone alone does not include your local card catalog or account data. Windows desktop packages include a separate clean starter catalog; see [Windows setup and validation](docs/windows-beta.md).
+You need the .NET 10 SDK selected by [`global.json`](global.json), Node 22.12+ for building the interface, `tar`, and a local Arena card database at `../../standard_cards.sqlite` relative to this repository. Automatic engine setup supports macOS, Linux, and the Windows desktop beta and needs network access for its initial downloads. The database, downloaded engine, Java runtime, results, and replays are not in Git. A development clone alone does not include your local card catalog or account data. Windows desktop packages include a separate card-only starter catalog and an empty deck library; see [Windows setup and validation](docs/windows-beta.md).
 
 The owner can obtain a private catalog snapshot from [static-data](docs/static-data.md), including Codex Cloud setup through `MTG_CARD_DB`. The existing local catalog stays at its current path.
 
@@ -103,3 +109,5 @@ python3 tests/check_session_turns.py
 ```
 
 The [development guide](docs/development.md) maps the additional Workshop, pilot, worker, serialization, note, and Monitor checks to their prerequisites. [Implementation status](docs/implementation-status.md) separates implemented features and recorded checks from the remaining validation gates.
+
+Pyre Spark offline result ingestion is documented in [docs/pyre-ingestion.md](docs/pyre-ingestion.md).

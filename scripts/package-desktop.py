@@ -10,6 +10,10 @@ if not binary.is_file():raise SystemExit('Build the release Tauri executable fir
 with tempfile.TemporaryDirectory(prefix='crucible-desktop-package-',dir='/private/tmp') as temporary:
  app=Path(temporary)/'Crucible.app';contents=app/'Contents';(contents/'MacOS').mkdir(parents=True);resources=contents/'Resources';(resources/'resources').mkdir(parents=True)
  shutil.copy2(binary,contents/'MacOS/Crucible');shutil.copy2(root/'src/Crucible.Ui/src-tauri/icons/icon.icns',resources/'Crucible.icns')
+ for notice in ['LICENSE','THIRD_PARTY.md']:
+  shutil.copy2(root/notice,resources/notice)
+ (resources/'docs').mkdir()
+ shutil.copy2(root/'docs/license-review.md',resources/'docs/license-review.md')
  for runtime,name in [(args.ui_runtime,'ui'),(args.backend_runtime,'service')]:
   shutil.copytree(runtime,resources/'resources'/name,ignore=shutil.ignore_patterns('*.dSYM','*.pdb','*.dbg'))
  (resources/'resources/project-root.txt').write_text(str(root)+'\n')

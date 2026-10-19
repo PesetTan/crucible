@@ -70,6 +70,7 @@ class Native:
         self.callback=ctypes.WINFUNCTYPE(wt.BOOL,wt.HWND,wt.LPARAM)
         self.ui.GetWindowTextW.argtypes=[wt.HWND,wt.LPWSTR,ctypes.c_int]
         self.ui.GetWindowThreadProcessId.argtypes=[wt.HWND,ctypes.POINTER(wt.DWORD)]
+        self.ui.IsWindow.argtypes=[wt.HWND]
         self.ui.PostMessageW.argtypes=[wt.HWND,wt.UINT,wt.WPARAM,wt.LPARAM]
         self.ui.EnumWindows.argtypes=[self.callback,wt.LPARAM]
         self.ui.EnumChildWindows.argtypes=[wt.HWND,self.callback,wt.LPARAM]
@@ -82,19 +83,39 @@ class Native:
         else:self.ui.EnumWindows(cb,0)
         return result
     def main(self):return next((h for h in self.windows() if self.text(h)=='Crucible · Windows Beta'),None)
+    def dialog(self,process_id,title):
+        for h in self.windows():
+            owner=wt.DWORD();self.ui.GetWindowThreadProcessId(h,ctypes.byref(owner))
+            if owner.value!=process_id or self.text(h)!=title:continue
+            # TaskDialog body text can be a DirectUI accessibility node rather
+            # than a child HWND. Read the visible dialog's UI Automation tree.
+            powershell=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result=subprocess.run([str(powershell),'-NoProfile','-NonInteractive','-File',str(Path(__file__).with_name('read_windows_dialog.ps1')),'-WindowHandle',str(h)],capture_output=True,timeout=15)
+            assert result.returncode==0,result.stderr.decode(errors='replace')
+            value=json.loads(result.stdout.decode('utf-8-sig'))
+            assert value['processId']==process_id,value
+            return '\n'.join(value['names'])
+        return ''
     def close(self):
         h=wait(self.main);self.ui.PostMessageW(h,0x10,0,0)
     def choose(self,text):
         main=wait(self.main);pid=wt.DWORD();self.ui.GetWindowThreadProcessId(main,ctypes.byref(pid))
+        last_close=time.monotonic()
         def find():
+            nonlocal last_close
             for top in self.windows():
                 owner=wt.DWORD();self.ui.GetWindowThreadProcessId(top,ctypes.byref(owner))
-                if owner.value!=pid.value:continue
+                if owner.value!=pid.value or self.text(top)!='Stop Simulations And Exit?':continue
                 for child in self.windows(top):
                     if self.text(child).replace('&','')==text:
-                        self.ui.PostMessageW(child,0xF5,0,0);return True
+                        self.ui.PostMessageW(child,0xF5,0,0);return top
+            # A preceding Keep Open click is asynchronous. The launcher's close
+            # guard can still be resetting when another WM_CLOSE is posted.
+            if time.monotonic()-last_close>=1:
+                self.ui.PostMessageW(main,0x10,0,0);last_close=time.monotonic()
             return False
-        wait(find,15)
+        dialog=wait(find,15)
+        wait(lambda:not self.ui.IsWindow(dialog),15)
 
 
 def main():
@@ -103,7 +124,8 @@ def main():
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=True)
     installer=args.installer.resolve();checks=[];driver=None;web=None
     with installer.open('rb') as file:installer_hash=hashlib.file_digest(file,'sha256').hexdigest()
-    (output/'installer-provenance.json').write_text(json.dumps({'installer':installer.name,'sha256':installer_hash,'installerRunId':os.environ.get('CRUCIBLE_INSTALLER_RUN_ID',os.environ.get('GITHUB_RUN_ID')),'testCommit':os.environ.get('GITHUB_SHA')},indent=2)+'\n')
+    test_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=Path(__file__).resolve().parents[1],text=True).strip() if os.environ.get('GITHUB_SHA') else None
+    (output/'installer-provenance.json').write_text(json.dumps({'installer':installer.name,'sha256':installer_hash,'installerRunId':os.environ.get('CRUCIBLE_INSTALLER_RUN_ID',os.environ.get('GITHUB_RUN_ID')),'testCommit':test_commit},indent=2)+'\n')
     def record(message):
         checks.append(message);print('Passed: '+message,flush=True)
     with tempfile.TemporaryDirectory(prefix='Crucible Windows Ω ',ignore_cleanup_errors=True) as temporary:
@@ -111,7 +133,7 @@ def main():
         state.mkdir();ui_port,backend_port=port(),port();assert ui_port!=backend_port
         ui=f'http://127.0.0.1:{ui_port}';backend=f'http://127.0.0.1:{backend_port}'
         env=dict(os.environ,MTG_PROJECT_ROOT=str(state),CRUCIBLE_UI_PORT=str(ui_port),CRUCIBLE_BACKEND_PORT=str(backend_port))
-        for key in ['MTG_ASSET_ROOT','MTG_CARD_DB','MTG_JAVA','MTG_PYTHON','MTG_HOST_MODE','CRUCIBLE_HOST_OWNER','CRUCIBLE_LAUNCH_EVENT','DOTNET_ROOT','DOTNET_ROOT_X64']:
+        for key in ['CRUCIBLE_DECK_PACK','CRUCIBLE_NOTES_FILE','MTG_ASSET_ROOT','MTG_CARD_DB','MTG_JAVA','MTG_PYTHON','MTG_HOST_MODE','CRUCIBLE_HOST_OWNER','CRUCIBLE_LAUNCH_EVENT','DOTNET_ROOT','DOTNET_ROOT_X64']:
             env.pop(key,None)
         # Runtime proof: only Windows system utilities are on the app's PATH.
         env['PATH']=str(Path(os.environ['SystemRoot'])/'System32')+os.pathsep+os.environ['SystemRoot']
@@ -219,12 +241,19 @@ def main():
                     owner_health=http(owner_origin+'/api/v1/health')[1]
                     blocker=subprocess.Popen([str(executable)],env=dict(env,MTG_PROJECT_ROOT=str(lock_root)))
                     def ownership_dialog():
-                        return any('already owns this data directory' in native.text(control) for top in native.windows() if native.text(top)=='Crucible Could Not Start' for control in native.windows(top))
+                        if blocker.poll() is not None:raise StartupFailure(f'Ownership-conflict app exited: {blocker.returncode}')
+                        text=native.dialog(blocker.pid,'Crucible Could Not Start')
+                        if text:(output/'ownership-dialog.txt').write_text(text,encoding='utf-8')
+                        return 'already owns this data directory' in text
                     wait(ownership_dialog,30)
                     after=http(owner_origin+'/api/v1/health')[1]
                     assert existing.poll() is None and after['ready'] and after['instanceId']==owner_health['instanceId']
                     assert not (lock_root/'data/engine-bundles/active.json').exists()
                     record('database ownership conflict is visible; external native host remains untouched')
+                except Exception:
+                    capture_desktop('ownership-failure.png')
+                    (output/'ownership-windows.json').write_text(json.dumps({'windows':[{'title':native.text(h),'children':[native.text(c) for c in native.windows(h)]} for h in native.windows() if native.text(h).startswith('Crucible')]},indent=2)+'\n')
+                    raise
                 finally:
                     if blocker:stop_fixture(blocker)
                     if existing.poll() is None:
@@ -249,34 +278,47 @@ def main():
             assert [health(origin)['instanceId'] for origin in [ui,backend]]==before
             record('duplicate desktop launch adopts no new hosts')
             library=api('/api/v1/library-state')
-            assert library['decks'] and all(d['manifest']['sourceType']=='public' for d in library['decks'])
+            assert library['decks']==[], 'Clean installation must have an empty library'
+            for basic in ['Forest','Mountain']:
+                resolved=api('/api/v1/decks/resolve','POST',{'text':'Deck\n60 '+basic})
+                assert not resolved['issues'],resolved
+                cards=[{'arenaId':c['arenaId'],'quantity':c['quantity']} for c in resolved['cards']]
+                api('/api/v1/decks/custom','POST',{'name':'Synthetic '+basic,'cards':cards})
+            library=api('/api/v1/library-state')
             decks=[d['manifest'] for d in library['decks'] if d['coverage']['status']!='blocked']
-            # Prefer two fast interactive public lists, with a deterministic fallback.
-            decks.sort(key=lambda d:(0 if 'Mono-Red Burn' in d['name'] else 1 if 'Rakdos Aggro' in d['name'] else 2,d['id']))
-            decks=list({d['name']:d for d in reversed(decks)}.values())[::-1]
-            assert len(decks)>=2
+            assert len(decks)==2
             web.go('/workshop?deck='+decks[0]['id'])
-            wait(lambda:'60 Main-Deck Cards' in web.text())
+            wait(lambda:web.js("const list=document.querySelector('[aria-label=\"Deck List · Main deck\"]');return list&&[...list.querySelectorAll('input[type=number]')].reduce((n,e)=>n+Number(e.value),0)===60"))
             web.value('Deck name','Windows Beta Saved Deck Ω')
             wait(lambda:web.button('Save to Library'))
             wait(lambda:'Saved to Deck Library.' in web.text());web.shot(output/'workshop.png')
-            record('Workshop edits and saves a real public deck')
+            record('Workshop edits and saves a synthetic deck')
             web.go('/')
             wait(lambda:'Choose the Decks' in web.text())
             assert web.js("document.querySelectorAll('details').forEach(d=>d.open=true);return true")
+            labels={d['id']:d['label'] for d in api('/api/v1/presentation/catalog')['decks']}
+            assert len({labels[d['id']] for d in decks[:2]})==2
             for deck in decks[:2]:
-                assert web.js("const c=[...document.querySelectorAll('.deck-card')].find(c=>c.textContent.includes(arguments[0]));const e=c?.querySelector('input[type=checkbox]');if(!e||e.disabled)return false;if(!e.checked)e.click();return true",deck['name'])
+                wait(lambda:web.js("const e=[...document.querySelectorAll('button.deck-card-choice')].find(e=>e.getAttribute('aria-label')===arguments[0]);if(!e||e.disabled)return false;if(e.getAttribute('aria-pressed')!=='true')e.click();return true",labels[deck['id']]))
             web.value('Games per Matchup',2);web.value('Root Seed','9223372036854775807');web.value('Time limit per game',180)
             wait(lambda:web.button('Run Exploratory Games'))
             run_id=wait(lambda:web.js("return /^\\/runs\\/[a-f0-9]+$/.test(location.pathname)?location.pathname.split('/')[2]:null"))
-            wait(lambda:api('/api/v1/runs/'+run_id)['status']=='completed',900)
+            def completed():
+                run=api('/api/v1/runs/'+run_id)
+                if run['status'] in ('failed','cancelled'):
+                    detail={'run':run,'games':api('/api/v1/runs/'+run_id+'/games')}
+                    (output/'failed-run.json').write_text(json.dumps(detail,indent=2)+'\n')
+                    raise StartupFailure('Real-game validation failed: '+json.dumps(detail))
+                return run['status']=='completed'
+            wait(completed,900)
             finished=api('/api/v1/runs/'+run_id)
+            assert set(finished['config']['deckIds'])=={d['id'] for d in decks[:2]},finished['config']
             assert finished['config']['rootSeed']==9223372036854775807,finished['config']
             games=api('/api/v1/runs/'+run_id+'/games')
             assert len(games)==2 and all(g['status']=='completed' and g['result'] for g in games),games
             web.shot(output/'results.png')
             web.go(f'/runs/{run_id}/games/{games[0]["id"]}')
-            wait(lambda:'Replay' in web.text());web.shot(output/'replay.png')
+            wait(lambda:web.js("return document.title.startsWith('Game Replay')&&[...document.querySelectorAll('.replay-toolbar button')].some(b=>b.textContent.trim()==='Next Event'&&!b.disabled)"));web.shot(output/'replay.png')
             assert api(f'/api/v1/runs/{run_id}/games/{games[0]["id"]}/replay?audit=true')
             record('two complete real Forge games, exact signed 64-bit seed, results, and replay')
             # Create enough new work to test native confirmation and explicit recovery.
@@ -302,19 +344,24 @@ def main():
             wait(lambda:app_processes[-1].poll() is not None,45);web.dispose();web=None
             record('Keep Open / Stop And Exit, graceful owned-host shutdown, saved results, explicit resume')
             catalog=state/'catalog.sqlite';catalog_hash=hashlib.sha256(catalog.read_bytes()).hexdigest()
+            def database_files():
+                return {x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data').glob('simulator.sqlite*') if x.is_file()}
+            database_hashes=database_files();assert 'simulator.sqlite' in database_hashes
             replay_hashes={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
             assert replay_hashes
             sentinel=state/'keep-on-uninstall.txt';sentinel.write_text('user data')
             executable=install_app()
             assert hashlib.sha256(catalog.read_bytes()).hexdigest()==catalog_hash and sentinel.read_text()=='user data'
+            assert database_files()==database_hashes,'Upgrade must retain simulator database and WAL bytes'
             record('silent same-version upgrade preserves user catalog and state')
             uninstallers=list(install.glob('*uninstall*.exe'));assert len(uninstallers)==1,uninstallers
             assert subprocess.run([str(uninstallers[0]),'/S'],timeout=120).returncode==0
             wait(lambda:not executable.exists())
             assert sentinel.read_text()=='user data' and hashlib.sha256(catalog.read_bytes()).hexdigest()==catalog_hash
+            assert database_files()==database_hashes,'Uninstall must retain simulator database and WAL bytes'
             assert replay_hashes=={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in (state/'data/replays').glob('*') if x.is_file()}
             record('uninstall retains catalog, simulation database, and replay bytes')
-            (output/'summary.json').write_text(json.dumps({'checks':checks,'target':'Windows x64 hosted runner','humanWindows11Validation':False},indent=2)+'\n')
+            (output/'summary.json').write_text(json.dumps({'passed':True,'checks':checks,'target':'Windows x64 hosted runner','humanWindows11Validation':False},indent=2)+'\n')
             succeeded=True
             print('Windows installed desktop checks passed: '+', '.join(checks))
         finally:

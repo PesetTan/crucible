@@ -80,11 +80,17 @@ public sealed record RunConfig(List<string> DeckIds, int GamesPerPair, int Worke
     bool StaggerStarts = false, int EstimatedGameSeconds = 15, int StartLeadSeconds = 5, double? StartupSpacingSeconds = null, bool PerformanceMode = false,
     Dictionary<string,string>? PilotProfiles = null)
 {
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public EngineProviderIdentity? Provider { get; init; }
+    [JsonIgnore]
+    public string ProviderId => Provider?.Id ?? "forge";
     public ProtocolCatalog? ProtocolSet { get; init; }
     public OptimizerPolicy? OptimizerPolicy { get; init; }
     public Dictionary<string,JsonElement>? CardAttributes { get; init; }
     public string? AttributesHash { get; init; }
 }
+public sealed record EngineProviderIdentity(string Id,string AdapterVersion,string MetricDefinitionHash,string ControllerDefinitionHash,string ExperimentId);
+public sealed record PyreIngestReceipt(string RecordId,string PayloadHash,string RunId,string SlotId,bool Duplicate);
 public sealed record OptimizerPolicy(int Version,string Id,string Profile,Dictionary<string,int> Tuning,string TuningHash,string EngineHash,string AdapterHash);
 public sealed record SimulationRun(string Id, DateTimeOffset CreatedAt, string Status, RunConfig Config, int Total, string? Error = null, List<RunExtension>? Extensions = null, DateTimeOffset? UpdatedAt = null)
 {

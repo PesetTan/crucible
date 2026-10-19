@@ -74,7 +74,7 @@ internal sealed class ForgeWorker : IAsyncDisposable
     public ForgeWorker(AppPaths paths, EngineBundle bundle, bool persistent)
     {
         Persistent = persistent;
-        var info = new ProcessStartInfo(paths.Java) {
+        var info = new ProcessStartInfo(AppPaths.JavaExecutable(paths.Java)) {
             WorkingDirectory = bundle.Directory, RedirectStandardInput = true,
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
         };

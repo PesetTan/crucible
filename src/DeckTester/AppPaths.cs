@@ -7,12 +7,20 @@ public sealed class AppPaths
     public bool Installed { get; }
     public string Data => Path.Combine(Root, "data");
     public string Source => Path.GetFullPath(Environment.GetEnvironmentVariable("MTG_CARD_DB") ?? (Installed ? Path.Combine(Root,"catalog.sqlite") : Path.Combine(Root, "..", "..", "standard_cards.sqlite")));
+    // Explicit opt-in only. The path may live outside the checkout and is never packaged.
+    public string? DeckPack => Environment.GetEnvironmentVariable("CRUCIBLE_DECK_PACK") is {} pack ? Path.GetFullPath(pack) : null;
     public string Vendor => Path.Combine(Root, "vendor");
     public string Jar => Path.Combine(Vendor, "forge-gui-desktop-2.0.15-jar-with-dependencies.jar");
     public string Bridge => Path.Combine(Root, "engine", "build");
     public static string JavaTool(string name) => OperatingSystem.IsWindows() ? name+".exe" : name;
     public string JavaHome => OperatingSystem.IsMacOS()?Path.Combine(Vendor,"jdk","Contents","Home"):Path.Combine(Vendor,"jdk");
     public string Java => Environment.GetEnvironmentVariable("MTG_JAVA") ?? Path.Combine(JavaHome,"bin",JavaTool("java"));
+    // Keep Java 17's native loader on an ASCII path without relocating user data.
+    public static string JavaExecutable(string path)
+    {
+        if(!OperatingSystem.IsWindows()||path.All(char.IsAscii))return path;
+        return WindowsJavaPaths.Executable(path);
+    }
     public string Replays => Path.Combine(Data, "replays");
     public string Decks => Path.Combine(Data, "decks");
     public AppPaths(IHostEnvironment environment)
