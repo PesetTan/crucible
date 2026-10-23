@@ -111,3 +111,5 @@ python3 tests/check_session_turns.py
 The [development guide](docs/development.md) maps the additional Workshop, pilot, worker, serialization, note, and Monitor checks to their prerequisites. [Implementation status](docs/implementation-status.md) separates implemented features and recorded checks from the remaining validation gates.
 
 Pyre Spark offline result ingestion is documented in [docs/pyre-ingestion.md](docs/pyre-ingestion.md).
+
+The Deck Library also supports private, versioned [engine coverage catalogs](docs/engine-support.md), with exact validated lists, matchup dates, supported card definitions and generated tokens.

@@ -502,6 +502,10 @@
   </div>
   <section class="panel">
     <h2>Test the Matchup</h2>
+    <p class="small">
+      <strong>Engine for this run: Forge.</strong> Check exact saved-list engine
+      coverage in the <a href="/decks">Deck Library</a> after editing.
+    </p>
     <div class="config-grid">
       <div>
         <label for="workshop-opponent">Opponent</label><AppSelect

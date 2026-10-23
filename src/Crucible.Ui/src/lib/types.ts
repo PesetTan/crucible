@@ -54,6 +54,21 @@ export interface Library {
   decks: DeckRow[];
   manaValues: Record<string, number>;
 }
+export interface EngineSupport {
+  id: string;
+  providerId: string;
+  engineVersion: string;
+  target: string;
+  cards: { name: string; kind: "Card" | "Token"; arenaId?: number }[];
+  decks: Deck[];
+  matchups: {
+    id: string;
+    label: string;
+    deckA: string;
+    deckB: string;
+    eligibilityAsOf: string;
+  }[];
+}
 export interface Protocol {
   id: string;
   name: string;
@@ -69,7 +84,15 @@ export interface ProtocolSet {
   hash: string;
   definitions: Protocol[];
   settings: Record<string, unknown>;
-  sets?: Record<string, { profile: string; parent: string; activation: string; definitions: Protocol[] }>;
+  sets?: Record<
+    string,
+    {
+      profile: string;
+      parent: string;
+      activation: string;
+      definitions: Protocol[];
+    }
+  >;
 }
 export interface Capability {
   available: boolean;

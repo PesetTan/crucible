@@ -22,6 +22,11 @@ export CRUCIBLE_NOTES_FILE=/absolute/path/to/private-data/editorial.json
 
 Use the launcher that owns your existing service when changing its environment. Existing services do not acquire new environment variables until a deliberate restart. Never start a second service against live state. Do not place private packs, catalogs, or screenshots in tracked files. `private/`, application `data/`, and raw SQLite databases are ignored; external paths are preferred. Release packaging does not copy either configured file.
 
+Versioned engine coverage and its exact private deck lists can also be imported
+through the [engine support catalog](engine-support.md). Keep these input packs
+outside tracked source files; engine support is independent of card ownership and
+the selected simulation provider.
+
 ## Public source export
 
 Deleting current files does not remove them from prior commits. Earlier branches, tags, releases, installed packages, and screenshots can retain old data. Do not make the existing repository public assuming this change cleaned its history.

@@ -7,10 +7,12 @@
     deck,
     manaValues = {},
     initialOpen = false,
+    engineSupport = {},
   }: {
     deck: Deck;
     manaValues?: Record<string, number>;
     initialOpen?: boolean;
+    engineSupport?: Record<string, string[]>;
   } = $props();
   let open = $state(untrack(() => initialOpen));
 </script>
@@ -24,13 +26,16 @@
       scope="deck"
       subject={deck.id}
       context={deck.manifestHash}
-    /><DeckList cards={deck.cards} {manaValues} />{#if deck.sideCount}<h3>
-        Sideboard
-      </h3>
+    /><DeckList
+      cards={deck.cards}
+      {manaValues}
+      {engineSupport}
+    />{#if deck.sideCount}<h3>Sideboard</h3>
       <DeckList
         cards={deck.cards}
         {manaValues}
         zone="Sideboard"
         headingLevel={4}
+        {engineSupport}
       />{/if}{/if}
 </details>

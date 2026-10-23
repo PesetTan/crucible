@@ -9,8 +9,15 @@
     RunRequest,
     Estimate,
     History,
+    EngineSupport,
   } from "../lib/types.ts";
   import DeckIdentity from "../lib/DeckIdentity.svelte";
+  import EngineSupportBadges from "../lib/EngineSupportBadges.svelte";
+  import {
+    engineLabel,
+    loadEngineSupport,
+    supportsSelection,
+  } from "../lib/engine-support.ts";
   import AppSelect from "../lib/AppSelect.svelte";
   import AiNote from "../lib/AiNote.svelte";
   import PageHeader from "../lib/PageHeader.svelte";
@@ -36,6 +43,12 @@
     estimate = $state<Estimate>(),
     preview = $state("");
   let expandedGroups = $state<Record<string, boolean>>({});
+  let engines = $state<EngineSupport[]>();
+  let selectedDecks = $derived(
+    (snapshot?.decks ?? [])
+      .filter((d) => selected.includes(d.manifest.id))
+      .map((d) => d.manifest),
+  );
   let simulatedRates = $derived(latestSimulatedRates(history?.sessions ?? []));
   const saved = loadSaved("home", {
     selected: [] as string[],
@@ -118,11 +131,19 @@
     [...(snapshot?.decks ?? [])].sort((a, b) => {
       const first = catalog?.decks.find((d) => d.id === a.manifest.id);
       const second = catalog?.decks.find((d) => d.id === b.manifest.id);
-      return (first?.colors ?? "Unknown colors").localeCompare(
-        second?.colors ?? "Unknown colors", undefined, { sensitivity: "base" },
-      ) || deckLabel(a.manifest, catalog).localeCompare(
-        deckLabel(b.manifest, catalog), undefined, { sensitivity: "base" },
-      ) || a.manifest.id.localeCompare(b.manifest.id);
+      return (
+        (first?.colors ?? "Unknown colors").localeCompare(
+          second?.colors ?? "Unknown colors",
+          undefined,
+          { sensitivity: "base" },
+        ) ||
+        deckLabel(a.manifest, catalog).localeCompare(
+          deckLabel(b.manifest, catalog),
+          undefined,
+          { sensitivity: "base" },
+        ) ||
+        a.manifest.id.localeCompare(b.manifest.id)
+      );
     }),
   );
   $effect(() =>
@@ -168,10 +189,11 @@
   });
   async function load() {
     try {
-      [snapshot, resources, history] = await Promise.all([
+      [snapshot, resources, history, engines] = await Promise.all([
         api<Snapshot>("/api/v1/ui-state"),
         api<Resource>("/api/v1/resources"),
         api<History>("/api/v1/run-history"),
+        loadEngineSupport(),
       ]);
       const filtered = selected
         .filter((id) =>
@@ -184,9 +206,11 @@
       for (const row of snapshot.decks) {
         const name = group(row.manifest.sourceType, row.manifest.archetypeTier);
         if (!(name in expandedGroups))
-          expandedGroups[name] = snapshot.decks.some((d) =>
-            selected.includes(d.manifest.id) &&
-            group(d.manifest.sourceType, d.manifest.archetypeTier) === name);
+          expandedGroups[name] = snapshot.decks.some(
+            (d) =>
+              selected.includes(d.manifest.id) &&
+              group(d.manifest.sourceType, d.manifest.archetypeTier) === name,
+          );
       }
       error = "";
     } catch (e) {
@@ -200,7 +224,12 @@
     return poll(load);
   });
   function toggle(id: string) {
-    if (locked || snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status === "blocked") return;
+    if (
+      locked ||
+      snapshot?.decks.find((d) => d.manifest.id === id)?.coverage.status ===
+        "blocked"
+    )
+      return;
     if (selected.includes(id)) selected = selected.filter((d) => d !== id);
     else if (selected.length < (catalog?.maximumDecks ?? 10))
       selected = [...selected, id];
@@ -277,7 +306,25 @@
         (selected.length - 1)) /
         2} matchups.
     </p>
-    <p class="small muted">Select a deck tile to add or remove it. Use the group title to expand or collapse its decks.</p>
+    <p class="small muted">
+      Select a deck tile to add or remove it. Use the group title to expand or
+      collapse its decks.
+    </p>
+    <p class="small">
+      <strong>Engine for this run: Forge.</strong> Pyre labels show validated coverage;
+      Pyre execution is configured separately.
+    </p>
+    {#if selectedDecks.length >= 2}{#each engines ?? [] as engine (engine.id)}<p
+          class="small"
+          role="status"
+        >
+          {engineLabel(engine.providerId, engine.engineVersion)}: {supportsSelection(
+            selectedDecks,
+            engine,
+          )
+            ? "all selected matchups are validated"
+            : "the selected field includes matchups outside validated coverage"}.
+        </p>{/each}{/if}
     <div class="chart-palette">
       {#each ["Mint", "Gold", "Sky Blue", "Coral", "Lavender", "Orange", "Rose", "Lime", "Cyan", "Stone"] as color, i}<span
           ><i style:background={"var(--theme-chart-" + (i + 1) + ")"}
@@ -307,15 +354,21 @@
               class:selected={selected.includes(deck.id)}
               class:blocked={row.coverage.status === "blocked"}
             >
-              <button class="deck-card-choice"
-                  type="button"
-                  aria-label={deckLabel(deck, catalog)}
-                  aria-pressed={selected.includes(deck.id)}
-                  disabled={row.coverage.status === "blocked" ||
-                    (!selected.includes(deck.id) &&
-                      selected.length >= (catalog?.maximumDecks ?? 10))}
-                  onclick={() => toggle(deck.id)}
-                ><DeckIdentity {deck} {catalog} /><span class="deck-selection-state">{selected.includes(deck.id) ? "Selected" : "Select deck"}</span></button
+              <button
+                class="deck-card-choice"
+                type="button"
+                aria-label={deckLabel(deck, catalog)}
+                aria-pressed={selected.includes(deck.id)}
+                disabled={row.coverage.status === "blocked" ||
+                  (!selected.includes(deck.id) &&
+                    selected.length >= (catalog?.maximumDecks ?? 10))}
+                onclick={() => toggle(deck.id)}
+                ><DeckIdentity {deck} {catalog} /><span
+                  class="deck-selection-state"
+                  >{selected.includes(deck.id)
+                    ? "Selected"
+                    : "Select deck"}</span
+                ></button
               >
               <p class="small muted">
                 {deck.creatureCount} creatures · {deck.landCount} lands{deck.archetypeTier
@@ -327,13 +380,17 @@
                     "Unknown sample"} matches
                 </p>{/if}
               <SimulatedRate result={simulatedRates.get(deck.id)} />
+              <EngineSupportBadges {deck} coverage={row.coverage} {engines} />
               <div class="deck-bottom">
                 <span class="small"
                   >{row.coverage.status === "blocked"
-                    ? "Missing card support"
-                    : pilotLabel(catalog?.decks.find((d) => d.id === deck.id)?.profiles[
+                    ? "Forge card support missing"
+                    : pilotLabel(
+                        catalog?.decks.find((d) => d.id === deck.id)?.profiles[
                           pilot || catalog.defaultPilotMode
-                        ] ?? "forge-default", catalog)}</span
+                        ] ?? "forge-default",
+                        catalog,
+                      )}</span
                 ><button
                   type="button"
                   aria-expanded={preview === deck.id}
@@ -342,7 +399,10 @@
                   >Deck List</button
                 >
               </div>
-              {#if preview === deck.id}<div class="deck-preview" id={"deck-list-" + deck.id}>
+              {#if preview === deck.id}<div
+                  class="deck-preview"
+                  id={"deck-list-" + deck.id}
+                >
                   <DeckList
                     cards={deck.cards}
                     manaValues={snapshot?.manaValues}

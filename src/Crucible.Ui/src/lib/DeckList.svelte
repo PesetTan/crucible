@@ -10,12 +10,14 @@
     zone = "MainDeck",
     row,
     headingLevel = 3,
+    engineSupport = {},
   }: {
     cards: Card[];
     manaValues?: Record<string, number>;
     zone?: string;
     row?: Snippet<[Card]>;
     headingLevel?: 3 | 4;
+    engineSupport?: Record<string, string[]>;
   } = $props();
   let groups = $derived(groupDeckList(cards, manaValues, zone));
 </script>
@@ -45,6 +47,10 @@
             >
             <div class="card-detail">
               <p>{card.type} · {card.set}</p>
+              {#if engineSupport[card.name]?.length}<p class="small">
+                  Engine coverage: {engineSupport[card.name].join(", ")} · validated
+                  cohort interactions.
+                </p>{/if}
               <p class="rules-text"><CardRules text={card.text} /></p>
               <p class="small muted">
                 Arena card {card.arenaId} · {card.locallyLegal

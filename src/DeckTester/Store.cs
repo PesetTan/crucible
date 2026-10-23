@@ -20,6 +20,8 @@ public sealed partial class Store
             CREATE TABLE IF NOT EXISTS session_timings(id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id), payload TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS session_timings_run ON session_timings(run_id);
             CREATE TABLE IF NOT EXISTS run_matchup_notes(run_id TEXT NOT NULL REFERENCES runs(id), deck_a TEXT NOT NULL, deck_b TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(run_id,deck_a,deck_b));
+            CREATE TABLE IF NOT EXISTS engine_support_catalogs(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS engine_support_cards(catalog_id TEXT NOT NULL REFERENCES engine_support_catalogs(id),name TEXT NOT NULL,kind TEXT NOT NULL,arena_id INTEGER,PRIMARY KEY(catalog_id,name));
             """;
         cmd.ExecuteNonQuery();
         // Tier annotations are separate from immutable list/run fingerprints.
@@ -340,11 +342,12 @@ public sealed partial class Store
         return cmd.ExecuteScalar() is string payload?Json.Decode<SimulationRun>(payload):throw new KeyNotFoundException("Run not found.");
     }
     public GameSlot Slot(string run, string id) => Slots(run).SingleOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException("Game not found.");
-    private static string NewFriendlyName(SqliteConnection db)
+    private static string NewFriendlyName(SqliteConnection db,SqliteTransaction? transaction=null)
     {
         var adjectives = NameLibrary.Adjectives;
         var nouns = NameLibrary.Nouns;
         using var cmd = db.CreateCommand();
+        cmd.Transaction=transaction;
         cmd.CommandText = "SELECT count(*) FROM decks WHERE friendly_name=$name";
         for (var attempt = 0; attempt < 1000; attempt++) {
             var name = $"{adjectives[System.Security.Cryptography.RandomNumberGenerator.GetInt32(adjectives.Count)]}-{nouns[System.Security.Cryptography.RandomNumberGenerator.GetInt32(nouns.Count)]}";
