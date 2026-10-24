@@ -21,6 +21,25 @@ Work remains in this order:
 
 ## Using the beta
 
+### Ownership-timeout investigation — October 23, 2026
+
+Runs `38797399988` and `38871349803` both recorded an unhandled
+`InvalidOperationException` from setup's `AcquireDataOwnership`. The data lock
+therefore rejected the second host as intended. Their desktop screenshots were
+captured after the conflicting launcher was stopped and cannot establish whether
+its error dialog was visible. `Timed out: None` alone does not distinguish an
+absent dialog from a title/process mismatch in the detector.
+
+The service now catches a typed ownership refusal and exits with code 1 while
+preserving the ownership message on stderr. This removes an expected conflict
+from the Windows crash-reporting path; a crash-reporting delay is a hypothesis,
+not a confirmed explanation of the original timeout. Other exceptions still
+propagate. Installed checks require normal, prompt refusals from both service
+startup and setup, verify the existing owner remains healthy, and retain desktop
+and window/PID evidence before cleaning up the conflicting launcher. The exact
+dialog title, process identity, and ownership-message assertion remain required.
+Full Windows CI and human Windows 11 verification remain release gates.
+
 After the Windows workflow succeeds, download `crucible-windows-x64-beta` from that run's artifacts and run its `*-setup.exe`. This is a per-user, unsigned beta installer, so publisher/reputation warnings can appear. It is not a signed public release or an automatic updater.
 
 The default program folder is `%LOCALAPPDATA%\Crucible Desktop`. Mutable data lives separately under `%LOCALAPPDATA%\Crucible`:
