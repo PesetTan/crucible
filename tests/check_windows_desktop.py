@@ -239,13 +239,32 @@ def main():
                 try:
                     wait(lambda:(h:=http(owner_origin+'/api/v1/health'))[0]==200 and h[1]['ready'],60)
                     owner_health=http(owner_origin+'/api/v1/health')[1]
+                    # Both setup and ordinary startup must refuse ownership with a
+                    # normal exit, rather than waiting in Windows crash reporting.
+                    for arguments in [[],['--setup']]:
+                        refusal=subprocess.run([str(install/'resources/service/CrucibleBackend.exe'),*arguments],env=dict(env,MTG_PROJECT_ROOT=str(lock_root),MTG_ASSET_ROOT=str(install/'resources/assets'),MTG_PORT=str(backend_port),MTG_HOST_MODE='service'),capture_output=True,timeout=15)
+                        detail=refusal.stderr.decode(errors='replace')
+                        (output/('ownership-setup-refusal.txt' if arguments else 'ownership-service-refusal.txt')).write_text(detail,encoding='utf-8')
+                        assert refusal.returncode==1 and 'already owns this data directory' in detail and 'Unhandled exception' not in detail,(refusal.returncode,detail)
+                        after=http(owner_origin+'/api/v1/health')[1]
+                        assert existing.poll() is None and after['ready'] and after['instanceId']==owner_health['instanceId']
                     blocker=subprocess.Popen([str(executable)],env=dict(env,MTG_PROJECT_ROOT=str(lock_root)))
                     def ownership_dialog():
                         if blocker.poll() is not None:raise StartupFailure(f'Ownership-conflict app exited: {blocker.returncode}')
                         text=native.dialog(blocker.pid,'Crucible Could Not Start')
                         if text:(output/'ownership-dialog.txt').write_text(text,encoding='utf-8')
                         return 'already owns this data directory' in text
-                    wait(ownership_dialog,30)
+                    try:
+                        wait(ownership_dialog,30)
+                    finally:
+                        # Preserve the dialog/process evidence BEFORE fixture cleanup,
+                        # including when title/PID matching never finds a dialog.
+                        capture_desktop('ownership-dialog-desktop.png')
+                        windows=[]
+                        for h in native.windows():
+                            pid=wt.DWORD();native.ui.GetWindowThreadProcessId(h,ctypes.byref(pid))
+                            windows.append({'handle':h,'processId':pid.value,'title':native.text(h)})
+                        (output/'ownership-window-context.json').write_text(json.dumps({'blockerPid':blocker.pid,'blockerExitCode':blocker.poll(),'windows':windows},indent=2)+'\n')
                     after=http(owner_origin+'/api/v1/health')[1]
                     assert existing.poll() is None and after['ready'] and after['instanceId']==owner_health['instanceId']
                     assert not (lock_root/'data/engine-bundles/active.json').exists()

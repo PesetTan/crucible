@@ -3,12 +3,14 @@ using System.Text;
 
 namespace DeckTester;
 
+public sealed class DataOwnershipException(string message,IOException inner) : InvalidOperationException(message,inner);
+
 public static class HostControl
 {
     public static FileStream AcquireDataOwnership(AppPaths paths)
     {
         try{return new FileStream(Path.Combine(paths.Data,"service.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
-        catch(IOException error){throw new InvalidOperationException("Another simulation host or engine setup already owns this data directory. Close that host before starting a replacement.",error);}
+        catch(IOException error){throw new DataOwnershipException("Another simulation host or engine setup already owns this data directory. Close that host before starting a replacement.",error);}
     }
     public static void WaitForLauncher()
     {

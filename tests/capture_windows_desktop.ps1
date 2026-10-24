@@ -9,7 +9,7 @@ try {
     $bitmap.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
 } finally { $graphics.Dispose(); $bitmap.Dispose() }
 if ($ProcessOutputPath) {
-    Get-CimInstance Win32_Process -Filter "Name = 'crucible-desktop.exe' OR Name = 'msedgewebview2.exe'" |
+    Get-CimInstance Win32_Process -Filter "Name = 'crucible-desktop.exe' OR Name = 'CrucibleBackend.exe' OR Name = 'WerFault.exe' OR Name = 'msedgewebview2.exe'" |
         Select-Object Name, ProcessId, ParentProcessId, CommandLine |
         ConvertTo-Json -Depth 3 | Set-Content -Encoding utf8 $ProcessOutputPath
 }

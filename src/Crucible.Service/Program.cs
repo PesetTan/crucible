@@ -7,7 +7,13 @@ if(args.Contains("--check-runtime",StringComparer.Ordinal)){
     Console.WriteLine(Json.Encode(new CreatedRun(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported?"jit":"native-aot")));
     return;
 }
-Run(args).GetAwaiter().GetResult();
+try{Run(args).GetAwaiter().GetResult();}
+catch(DataOwnershipException error){
+    // An expected startup refusal must exit normally, not enter Windows crash
+    // reporting while the desktop launcher waits to display its error dialog.
+    Console.Error.WriteLine(error.Message);
+    Environment.ExitCode=1;
+}
 
 static async Task Run(string[] args)
 {
